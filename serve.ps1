@@ -8,7 +8,7 @@ while ($listener.IsListening) {
   try {
     $ctx = $listener.GetContext()
     $path = $ctx.Request.Url.LocalPath.TrimStart('/')
-    if ([string]::IsNullOrWhiteSpace($path)) { $path = 'app.html' }
+    if ([string]::IsNullOrWhiteSpace($path)) { $path = 'index.html' }
     $path = [Uri]::UnescapeDataString($path)
     $file = Join-Path $root $path
     if (Test-Path $file -PathType Leaf) {
