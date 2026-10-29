@@ -52,8 +52,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /* --------------------------------------------------------------------------
    1. الثوابت والبيانات الأساسية
    -------------------------------------------------------------------------- */
-const STORAGE_KEY = 'jalees-members-v1';
-const CLUB_GOAL = 1500;
+const SESSION_KEY = 'jalees-session-v2';
+const MEMBER_KEY_PREFIX = 'jalees-member-v2:';
+const LEGACY_KEY = 'jalees-members-v1';
+const CLUB_GOAL = 12000;
 
 const CLUB = {
   name: 'نادي جليس القرائي',
@@ -61,15 +63,108 @@ const CLUB = {
   city: 'منطقة القصيم'
 };
 
-const MEMBERS = [
-  { id: 'm1', name: 'عبدالله الشبرمي', role: 'عضو مؤسس', pages: 186, lastWeek: 172, color: '#1E3A2B' },
-  { id: 'm2', name: 'نورة العتيبي', role: 'عضوة', pages: 164, lastWeek: 155, color: '#8C532D' },
-  { id: 'm3', name: 'ريم الحربي', role: 'عضوة', pages: 142, lastWeek: 138, color: '#A3503B' },
-  { id: 'm4', name: 'سارة القحطاني', role: 'عضوة', pages: 118, lastWeek: 96, color: '#3D5A4C' },
-  { id: 'm5', name: 'فهد المطيري', role: 'عضو', pages: 96, lastWeek: 110, color: '#6B4E2E' },
-  { id: 'm6', name: 'الجوهرة السالم', role: 'عضوة', pages: 74, lastWeek: 82, color: '#7A4A3A' },
-  { id: 'm7', name: 'تركي البقمي', role: 'عضو', pages: 52, lastWeek: 67, color: '#2A4F3B' }
+/* قائمة أعضاء النادي — الاسم هو العضوية.
+   pages = صفحات الأسبوع ١٩٨، lastWeek = صفحات الأسبوع ١٩٧ (من تقرير النادي). */
+const MEMBER_COLORS = ['#1E3A2B', '#8C532D', '#A3503B', '#3D5A4C', '#6B4E2E', '#7A4A3A', '#2A4F3B', '#C59B63'];
+const MEMBER_ROSTER = [
+  ['محمد السحيباني', 750, 760],
+  ['عبدالرحمن بن أمين', 650, 700],
+  ['عادل الكبير', 679, 653],
+  ['خالد الواصل', 600, 672],
+  ['راكان الحربي', 455, 600],
+  ['رائد القرعاوي', 150, 500],
+  ['عمار الفايز', 400, 400],
+  ['محمد الضويان', 450, 100],
+  ['محمد العميري', 375, 335],
+  ['محمد العمر', 287, 582],
+  ['باسل الرميح', 500, 406],
+  ['نعيم الغضية', 1230, 0],
+  ['عبدالعزيز الدوسري', 0, 0],
+  ['أسامة الفلاج', 300, 300],
+  ['سلطان النصيان', 200, 200],
+  ['عبدالرحمن الجريش', 250, 200],
+  ['سلطان بن برغش', 400, 300],
+  ['عبدالرحمن السيف', 388, 0],
+  ['عبدالرحمن الصعب', 0, 700],
+  ['عبدالله الزويد', 123, 404],
+  ['عبدالرحيم قاعد', 0, 700],
+  ['عبدالعزيز الطويان', 247, 127],
+  ['أحمد الظاهر', 175, 155],
+  ['عبدالله التويجري', 200, 50],
+  ['محمد الدبيخي', 80, 70],
+  ['خلف الهديي', 190, 60],
+  ['عبدالله الشبرمي', 180, 0],
+  ['محمد الدخيل', 500, 0],
+  ['عبدالعزيز الوهيبي', 135, 108],
+  ['مشعل الحفير', 85, 164],
+  ['صالح الجاسر', 30, 70],
+  ['عبدالرحمن القحطاني', 0, 324],
+  ['صالح الضحيان', 0, 0],
+  ['بدر الشايعي', 200, 0],
+  ['عبدالله المحميد', 70, 0],
+  ['سلطان الدبيخي', 0, 0],
+  ['بندر الغامدي', 0, 100],
+  ['إبراهيم الشويهي', 0, 35],
+  ['محمد العليان', 30, 100],
+  ['عمر الشعيبي', 0, 149],
+  ['محمد العجاجي', 145, 0],
+  ['تركي العمران', 53, 61],
+  ['عبدالعزيز الهويمل', 111, 0],
+  ['عبدالله السعودي', 0, 110],
+  ['محمد حمدان', 0, 102],
+  ['حكيم الصطامي', 0, 0],
+  ['رائد الوسيدي', 0, 0],
+  ['إلياس العبيري', 1, 3],
+  ['احمد الاكيزم', 0, 0],
+  ['عبدالله الفهيد', 20, 20],
+  ['عمر القريعان', 50, 0],
+  ['معاذ عطافي', 0, 23],
+  ['عبدالعزيز العقيل', 0, 0],
+  ['يحيى اليحيا', 0, 30],
+  ['فهد العوفي', 0, 27],
+  ['صالح السمحان', 0, 0],
+  ['مهيب الغيثي', 0, 0],
+  ['فهد الفلاج', 11, 5],
+  ['عمر البقمي', 0, 14],
+  ['ابراهيم النغيمشي', 0, 20],
+  ['عبدالله المنصور', 0, 15],
+  ['عبدالله الرقيعي', 0, 10],
+  ['عبدالرحمن الثنيان', 0, 4]
 ];
+
+const MEMBERS = MEMBER_ROSTER.map(([name, pages, lastWeek], index) => ({
+  id: `m${index + 1}`,
+  name,
+  role: index === 0 ? 'عضو مؤسس' : 'عضو',
+  pages,
+  lastWeek,
+  color: MEMBER_COLORS[index % MEMBER_COLORS.length]
+}));
+
+const memberById = (id) => MEMBERS.find((member) => member.id === id) || null;
+
+function normalizeName(value) {
+  return String(value || '')
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function findMemberByName(value) {
+  const key = normalizeName(value);
+  if (!key) return null;
+  return MEMBERS.find((member) => normalizeName(member.name) === key) || null;
+}
+
+const seedAuthor = (id) => {
+  const member = memberById(id);
+  return member
+    ? { authorId: member.id, authorName: member.name, color: member.color }
+    : { authorId: id, authorName: 'عضو جليس', color: '#1E3A2B' };
+};
 
 const BOOKS = [
   {
@@ -114,28 +209,46 @@ const BOOKS = [
   }
 ];
 
+const ARTICLE_CATEGORIES = [
+  'الكل',
+  'قراءة',
+  'تجارب',
+  'فكر',
+  'رواية',
+  'تاريخ',
+  'أدب',
+  'تطوير ذاتي',
+  'شعر',
+  'دراسات',
+  'طفولة',
+  'فلسفة',
+  'علوم',
+  'سيرة',
+  'فنون'
+];
+
 const ARTICLE_SEED = [
   {
     id: 'a1', title: 'كيف نقرأ الكتاب الواحد ثلاث مرات؟', category: 'قراءة', read: 5,
-    authorId: 'm1', authorName: 'عبدالله الشبرمي', color: '#1E3A2B', time: 'قبل ٣ ساعات',
+    ...seedAuthor('m27'), time: 'قبل ٣ ساعات',
     excerpt: 'ليست إعادة القراءة تكراراً… بل اكتشافاً لطبقات لم نرها في المرة الأولى.',
     body: 'أول قراءة هي قراءة الاكتشاف. نندفع مع الصفحات لنعرف ماذا سيحدث، ونلتقط الفكرة العامة، ونغلق الكتاب وقد صار لنا رأي أولي… لكنه رأي متعجل.\n\nالقراءة الثانية هي قراءة الخريطة. نعود إلى الفصول التي أحببناها، ونتوقف عند الجمل التي مررنا عليها سريعاً، ونبدأ في رؤية كيف بُني الكتاب: أين يكرر المؤلف فكرته؟ وأين يخالف نفسه؟\n\nأما القراءة الثالثة فهي قراءة الحوار. نقرأ ونحن نكتب على الهامش، نسأل الكاتب، ونعترض، ونربط بما قرأناه في كتب أخرى. عندها يتوقف الكتاب عن كونه نصاً خارجياً، ويصبح جزءاً من تفكيرنا.\n\nليست كل الكتب تستحق ثلاث قراءات، لكن أجملها يستحق أن يعود إليه القارئ بعد سنة، فيجده مختلفاً… لا لأن الكتاب تغيّر، بل لأننا تغيّرنا.'
   },
   {
     id: 'a2', title: 'القراءة البطيئة: حين يصير التأمل جزءاً من الكتاب', category: 'قراءة', read: 4,
-    authorId: 'm2', authorName: 'نورة العتيبي', color: '#8C532D', time: 'أمس',
+    ...seedAuthor('m19'), time: 'أمس',
     excerpt: 'في زمن يعدّ الصفحات، قد تكون أجمل قراءة هي التي نتوقف فيها أكثر مما نتقدم.',
     body: 'كبرتُ على فكرة أن القراءة إنجاز: عدد الكتب، عدد الصفحات، قائمة تنتهي ثم تبدأ أخرى. ثم اكتشفت أن بعض الكتب لا تريد منك أن تصل إلى صفحتها الأخيرة بسرعة.\n\nالقراءة البطيئة ليست بطئاً في الفهم، بل هي سماح للجملة بأن تعمل داخلك. تعيد قراءة الفقرة، تغلق الكتاب، تمشي قليلاً، ثم تعود.\n\nجرّب أن تقرأ عشر صفحات فقط في جلسة واحدة، وأن تكتب بعدها ثلاثة أسطر عمّا تغيّر فيك. ستكتشف أن ما بقي معك أكبر مما توقعت.\n\nالكتب العظيمة لا تُقاس بعدد الصفحات التي أنهيناها، بل بعدد المرات التي عُدنا فيها إلى جملة واحدة.'
   },
   {
     id: 'a3', title: 'من هامش الكتاب: لماذا نكتب على الصفحات؟', category: 'تجارب', read: 3,
-    authorId: 'me', authorName: 'مشعل الحفير', color: '#C59B63', time: 'قبل يومين',
+    ...seedAuthor('m30'), color: '#C59B63', time: 'قبل يومين',
     excerpt: 'الهامش مساحة خاصة بين الكاتب والقارئ… فيها نعترف بما لم نفهمه، ونحتفظ بما أدهشنا.',
     body: 'أول كتاب كتبت على هوامشه كنت أظن أنني أفسده. ثم صار الهامش هو المكان الذي أعود إليه قبل أن أعيد قراءة الكتاب نفسه.\n\nنكتب في الهامش لأن الذاكرة لا تحفظ كل شيء. نكتب لنقول لأنفسنا في المستقبل: هنا توقفت، وهذه الفكرة أشبهتني، وهذا السؤال ما زال بلا جواب.\n\nبعض الهوامش تصير مقالات، وبعضها يصير اقتباساً نشاركه، وبعضها يبقى سراً صغيراً بيننا وبين الصفحة.\n\nالكتاب الذي لا أثر لنا فيه، ربما لم نقرأه بالطريقة التي تستحق.'
   },
   {
     id: 'a4', title: 'جليس… حين تصير القراءة مجلساً', category: 'النادي', read: 4,
-    authorId: 'm3', authorName: 'ريم الحربي', color: '#A3503B', time: 'قبل ٤ أيام',
+    ...seedAuthor('m3'), time: 'قبل ٤ أيام',
     excerpt: 'لم نكن نبحث عن نادٍ للقراءة، كنا نبحث عن مكان يجتمع فيه الناس على السؤال نفسه.',
     body: 'بدأت الحكاية بجلسة صغيرة، كتاب واحد، وعدد محدود من الكراسي. لم يكن هناك عنوان كبير ولا شعار، فقط رغبة في أن نقرأ ثم نتحدث.\n\nفي جليس تعلمت أن القراءة الجماعية لا تلغي القراءة الفردية، بل تضيء زوايا لم أرها وحدي. كل عضو يقرأ الكتاب بعينه، وحين نجتمع يصبح لدينا عشر عيون.\n\nأجمل ما في المجلس هو الصمت الذي يسبق السؤال، ثم الضحك حين يكتشف أحدنا أنه فهم الجملة بشكل مختلف تماماً.\n\nجليس ليس مكاناً نذهب إليه لننهي الكتب، بل لنبدأ الحديث عنها.'
   }
@@ -144,78 +257,50 @@ const ARTICLE_SEED = [
 const QUOTE_SEED = [
   {
     id: 'q1', text: 'خير جليس في الزمان كتاب', book: 'ديوان المتنبي', page: '',
-    authorId: 'm1', authorName: 'عبدالله الشبرمي', color: '#1E3A2B', time: 'قبل ساعتين', likes: 18
+    ...seedAuthor('m27'), time: 'قبل ساعتين', likes: 18
   },
   {
     id: 'q2', text: 'القراءة ليست هروباً من الحياة، بل عودة إليها بعينين أكثر اتساعاً.', book: 'الأيام', page: '٢٤',
-    authorId: 'm2', authorName: 'نورة العتيبي', color: '#8C532D', time: 'قبل ٥ ساعات', likes: 24
+    ...seedAuthor('m9'), time: 'قبل ٥ ساعات', likes: 24
   },
   {
     id: 'q3', text: 'ما أجمل أن تكتشف أن الكتاب الذي تأخرت في قراءته كان ينتظرك في الوقت المناسب.', book: 'وحي القلم', page: '١١٢',
-    authorId: 'me', authorName: 'مشعل الحفير', color: '#C59B63', time: 'أمس', likes: 12
+    ...seedAuthor('m30'), color: '#C59B63', time: 'أمس', likes: 12
   },
   {
     id: 'q4', text: 'نحن نقرأ لنعرف أننا لسنا وحدنا في هذا العالم.', book: 'موسم الهجرة إلى الشمال', page: '',
-    authorId: 'm3', authorName: 'ريم الحربي', color: '#A3503B', time: 'أمس', likes: 31
+    ...seedAuthor('m15'), time: 'أمس', likes: 31
   },
   {
     id: 'q5', text: 'في كل كتاب زاوية جديدة للعالم… وفي كل قارئ عالم جديد للكتاب.', book: 'حياة في الإدارة', page: '٨٨',
-    authorId: 'm5', authorName: 'فهد المطيري', color: '#6B4E2E', time: 'قبل يومين', likes: 9
+    ...seedAuthor('m25'), time: 'قبل يومين', likes: 9
   },
   {
     id: 'q6', text: 'الصفحات القليلة التي نقرأها كل يوم تصنع فارقاً لا نراه اليوم، لكننا نراه بعد سنة.', book: 'العادات الذرية', page: '',
-    authorId: 'm4', authorName: 'سارة القحطاني', color: '#3D5A4C', time: 'قبل ٣ أيام', likes: 27
+    ...seedAuthor('m22'), time: 'قبل ٣ أيام', likes: 27
   }
 ];
 
 /* --------------------------------------------------------------------------
    2. حالة التطبيق والتخزين المحلي
    -------------------------------------------------------------------------- */
-function createInitialState() {
-  const today = new Date();
-  const start = startOfWeek(today);
-  const dayIndex = today.getDay();
-  const offsets = [Math.max(0, dayIndex - 2), Math.max(0, dayIndex - 1), dayIndex];
-  const stamp = Date.now();
-
+function createInitialState(member) {
   return {
-    session: false,
+    memberId: member ? member.id : null,
     profile: {
-      name: 'مشعل الحفير',
-      role: 'عضو مؤسس',
+      name: member ? member.name : MEMBERS[0].name,
+      role: member ? member.role : 'عضو',
       joined: '٢٠٢٤',
       goal: 200,
-      lastWeekPages: 148,
+      lastWeekPages: member ? member.lastWeek : 0,
       notifications: true
     },
-    entries: [
-      {
-        id: 'e1', bookId: 'b2', pages: 22, minutes: 35,
-        date: toISO(addDays(start, offsets[0])), ts: stamp - 300000,
-        note: 'الوصف في الأيام يجعل الريف شخصية كاملة… توقفت عند وصف البيت.'
-      },
-      {
-        id: 'e2', bookId: 'b1', pages: 31, minutes: 45,
-        date: toISO(addDays(start, offsets[1])), ts: stamp - 200000,
-        note: 'فكرة أن الإدارة فن التعامل مع الإنسان قبل الأنظمة.'
-      },
-      {
-        id: 'e3', bookId: 'b2', pages: 20, minutes: 30,
-        date: toISO(addDays(start, offsets[2])), ts: stamp - 100000,
-        note: ''
-      }
-    ],
-    myBooks: [
-      { bookId: 'b1', status: 'reading', currentPage: 118, addedAt: '2026-09-02' },
-      { bookId: 'b2', status: 'reading', currentPage: 42, addedAt: '2026-09-18' },
-      { bookId: 'b6', status: 'reading', currentPage: 42, addedAt: '2026-10-04' },
-      { bookId: 'b3', status: 'finished', currentPage: 400, addedAt: '2026-05-11' },
-      { bookId: 'b5', status: 'finished', currentPage: 240, addedAt: '2026-06-23' },
-      { bookId: 'b8', status: 'want', currentPage: 0, addedAt: '2026-10-20' }
-    ],
+    /* كل عضو يبدأ بسجل فارغ — التقدم يُبنى من قراءاته الفعلية. */
+    entries: [],
+    myBooks: [],
     quotes: QUOTE_SEED.map((q) => ({ ...q })),
-    savedQuotes: ['q2'],
-    likedQuotes: ['q4'],
+    savedQuotes: [],
+    likedQuotes: [],
     quoteFilter: 'all',
     articles: ARTICLE_SEED.map((a) => ({ ...a })),
     savedArticles: [],
@@ -224,39 +309,73 @@ function createInitialState() {
     libraryPane: 'club',
     libraryCategory: 'all',
     libraryQuery: '',
-    myFilter: 'reading'
+    myFilter: 'reading',
+    articleFilter: 'all',
+    articleCategory: 'all',
+    articleCategorySearch: ''
   };
 }
 
-function loadState() {
+const stateKey = (id) => `${MEMBER_KEY_PREFIX}${id}`;
+
+let currentMember = null;
+let state = null;
+
+/* ترحيل بيانات النسخة القديمة — فقط للعضو الذي يطابق اسمه اسم الملف الشخصي المحفوظ. */
+function readLegacyFor(member) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return createInitialState();
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
-    const base = createInitialState();
-    const merged = {
-      ...base,
-      ...parsed,
-      profile: { ...base.profile, ...(parsed.profile || {}) },
-      entries: Array.isArray(parsed.entries) ? parsed.entries : base.entries,
-      myBooks: Array.isArray(parsed.myBooks) ? parsed.myBooks : base.myBooks,
-      quotes: Array.isArray(parsed.quotes) ? parsed.quotes : base.quotes,
-      articles: Array.isArray(parsed.articles) ? parsed.articles : base.articles,
-      savedQuotes: Array.isArray(parsed.savedQuotes) ? parsed.savedQuotes : base.savedQuotes,
-      likedQuotes: Array.isArray(parsed.likedQuotes) ? parsed.likedQuotes : base.likedQuotes,
-      savedArticles: Array.isArray(parsed.savedArticles) ? parsed.savedArticles : base.savedArticles
-    };
-    return merged;
+    if (normalizeName(parsed && parsed.profile && parsed.profile.name) !== normalizeName(member.name)) return null;
+    localStorage.removeItem(LEGACY_KEY);
+    return parsed;
   } catch (error) {
-    return createInitialState();
+    return null;
   }
 }
 
-let state = loadState();
+function loadStateFor(member) {
+  const base = createInitialState(member);
+  let parsed = null;
+  try {
+    const raw = localStorage.getItem(stateKey(member.id));
+    if (raw) parsed = JSON.parse(raw);
+  } catch (error) {
+    parsed = null;
+  }
+  if (!parsed) parsed = readLegacyFor(member);
+  if (!parsed) return base;
+
+  return {
+    ...base,
+    ...parsed,
+    memberId: member.id,
+    profile: {
+      ...base.profile,
+      ...(parsed.profile || {}),
+      name: member.name,
+      role: member.role,
+      lastWeekPages: member.lastWeek
+    },
+    entries: (Array.isArray(parsed.entries) ? parsed.entries : []).map((entry) => {
+      const copy = { ...(entry || {}) };
+      delete copy.minutes;
+      return copy;
+    }),
+    myBooks: Array.isArray(parsed.myBooks) ? parsed.myBooks : [],
+    quotes: Array.isArray(parsed.quotes) && parsed.quotes.length ? parsed.quotes : base.quotes,
+    articles: Array.isArray(parsed.articles) && parsed.articles.length ? parsed.articles : base.articles,
+    savedQuotes: Array.isArray(parsed.savedQuotes) ? parsed.savedQuotes : [],
+    likedQuotes: Array.isArray(parsed.likedQuotes) ? parsed.likedQuotes : [],
+    savedArticles: Array.isArray(parsed.savedArticles) ? parsed.savedArticles : []
+  };
+}
 
 function saveState() {
+  if (!state || !currentMember) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(stateKey(currentMember.id), JSON.stringify(state));
   } catch (error) {
     /* التخزين غير متاح — يستمر التطبيق في الذاكرة */
   }
@@ -267,6 +386,19 @@ function saveState() {
    -------------------------------------------------------------------------- */
 const getBook = (id) => BOOKS.find((b) => b.id === id);
 const getMyBook = (id) => state.myBooks.find((b) => b.bookId === id);
+
+function isMine(item) {
+  return Boolean(item && currentMember)
+    && (item.authorId === 'me' || item.authorId === currentMember.id);
+}
+
+function authorNameOf(item) {
+  return isMine(item) ? state.profile.name : ((item && item.authorName) || 'عضو جليس');
+}
+
+function authorColorOf(item) {
+  return isMine(item) ? '#C59B63' : ((item && item.color) || '#1E3A2B');
+}
 
 function weekEntries() {
   const start = toISO(startOfWeek());
@@ -304,18 +436,13 @@ function streakDays() {
 }
 
 function allMembers(period = state.boardPeriod) {
-  const mine = period === 'week' ? weekStats().pages : state.profile.lastWeekPages;
-  const list = MEMBERS.map((member) => ({
-    ...member,
-    pages: period === 'week' ? member.pages : member.lastWeek
-  }));
-  list.push({
-    id: 'me',
-    name: state.profile.name,
-    role: state.profile.role,
-    color: '#C59B63',
-    pages: mine,
-    isMe: true
+  const myWeekPages = weekStats().pages;
+  const list = MEMBERS.map((member) => {
+    const isMe = Boolean(currentMember && member.id === currentMember.id);
+    const pages = period === 'week'
+      ? Number(member.pages || 0) + (isMe ? myWeekPages : 0)
+      : Number(member.lastWeek || 0);
+    return { ...member, pages, isMe };
   });
   return list.sort((a, b) => b.pages - a.pages);
 }
@@ -415,8 +542,8 @@ function renderHome() {
     <p class="dq-text">${esc(quote.text)}</p>
     <div class="dq-source">${esc(quote.book || 'من هامش القراءة')}${quote.page ? ` · ص ${esc(quote.page)}` : ''}</div>
     <div class="dq-author">
-      ${avatarHTML(quote.authorName, quote.color || '#1E3A2B')}
-      <span>${esc(quote.authorName)}${quote.authorId === 'me' ? ' · أنت' : ''}</span>
+      ${avatarHTML(authorNameOf(quote), authorColorOf(quote))}
+      <span>${esc(authorNameOf(quote))}${isMine(quote) ? ' · أنت' : ''}</span>
     </div>` : '';
 
   const article = state.articles[0];
@@ -425,7 +552,7 @@ function renderHome() {
     <div class="ha-body">
       <span class="chip chip-soft">${esc(article.category)}</span>
       <h4>${esc(article.title)}</h4>
-      <div class="ha-meta"><b>${esc(article.authorName)}</b><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
+      <div class="ha-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
     </div>` : emptyHTML('article', 'لا مقالات بعد', 'شارك أول مقال في مساحة الأعضاء.');
   $('#home-article').dataset.action = article ? 'open-article' : '';
   if (article) $('#home-article').dataset.id = article.id;
@@ -444,11 +571,12 @@ function renderReadings() {
   const goal = Number(state.profile.goal) || 200;
   const remaining = Math.max(0, goal - stats.pages);
   const percent = Math.round(clamp(stats.pages / goal, 0, 1) * 100);
+  const streak = streakDays();
 
   $('#readings-week-badge').textContent = `الأسبوع ${toAr(weekNumber())}`;
   $('#log-stats').innerHTML = [
     miniStatHTML(stats.pages, 'صفحة هذا الأسبوع', `٪${toAr(percent)} من هدفك`),
-    miniStatHTML(stats.sessions, 'جلسة قراءة', `${toAr(streakDays())} أيام متتالية`),
+    miniStatHTML(stats.sessions, 'جلسة قراءة', `${toAr(streak)} ${streak === 1 ? 'يوم' : 'أيام'} متتالية`),
     miniStatHTML(remaining, 'صفحة متبقية', `هدفك ${toAr(goal)} صفحة`)
   ].join('');
 
@@ -521,7 +649,7 @@ function renderWeekChart(stats) {
 function renderEntries(stats) {
   const entries = weekEntries();
   $('#entries-count').textContent = entries.length
-    ? `${toAr(entries.length)} جلسات · ${toAr(stats.pages)} صفحة`
+    ? `${toAr(entries.length)} ${entries.length === 1 ? 'جلسة' : 'جلسات'} · ${toAr(stats.pages)} صفحة`
     : 'لا توجد جلسات مسجّلة بعد';
 
   if (!entries.length) {
@@ -542,7 +670,7 @@ function renderEntries(stats) {
             <h4>${esc(title)}</h4>
             <span>${dayLabel(entry.date)}${entry.ts ? ` · ${timeLabel(entry.ts)}` : ''}</span>
           </div>
-          <div class="entry-meta"><span><b>${toAr(entry.pages)}</b> صفحة</span>${book ? '' : '<span class="entry-free">قراءة حرة</span>'}</div>
+          <div class="entry-meta"><span><b>${toAr(entry.pages)}</b> صفحة</span>${!book && entry.bookTitle ? '<span class="entry-free">قراءة حرة</span>' : ''}</div>
           ${entry.note ? `<p class="entry-note">${esc(entry.note)}</p>` : ''}
         </div>
         <button class="entry-del" type="button" data-action="del-entry" data-id="${entry.id}" aria-label="حذف السجل">
@@ -603,8 +731,8 @@ function renderBoard() {
 function quoteCardHTML(quote) {
   const liked = state.likedQuotes.includes(quote.id);
   const saved = state.savedQuotes.includes(quote.id);
-  const name = quote.authorId === 'me' ? state.profile.name : quote.authorName;
-  const color = quote.authorId === 'me' ? '#C59B63' : (quote.color || '#1E3A2B');
+  const name = authorNameOf(quote);
+  const color = authorColorOf(quote);
   const likes = Number(quote.likes || 0) + (liked ? 1 : 0);
   return `
     <article class="quote-card">
@@ -613,7 +741,7 @@ function quoteCardHTML(quote) {
       <div class="quote-foot">
         <div class="quote-author">
           ${avatarHTML(name, color)}
-          <div><strong>${esc(name)}${quote.authorId === 'me' ? ' · أنت' : ''}</strong><small>${esc(quote.time || '')}</small></div>
+          <div><strong>${esc(name)}${isMine(quote) ? ' · أنت' : ''}</strong><small>${esc(quote.time || '')}</small></div>
         </div>
         <div class="quote-actions">
           <button type="button" data-action="like-quote" data-id="${quote.id}" class="${liked ? 'active' : ''}" aria-label="إعجاب">
@@ -639,7 +767,7 @@ function renderQuotes() {
   });
 
   let list = state.quotes;
-  if (filter === 'mine') list = list.filter((quote) => quote.authorId === 'me');
+  if (filter === 'mine') list = list.filter((quote) => isMine(quote));
   if (filter === 'saved') list = list.filter((quote) => state.savedQuotes.includes(quote.id));
 
   const labels = {
@@ -795,6 +923,7 @@ function renderArticles() {
     $('#featured-article').innerHTML = emptyHTML('article', 'مساحة القلم', 'اكتب أول مقال لأعضاء جليس.');
     $('#featured-article').removeAttribute('data-action');
     $('#articles-list').innerHTML = '';
+    renderArticleFilters();
     return;
   }
 
@@ -809,22 +938,29 @@ function renderArticles() {
     <p>${esc(featured.excerpt)}</p>
     <div class="fa-foot">
       <div class="fa-author">
-        ${avatarHTML(featured.authorId === 'me' ? state.profile.name : featured.authorName, featured.authorId === 'me' ? '#C59B63' : featured.color)}
-        <div><strong>${esc(featured.authorId === 'me' ? state.profile.name : featured.authorName)}</strong><small>${esc(featured.time || '')}</small></div>
+        ${avatarHTML(authorNameOf(featured), authorColorOf(featured))}
+        <div><strong>${esc(authorNameOf(featured))}</strong><small>${esc(featured.time || '')}</small></div>
       </div>
       <span class="fa-more">اقرأ المقال <svg class="ic"><use href="#i-arrow-right"/></svg></span>
     </div>`;
 
   const rest = state.articles.slice(1);
-  $('#articles-list').innerHTML = rest.length ? rest.map((article, index) => {
+  const filtered = rest.filter((article) => {
+    if (state.articleFilter === 'saved' && !state.savedArticles.includes(article.id)) return false;
+    const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
+    if (cat !== ARTICLE_CATEGORIES[0] && cat !== 'all' && article.category !== cat) return false;
+    return true;
+  });
+
+  $('#articles-list').innerHTML = filtered.length ? filtered.map((article, index) => {
     const saved = state.savedArticles.includes(article.id);
     return `
       <article class="article-row" data-action="open-article" data-id="${article.id}">
-        <span class="ar-num">${toAr(index + 2)}</span>
+        <span class="ar-num">${toAr(index + 1)}</span>
         <div class="ar-body">
           <span class="chip chip-soft">${esc(article.category)}</span>
           <h4>${esc(article.title)}</h4>
-          <div class="ar-meta"><b>${esc(article.authorId === 'me' ? state.profile.name : article.authorName)}</b><span>·</span><span>${toAr(article.read || 3)} دقائق</span></div>
+          <div class="ar-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${toAr(article.read || 3)} دقائق</span></div>
         </div>
         <div class="ar-actions">
           <button class="ar-save ${saved ? 'saved' : ''}" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
@@ -832,7 +968,44 @@ function renderArticles() {
           </button>
         </div>
       </article>`;
-  }).join('') : emptyHTML('article', 'مقال واحد فقط', 'شارك مقالاً جديداً ليظهر هنا.');
+  }).join('') : emptyHTML('article', 'لا مقالات متاحة', 'جرّب تصنيفاً آخر أو اكتب أول مقال.');
+  renderArticleFilters();
+}
+
+function renderArticleFilters() {
+  const container = $('#article-filters');
+  if (!container) return;
+  $$('#article-filters button').forEach((button) => {
+    const active = button.dataset.afilter === state.articleFilter;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  const catContainer = $('#article-categories');
+  if (!catContainer) return;
+
+  const articleCats = new Set(state.articles.map((a) => a.category));
+
+  const search = (state.articleCategorySearch || '').trim().toLowerCase();
+  const visibleCats = ARTICLE_CATEGORIES.filter((c) =>
+    c.toLowerCase().includes(search)
+  );
+
+  catContainer.innerHTML = `
+    <div class="category-search">
+      <svg class="ic"><use href="#i-search"/></svg>
+      <input class="input" id="article-category-search" type="search"
+        placeholder="ابحث عن تصنيف…" value="${esc(state.articleCategorySearch || '')}"
+        aria-label="ابحث عن تصنيف">
+    </div>
+    <span class="eyebrow">التصنيفات العامة</span>
+  ` + visibleCats.map((category, index) => {
+    const active = state.articleCategory === category;
+    const hasArticles = articleCats.has(category);
+    const isAll = index === 0;
+    return `<button class="chip-filter ${active ? 'active' : ''}${hasArticles ? '' : ' cat-empty'}" type="button" data-acat="${category}" aria-selected="${active}">
+      ${esc(category)}${isAll || hasArticles ? '' : ' <span class="cat-count">—</span>'}</button>`;
+  }).join('');
 }
 
 /* --------------------------------------------------------------------------
@@ -841,8 +1014,8 @@ function renderArticles() {
 function renderProfile() {
   const finished = state.myBooks.filter((item) => item.status === 'finished').length;
   const stats = weekStats();
-  const myQuotes = state.quotes.filter((quote) => quote.authorId === 'me').length;
-  const myArticles = state.articles.filter((article) => article.authorId === 'me').length;
+  const myQuotes = state.quotes.filter((quote) => isMine(quote)).length;
+  const myArticles = state.articles.filter((article) => isMine(article)).length;
   const streak = streakDays();
 
   $('#profile-name').textContent = state.profile.name;
@@ -1124,9 +1297,9 @@ function openArticleSheet(id) {
         <span><svg class="ic"><use href="#i-calendar"/></svg> ${esc(article.time || '')}</span>
       </div>
       <div class="reader-author">
-        ${avatarHTML(article.authorId === 'me' ? state.profile.name : article.authorName, article.authorId === 'me' ? '#C59B63' : article.color)}
+        ${avatarHTML(authorNameOf(article), authorColorOf(article))}
         <div>
-          <strong>${esc(article.authorId === 'me' ? state.profile.name : article.authorName)}</strong>
+          <strong>${esc(authorNameOf(article))}</strong>
           <small>عضو في نادي جليس القرائي</small>
         </div>
       </div>
@@ -1244,34 +1417,6 @@ function openMeetingSheet() {
       <svg class="ic"><use href="#i-${state.rsvp ? 'check' : 'calendar'}"/></svg>
       ${state.rsvp ? 'حضورك مؤكد — نراك هناك' : 'أؤكد الحضور'}
     </button>`);
-}
-
-function openNameSheet() {
-  openSheet(`
-    ${sheetHead('تعديل الاسم', 'سيظهر اسمك في الاقتباسات والمقالات ولوحة الأعضاء.')}
-    <form id="name-form">
-      <div class="field">
-        <label for="name-input">اسم العضو</label>
-        <input class="input" id="name-input" maxlength="60" value="${esc(state.profile.name)}" required>
-      </div>
-      <button class="btn btn-primary btn-block" type="submit">حفظ الاسم</button>
-    </form>`, (root) => {
-    root.querySelector('#name-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const value = root.querySelector('#name-input').value.trim();
-      if (value.length < 2) {
-        toast('الاسم قصير جداً', 'info');
-        return;
-      }
-      state.profile.name = value;
-      state.quotes.forEach((quote) => { if (quote.authorId === 'me') quote.authorName = value; });
-      state.articles.forEach((article) => { if (article.authorId === 'me') article.authorName = value; });
-      saveState();
-      closeSheet();
-      renderAll();
-      toast('تم تحديث اسمك', 'check');
-    });
-  });
 }
 
 /* --------------------------------------------------------------------------
@@ -1392,25 +1537,37 @@ function showLibraryPane(name) {
   renderLibrary();
 }
 
-function renameEverywhere(name) {
-  state.profile.name = name;
-  state.quotes.forEach((quote) => { if (quote.authorId === 'me') quote.authorName = name; });
-  state.articles.forEach((article) => { if (article.authorId === 'me') article.authorName = name; });
+function setSessionMember(member) {
+  currentMember = member;
+  state = loadStateFor(member);
+  try {
+    localStorage.setItem(SESSION_KEY, member.id);
+  } catch (error) {
+    /* التخزين غير متاح */
+  }
+  saveState();
 }
 
 function showGate() {
   closeSheet();
+  try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
+  currentMember = null;
+  state = null;
   $('#gate').hidden = false;
   $('#shell').hidden = true;
-  $('#login-code').value = '';
   $('#login-error').hidden = true;
-  $('#login-name').value = state.profile.name;
+  const input = $('#login-name');
+  if (input) input.value = '';
   currentScreen = 'home';
 }
 
 function enterApp(welcome = false) {
-  state.session = true;
-  saveState();
+  if (!currentMember || !state) return;
+  try {
+    localStorage.setItem(SESSION_KEY, currentMember.id);
+  } catch (error) {
+    /* التخزين غير متاح */
+  }
   $('#gate').hidden = true;
   $('#shell').hidden = false;
   renderAll();
@@ -1548,28 +1705,28 @@ function handleGlobalClick(event) {
     case 'meeting':
       openMeetingSheet();
       break;
-    case 'edit-name':
-      openNameSheet();
-      break;
     case 'logout':
       openConfirm({
         title: 'تسجيل الخروج',
-        text: 'ستعود إلى بوابة الأعضاء. بياناتك ووردك محفوظة في هذا الجهاز.',
+        text: 'ستعود إلى بوابة الأعضاء. تقدمك محفوظ باسمك في هذا الجهاز.',
         confirmLabel: 'خروج',
         onConfirm: () => {
-          state.session = false;
-          saveState();
+          try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
           showGate();
         }
       });
       break;
     case 'reset-demo':
       openConfirm({
-        title: 'إعادة تعيين بيانات التجربة',
-        text: 'سيتم حذف الورد والاقتباسات والمقالات المسجلة في هذا الجهاز والعودة للبيانات الأولية.',
+        title: 'إعادة تعيين تقدمي',
+        text: 'سيتم حذف سجل قراءاتك ومكتبتك واقتباساتك ومقالاتك لهذا الاسم في هذا الجهاز.',
         confirmLabel: 'إعادة التعيين',
         onConfirm: () => {
-          try { localStorage.removeItem(STORAGE_KEY); } catch (error) { /* تجاهل */ }
+          const id = currentMember && currentMember.id;
+          try {
+            if (id) localStorage.removeItem(stateKey(id));
+            localStorage.removeItem(LEGACY_KEY);
+          } catch (error) { /* تجاهل */ }
           location.reload();
         }
       });
@@ -1600,7 +1757,7 @@ function handleGlobalClick(event) {
     case 'share-quote': {
       const quote = state.quotes.find((item) => item.id === id);
       if (!quote) break;
-      const text = `«${quote.text}»\n${quote.book || ''}${quote.page ? ` — ص ${quote.page}` : ''}\n— ${quote.authorId === 'me' ? state.profile.name : quote.authorName}\n#جليس_القرائي`;
+      const text = `«${quote.text}»\n${quote.book || ''}${quote.page ? ` — ص ${quote.page}` : ''}\n— ${authorNameOf(quote)}\n#جليس_القرائي`;
       copyText(text).then((ok) => toast(ok ? 'نُسخ الاقتباس للمشاركة' : 'تعذّر النسخ من المتصفح', ok ? 'share' : 'info'));
       break;
     }
@@ -1705,7 +1862,7 @@ function handleGlobalClick(event) {
     case 'share-article': {
       const article = state.articles.find((item) => item.id === id);
       if (!article) break;
-      const text = `${article.title}\n— ${article.authorId === 'me' ? state.profile.name : article.authorName}\n\n${article.excerpt}\n\n#جليس_القرائي`;
+      const text = `${article.title}\n— ${authorNameOf(article)}\n\n${article.excerpt}\n\n#جليس_القرائي`;
       copyText(text).then((ok) => toast(ok ? 'نُسخ المقال للمشاركة' : 'تعذّر النسخ من المتصفح', ok ? 'share' : 'info'));
       break;
     }
@@ -1782,30 +1939,19 @@ function init() {
   $('#login-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const name = $('#login-name').value.trim();
-    const code = $('#login-code').value.trim();
     const error = $('#login-error');
+    const member = findMemberByName(name);
 
-    if (name.length < 2) {
-      error.textContent = 'اكتب اسمك كما هو في عضوية النادي.';
+    if (!member) {
+      error.textContent = name.length < 2
+        ? 'اكتب اسمك كما هو مسجل في قائمة أعضاء النادي.'
+        : 'هذا الاسم ليس ضمن قائمة أعضاء جليس. تأكد من كتابته كما هو مسجل لدينا.';
       error.hidden = false;
       $('#login-name').focus();
       return;
     }
-    const validCode = code.toUpperCase() === 'JALEES' || code === 'جليس' || code === 'جليس ٢٠٢٦';
-    if (!validCode) {
-      error.textContent = 'رمز العضوية غير صحيح. رمز التجربة هو JALEES';
-      error.hidden = false;
-      $('#login-code').focus();
-      return;
-    }
     error.hidden = true;
-    renameEverywhere(name);
-    enterApp(true);
-  });
-
-  $('#demo-login').addEventListener('click', () => {
-    const typed = $('#login-name').value.trim();
-    if (typed.length >= 2) renameEverywhere(typed);
+    setSessionMember(member);
     enterApp(true);
   });
 
@@ -1839,6 +1985,23 @@ function init() {
     toast(event.target.checked ? 'تذكير الورد مفعّل' : 'تذكير الورد متوقف', 'bell');
   });
 
+  $('#app-main').addEventListener('click', (event) => {
+    const afilter = event.target.closest('[data-afilter]');
+    if (afilter) {
+      state.articleFilter = afilter.dataset.afilter;
+      saveState();
+      renderArticles();
+      return;
+    }
+    const acat = event.target.closest('[data-acat]');
+    if (acat) {
+      state.articleCategory = acat.dataset.acat;
+      saveState();
+      renderArticles();
+      return;
+    }
+  });
+
   $('#app-main').addEventListener('input', (event) => {
     const range = event.target.closest('[data-progress]');
     if (!range) return;
@@ -1847,6 +2010,14 @@ function init() {
     const head = range.closest('.my-progress').querySelector('.my-progress-head');
     head.querySelector('span').textContent = `${toAr(range.value)} من ${toAr(range.max)} صفحة`;
     head.querySelector('b').textContent = `٪${toAr(percent)}`;
+  });
+
+  $('#app-main').addEventListener('input', (event) => {
+    const search = event.target.closest('#article-category-search');
+    if (!search) return;
+    state.articleCategorySearch = search.value;
+    saveState();
+    renderArticles();
   });
 
   $('#app-main').addEventListener('change', (event) => {
@@ -1878,12 +2049,22 @@ function init() {
   });
 
   const params = new URLSearchParams(location.search);
-  if (params.get('demo') === '1') state.session = true;
+  let member = null;
+  if (params.get('demo') === '1') {
+    member = findMemberByName(params.get('member') || '')
+      || findMemberByName('مشعل الحفير')
+      || MEMBERS[0];
+  } else {
+    let savedId = null;
+    try { savedId = localStorage.getItem(SESSION_KEY); } catch (error) { savedId = null; }
+    member = memberById(savedId);
+  }
 
   renderLogStamp();
   setInterval(renderLogStamp, 30000);
 
-  if (state.session) {
+  if (member) {
+    setSessionMember(member);
     enterApp(false);
     const requested = params.get('screen');
     if (requested) go(requested);

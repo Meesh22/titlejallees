@@ -94,34 +94,29 @@
                 <span class="gate-card-icon"><svg class="ic"><use href="#i-book"/></svg></span>
                 <div>
                   <h2>دخول الأعضاء</h2>
-                  <p>أدخل اسمك ورمز العضوية للمتابعة</p>
+                  <p>العضوية بالاسم فقط — بلا رمز</p>
                 </div>
               </div>
               <div class="field">
                 <label for="login-name">اسم العضو</label>
-                <input class="input" id="login-name" name="name" type="text" autocomplete="name" placeholder="اكتب اسمك" required>
-              </div>
-              <div class="field">
-                <label for="login-code">رمز العضوية</label>
-                <input class="input" id="login-code" name="code" type="text" autocomplete="off" placeholder="مثال: JALEES" required>
-                <p class="field-hint">رمز النسخة التجريبية: <strong>JALEES</strong></p>
+                <input class="input" id="login-name" name="name" type="text" autocomplete="off" placeholder="اكتب اسمك كما هو مسجل" required>
+                <p class="field-hint">اسمك هو عضويّتك، وتقدمك يُحفظ لك وحدك في هذا الجهاز.</p>
               </div>
               <p class="form-error" id="login-error" role="alert" hidden></p>
               <button class="btn btn-gold btn-block" type="submit">
                 <svg class="ic"><use href="#i-arrow-right"/></svg>
                 الدخول إلى المساحة
               </button>
-              <button class="gate-demo" type="button" id="demo-login">تجربة سريعة بدون رمز</button>
             </form>
 
             <div class="gate-proof">
               <div class="avatar-stack" aria-hidden="true">
-                <span style="background:#2A4F3B">ع</span>
-                <span style="background:#8C532D">ن</span>
-                <span style="background:#A3503B">ر</span>
+                <span style="background:#1E3A2B">م</span>
+                <span style="background:#8C532D">ع</span>
+                <span style="background:#A3503B">خ</span>
                 <span style="background:#C59B63">م</span>
               </div>
-              <p>يجتمع في جليس <strong>٤٨ قارئاً</strong> حول الكتب والأفكار.</p>
+              <p>يجتمع في جليس <strong>٦٣ عضواً</strong> حول الكتب والأفكار.</p>
             </div>
           </div>
           <p class="gate-foot">نادي جليس القرائي · منطقة القصيم</p>
@@ -366,9 +361,16 @@
 
               <article class="featured-article" id="featured-article"></article>
 
+              <div class="chips-row" id="article-filters">
+                <button class="chip-filter active" type="button" data-afilter="all">الكل</button>
+                <button class="chip-filter" type="button" data-afilter="saved">محفوظاتك</button>
+              </div>
+
               <div class="sec-head">
                 <div><h3>أحدث المقالات</h3><p>تجارب وقراءات من أعضاء جليس</p></div>
               </div>
+
+              <div class="category-list" id="article-categories"></div>
               <div class="articles-list" id="articles-list"></div>
             </section>
 
@@ -379,9 +381,7 @@
                   <svg class="ic"><use href="#i-arrow-right"/></svg>
                 </button>
                 <span>ملفي الشخصي</span>
-                <button class="icon-btn light" type="button" data-action="edit-name" aria-label="تعديل الاسم">
-                  <svg class="ic"><use href="#i-edit"/></svg>
-                </button>
+                <span class="profile-top-ghost" aria-hidden="true"></span>
               </div>
 
               <div class="profile-hero">
@@ -411,7 +411,7 @@
                   <span class="switch" aria-hidden="true"></span>
                 </label>
                 <button class="switch-row as-btn" type="button" data-action="reset-demo">
-                  <span class="switch-label"><svg class="ic"><use href="#i-info"/></svg> إعادة تعيين بيانات التجربة</span>
+                  <span class="switch-label"><svg class="ic"><use href="#i-info"/></svg> إعادة تعيين تقدمي</span>
                   <svg class="ic chev"><use href="#i-chevron-left"/></svg>
                 </button>
                 <button class="switch-row as-btn danger" type="button" data-action="logout">

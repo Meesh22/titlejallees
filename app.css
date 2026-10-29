@@ -590,6 +590,35 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   box-shadow: 0 4px 12px rgba(30, 58, 43, 0.2);
 }
 
+.chip-filter.cat-empty {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.category-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  padding-left: 1px;
+}
+.category-search .ic { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.category-search .input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 7px 10px 7px 30px;
+}
+
+.category-list {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 2px 1px 12px;
+  scrollbar-width: none;
+}
+.category-list::-webkit-scrollbar { display: none; }
+
 .card {
   background: var(--white);
   border: 1px solid var(--line);
@@ -2000,6 +2029,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   font-size: 11px;
   font-weight: 700;
 }
+.profile-top-ghost { width: 32px; height: 32px; }
 .profile-hero {
   position: relative;
   margin: 0 -18px;
