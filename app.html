@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>جليس | مساحة الأعضاء</title>
+  <meta name="description" content="مساحة أعضاء نادي جليس القرائي: ورد القراءة الأسبوعي، لوحة القراءات، الاقتباسات، مكتبة النادي، ومقالات الأعضاء.">
+  <meta name="theme-color" content="#1E3A2B">
+  <link rel="icon" type="image/png" href="assets/images/logo-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6.5H9V21H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10 4.8 7.5 4 4 4v15c3.5 0 6 .8 8 2.5 2-1.7 4.5-2.5 8-2.5V4c-3.5 0-6 .8-8 2.5Z"/><path d="M12 6.5V21"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24"><path d="M9.5 7C6.5 8.3 5 10.8 5 14.5V17h5v-5H7.8c0-1.9.7-3.2 2.2-4.1zM19 7c-3 1.3-4.5 3.8-4.5 7.5V17h5v-5h-2.2c0-1.9.7-3.2 2.2-4.1z"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><path d="M4 4h5v17H4zM11 4h4v17h-4zM18.5 4.5 21.5 20l-3.2.7L15.3 5.2z"/></symbol>
+    <symbol id="i-article" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 12h8M8 16h8M8 8h3"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 21c0-3.6 3.1-6 7-6s7 2.4 7 6"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 22c4 0 6.5-2.6 6.5-6.2 0-2.6-1.5-4.6-3.3-6.4-.6 1.2-1.4 2-2.4 2.3.3-2.7-.8-5.5-3.3-7.7.2 3.4-1.6 4.6-3.1 6.6-1 1.4-1.4 2.8-1.4 4.4C5.5 19.2 8 22 12 22Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-9.4A4.1 4.1 0 0 1 12 7a4.1 4.1 0 0 1 7 3.6c0 5-7 9.4-7 9.4Z"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8.5 21h7M10 17h4"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-10a6 6 0 1 1 12 0c0 4.5-6 10-6 10Z"/><circle cx="12" cy="11" r="2.2"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M9 8l-4 4 4 4M5 12h10"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="m14 6 4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.6l6.2-.9z"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15M10 6l6 6-6 6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.8M18 15c2 .6 3 2.2 3 4.5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+    <symbol id="i-books" viewBox="0 0 24 24"><path d="M4 5h4v14H4zM10 4h4v15h-4zM16 6l3.5-1 3 15-3.5 1z"/></symbol>
+    <symbol id="i-emblem" viewBox="0 0 64 58"><path d="M30 52V13C22 8 12 6 3 8v40c9-2 19-1 27 4Z" fill="currentColor"/><path d="M34 52V13c8-5 18-7 27-5v40c-9-2-19-1-27 4Z" fill="currentColor" opacity=".9"/><path d="M7 18c7-1 13 0 18 2M7 26c7-1 13 0 18 2M7 34c7-1 13 0 18 2M57 18c-7-1-13 0-18 2M57 26c-7-1-13 0-18 2M57 34c-7-1-13 0-18 2" stroke="#1E3A2B" stroke-width="1.3" stroke-linecap="round" opacity=".45"/><path d="M32 11v20l-4.5-3.5L23 31V11Z" fill="#C59B63"/><circle cx="32" cy="6.5" r="2.8" fill="#C59B63"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m21 3-7 18-4-8-8-4z"/><path d="M21 3 10 13"/></symbol>
+  </svg>
+
+  <div class="stage">
+    <aside class="stage-brand" aria-hidden="true">
+      <div class="brand-lockup brand-lockup-lg">
+        <span class="brand-emblem"><svg><use href="#i-emblem"/></svg></span>
+        <span class="brand-lockup-text"><strong>جليس</strong><small>نادي قرائي ثقافي</small></span>
+      </div>
+      <p class="stage-kicker">مساحة الأعضاء · نسخة التجارب</p>
+      <h2>حيث تصير<br><span>القراءة مجلساً.</span></h2>
+      <p class="stage-text">ورد القراءة الأسبوعي، لوحة الأعضاء، الاقتباسات، مكتبة النادي، ومقالات الأعضاء… كل ذلك في مساحة واحدة، صُممت بهوية النادي.</p>
+      <ul class="stage-list">
+        <li><span>٠١</span> سجّل وردك الأسبوعي وتابع تقدمك</li>
+        <li><span>٠٢</span> شارك اقتباساً من هامش كتابك</li>
+        <li><span>٠٣</span> استعر من مكتبة النادي وأدر مكتبتك</li>
+        <li><span>٠٤</span> اقرأ ما يكتبه أعضاء جليس</li>
+      </ul>
+      <p class="stage-foot">نادي جليس القرائي · منطقة القصيم</p>
+    </aside>
+
+    <div class="phone">
+      <div class="phone-notch" aria-hidden="true"><span></span></div>
+      <div class="app" id="app">
+
+        <!-- ========== بوابة الأعضاء ========== -->
+        <section class="gate" id="gate" aria-labelledby="gate-title">
+          <div class="gate-glow" aria-hidden="true"></div>
+          <div class="gate-ornament" aria-hidden="true"></div>
+          <header class="gate-head">
+            <div class="brand-lockup brand-lockup-gate">
+              <span class="brand-emblem"><svg><use href="#i-emblem"/></svg></span>
+              <span class="brand-lockup-text"><strong>جليس</strong><small>نادي قرائي ثقافي</small></span>
+            </div>
+            <span class="gate-badge"><i></i> مساحة خاصة بالأعضاء</span>
+          </header>
+
+          <div class="gate-body">
+            <p class="gate-salaam">أهلاً بك في مجلسك القرائي</p>
+            <h1 id="gate-title">جليس<br><span>مساحة الأعضاء</span></h1>
+            <p class="gate-sub">هنا نتابع وردنا، نتبادل اقتباساتنا، ونكتب عن الكتب التي تسكنّا.</p>
+
+            <form class="gate-card" id="login-form" novalidate>
+              <div class="gate-card-head">
+                <span class="gate-card-icon"><svg class="ic"><use href="#i-book"/></svg></span>
+                <div>
+                  <h2>دخول الأعضاء</h2>
+                  <p>أدخل اسمك ورمز العضوية للمتابعة</p>
+                </div>
+              </div>
+              <div class="field">
+                <label for="login-name">اسم العضو</label>
+                <input class="input" id="login-name" name="name" type="text" autocomplete="name" placeholder="اكتب اسمك" required>
+              </div>
+              <div class="field">
+                <label for="login-code">رمز العضوية</label>
+                <input class="input" id="login-code" name="code" type="text" autocomplete="off" placeholder="مثال: JALEES" required>
+                <p class="field-hint">رمز النسخة التجريبية: <strong>JALEES</strong></p>
+              </div>
+              <p class="form-error" id="login-error" role="alert" hidden></p>
+              <button class="btn btn-gold btn-block" type="submit">
+                <svg class="ic"><use href="#i-arrow-right"/></svg>
+                الدخول إلى المساحة
+              </button>
+              <button class="gate-demo" type="button" id="demo-login">تجربة سريعة بدون رمز</button>
+            </form>
+
+            <div class="gate-proof">
+              <div class="avatar-stack" aria-hidden="true">
+                <span style="background:#2A4F3B">ع</span>
+                <span style="background:#8C532D">ن</span>
+                <span style="background:#A3503B">ر</span>
+                <span style="background:#C59B63">م</span>
+              </div>
+              <p>يجتمع في جليس <strong>٤٨ قارئاً</strong> حول الكتب والأفكار.</p>
+            </div>
+          </div>
+          <p class="gate-foot">نادي جليس القرائي · منطقة القصيم</p>
+        </section>
+
+        <!-- ========== هيكل التطبيق ========== -->
+        <div class="shell" id="shell" hidden>
+          <div class="status-bar" aria-hidden="true">
+            <span class="status-time">٩:٤١</span>
+            <span class="status-icons">
+              <i class="sig"><b></b><b></b><b></b><b></b></i>
+              <i class="wifi"></i>
+              <i class="battery"><b></b></i>
+            </span>
+          </div>
+
+          <header class="app-header">
+            <button class="brand" type="button" data-action="go-home" aria-label="الرئيسية">
+              <span class="brand-mark"><span class="brand-emblem"><svg><use href="#i-emblem"/></svg></span></span>
+              <span class="brand-text"><strong>جليس</strong><small>مساحة الأعضاء</small></span>
+            </button>
+            <div class="header-actions">
+              <button class="icon-btn" type="button" data-action="notifications" aria-label="التنبيهات">
+                <svg class="ic"><use href="#i-bell"/></svg>
+                <span class="notif-dot"></span>
+              </button>
+              <button class="avatar-btn" type="button" id="header-avatar" data-action="open-profile" aria-label="ملفي الشخصي">م</button>
+            </div>
+          </header>
+
+          <main class="app-main" id="app-main">
+
+            <!-- ========== الرئيسية ========== -->
+            <section class="screen active" data-screen="home" id="screen-home">
+              <div class="greeting">
+                <p class="date-label" id="today-label"></p>
+                <h1>أهلاً بك، <span id="home-first-name">مشعل</span></h1>
+                <p class="greeting-sub">أي كتاب بين يديك اليوم؟</p>
+              </div>
+
+              <div class="home-actions">
+                <button class="btn btn-gold" type="button" data-action="go-log">
+                  <svg class="ic"><use href="#i-plus"/></svg> سجّل قراءتك
+                </button>
+                <button class="btn btn-on-dark" type="button" data-action="open-quote">
+                  <svg class="ic"><use href="#i-quote"/></svg> اقتبس
+                </button>
+              </div>
+
+              <div class="sec-head">
+                <div><h3>لوحة الأسبوع</h3><p>أكثر الأعضاء قراءة</p></div>
+                <button class="link-btn" type="button" data-action="go-board">الكل <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              </div>
+              <div class="home-board" id="home-board"></div>
+
+              <article class="meeting-card">
+                <div class="meeting-date"><strong>١٦</strong><span>ربيع أول</span></div>
+                <div class="meeting-body">
+                  <span class="chip chip-soft">جلسة الأسبوع</span>
+                  <h4>مناقشة كتاب: ابني حبيبي</h4>
+                  <p><svg class="ic"><use href="#i-calendar"/></svg> الثلاثاء القادم · ٨:٠٠ م</p>
+                  <p><svg class="ic"><use href="#i-pin"/></svg> جمعية التنمية الأهلية بالمريداسية</p>
+                  <div class="meeting-foot">
+                    <span class="meeting-people" id="meeting-attendees">—</span>
+                    <button class="btn btn-sm btn-primary" type="button" data-action="meeting">التفاصيل والحضور</button>
+                  </div>
+                </div>
+              </article>
+
+              <div class="sec-head">
+                <div><h3>اقتباس اليوم</h3><p>من هامش كتب الأعضاء</p></div>
+                <button class="link-btn" type="button" data-action="go-quotes">المزيد <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              </div>
+              <article class="daily-quote" id="home-quote"></article>
+
+              <div class="sec-head">
+                <div><h3>من مكتبة النادي</h3><p>مختارات جليس لهذا الشهر</p></div>
+                <button class="link-btn" type="button" data-action="go-library">المكتبة <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              </div>
+              <div class="book-rail" id="home-books"></div>
+
+              <div class="sec-head">
+                <div><h3>قلم هذا الأسبوع</h3><p>من مقالات الأعضاء</p></div>
+                <button class="link-btn" type="button" data-action="go-articles">المقالات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              </div>
+              <article class="home-article" id="home-article"></article>
+            </section>
+            <!-- ========== القراءات ========== -->
+            <section class="screen" data-screen="readings" id="screen-readings">
+              <div class="screen-head">
+                <div><span class="eyebrow">وردك اليومي</span><h1>القراءات</h1></div>
+                <span class="week-badge" id="readings-week-badge">—</span>
+              </div>
+
+              <div class="segmented" id="readings-seg" role="tablist" aria-label="القراءات">
+                <button class="active" type="button" data-seg="pane-log" role="tab" aria-selected="true">سجلي</button>
+                <button type="button" data-seg="pane-board" role="tab" aria-selected="false">لوحة الأعضاء</button>
+              </div>
+
+              <div class="pane active" id="pane-log">
+                <div class="mini-stats" id="log-stats"></div>
+
+                <form class="card form-card" id="log-form" novalidate>
+                  <div class="form-head">
+                    <span class="form-icon"><svg class="ic"><use href="#i-plus"/></svg></span>
+                    <div><h3>سجّل قراءتك</h3><p>كم صفحة أضفت اليوم؟</p></div>
+                  </div>
+                  <div class="field">
+                    <label for="log-book">الكتاب <span class="label-opt">اختياري</span></label>
+                    <input class="input" id="log-book" type="text" list="log-book-list" maxlength="80" placeholder="اكتب عنوان الكتاب…" autocomplete="off">
+                    <datalist id="log-book-list"></datalist>
+                  </div>
+                  <div class="field">
+                    <label for="log-pages">الصفحات</label>
+                    <input class="input" id="log-pages" type="number" min="1" max="2000" inputmode="numeric" placeholder="٢٠" required>
+                  </div>
+                  <div class="field">
+                    <span class="field-label">التاريخ والوقت</span>
+                    <div class="auto-stamp">
+                      <svg class="ic"><use href="#i-calendar"/></svg>
+                      <span id="log-stamp-date">—</span>
+                      <i class="auto-stamp-dot" aria-hidden="true"></i>
+                      <svg class="ic"><use href="#i-clock"/></svg>
+                      <span id="log-stamp-time">—</span>
+                      <span class="auto-badge">تلقائي</span>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="log-note">خاطرة (اختياري)</label>
+                    <textarea class="input" id="log-note" rows="2" maxlength="180" placeholder="ما الفكرة التي توقفت عندها؟"></textarea>
+                  </div>
+                  <button class="btn btn-primary btn-block" type="submit">
+                    <svg class="ic"><use href="#i-check"/></svg> أضف إلى سجل قراءتي
+                  </button>
+                </form>
+
+                <article class="card chart-card">
+                  <div class="card-head"><h3>إيقاع الأسبوع</h3><span class="muted sm">صفحات / يوم</span></div>
+                  <div class="chart" id="week-chart"></div>
+                </article>
+
+                <div class="sec-head">
+                  <div><h3>سجل هذا الأسبوع</h3><p id="entries-count">—</p></div>
+                </div>
+                <div class="entries" id="entries-list"></div>
+              </div>
+
+              <div class="pane" id="pane-board" hidden>
+                <div class="board-hero">
+                  <div class="board-copy">
+                    <span class="eyebrow light">لوحة قراءات الأسبوع</span>
+                    <h2>من يقرأ أكثر هذا الأسبوع؟</h2>
+                    <p>القراءة ليست سباقاً… لكنها أجمل منافسة.</p>
+                  </div>
+                  <div class="board-total"><strong id="board-total">٠</strong><span>صفحة جماعية</span></div>
+                </div>
+
+                <div class="segmented segmented-sm" id="period-seg">
+                  <button class="active" type="button" data-period="week">هذا الأسبوع</button>
+                  <button type="button" data-period="last">الأسبوع الماضي</button>
+                </div>
+
+                <div class="podium" id="board-podium"></div>
+                <div class="board-list" id="board-list"></div>
+
+                <article class="card club-goal">
+                  <div class="card-head"><h3>هدف النادي</h3><span id="club-goal-label">—</span></div>
+                  <div class="progress"><span id="club-goal-bar"></span></div>
+                  <p class="muted sm" id="club-goal-note"></p>
+                </article>
+              </div>
+            </section>
+
+            <!-- ========== الاقتباسات ========== -->
+            <section class="screen" data-screen="quotes" id="screen-quotes">
+              <div class="screen-head">
+                <div><span class="eyebrow">من هامش الكتب</span><h1>الاقتباسات</h1></div>
+                <button class="btn btn-sm btn-primary" type="button" data-action="open-quote">
+                  <svg class="ic"><use href="#i-plus"/></svg> اقتبس
+                </button>
+              </div>
+
+              <article class="quote-promo" data-action="open-quote" role="button" tabindex="0">
+                <span class="quote-promo-mark">”</span>
+                <p>اقتباس واحد قد يغيّر طريقة قراءتنا لكتاب كامل.</p>
+                <span class="quote-promo-link">شارك ما ألهمك <svg class="ic"><use href="#i-arrow-right"/></svg></span>
+              </article>
+
+              <div class="chips-row" id="quote-filters">
+                <button class="chip-filter active" type="button" data-qfilter="all">الكل</button>
+                <button class="chip-filter" type="button" data-qfilter="mine">اقتباساتي</button>
+                <button class="chip-filter" type="button" data-qfilter="saved">المحفوظة</button>
+              </div>
+
+              <div class="quotes-feed" id="quotes-feed"></div>
+            </section>
+            <!-- ========== المكتبة ========== -->
+            <section class="screen" data-screen="library" id="screen-library">
+              <div class="screen-head">
+                <div><span class="eyebrow">ورفوف جليس</span><h1>المكتبة</h1></div>
+                <button class="icon-btn" type="button" data-action="focus-search" aria-label="بحث">
+                  <svg class="ic"><use href="#i-search"/></svg>
+                </button>
+              </div>
+
+              <div class="segmented" id="library-seg" role="tablist" aria-label="المكتبة">
+                <button class="active" type="button" data-lseg="pane-club" role="tab" aria-selected="true">مكتبة النادي</button>
+                <button type="button" data-lseg="pane-mine" role="tab" aria-selected="false">مكتبتي</button>
+              </div>
+
+              <div class="pane active" id="pane-club">
+                <div class="search-box">
+                  <svg class="ic"><use href="#i-search"/></svg>
+                  <input id="club-search" type="search" placeholder="ابحث عن كتاب أو مؤلف…" autocomplete="off" aria-label="ابحث في مكتبة النادي">
+                </div>
+                <div class="chips-row wrap" id="category-chips"></div>
+                <div class="sec-head">
+                  <div><h3 id="library-count-label">كتب النادي</h3><p>متاحة للاستعارة من مقر النادي</p></div>
+                </div>
+                <div class="book-grid" id="club-books"></div>
+              </div>
+
+              <div class="pane" id="pane-mine" hidden>
+                <div class="reading-summary" id="my-summary"></div>
+                <div class="chips-row" id="my-filters">
+                  <button class="chip-filter active" type="button" data-mfilter="reading">أقرأ الآن</button>
+                  <button class="chip-filter" type="button" data-mfilter="want">أريد قراءتها</button>
+                  <button class="chip-filter" type="button" data-mfilter="finished">أنهيتها</button>
+                </div>
+                <div class="my-books" id="my-books"></div>
+              </div>
+            </section>
+
+            <!-- ========== المقالات ========== -->
+            <section class="screen" data-screen="articles" id="screen-articles">
+              <div class="screen-head">
+                <div><span class="eyebrow">أقلام الأعضاء</span><h1>المقالات</h1></div>
+                <button class="btn btn-sm btn-primary" type="button" data-action="open-article-compose">
+                  <svg class="ic"><use href="#i-edit"/></svg> اكتب
+                </button>
+              </div>
+
+              <article class="featured-article" id="featured-article"></article>
+
+              <div class="sec-head">
+                <div><h3>أحدث المقالات</h3><p>تجارب وقراءات من أعضاء جليس</p></div>
+              </div>
+              <div class="articles-list" id="articles-list"></div>
+            </section>
+
+            <!-- ========== الملف الشخصي ========== -->
+            <section class="screen profile-screen" data-screen="profile" id="screen-profile">
+              <div class="profile-top">
+                <button class="icon-btn light" type="button" data-action="profile-back" aria-label="رجوع">
+                  <svg class="ic"><use href="#i-arrow-right"/></svg>
+                </button>
+                <span>ملفي الشخصي</span>
+                <button class="icon-btn light" type="button" data-action="edit-name" aria-label="تعديل الاسم">
+                  <svg class="ic"><use href="#i-edit"/></svg>
+                </button>
+              </div>
+
+              <div class="profile-hero">
+                <div class="profile-pattern" aria-hidden="true"></div>
+                <div class="profile-avatar" id="profile-avatar">م</div>
+                <h2 id="profile-name">مشعل الحفير</h2>
+                <p id="profile-role">عضو مؤسس · منذ ٢٠٢٤</p>
+                <div class="profile-badges" id="profile-badges"></div>
+              </div>
+
+              <div class="profile-stats" id="profile-stats"></div>
+
+              <article class="card goal-card">
+                <div class="card-head"><h3>هدف القراءة الأسبوعي</h3><span class="muted sm">صفحة</span></div>
+                <p class="muted sm">اختر ورداً يناسب إيقاعك… ونحن نتابع معك.</p>
+                <form class="goal-form" id="goal-form">
+                  <input type="range" id="goal-range" min="50" max="500" step="10" aria-label="هدف القراءة الأسبوعي">
+                  <output id="goal-output">٢٠٠</output>
+                  <button class="btn btn-primary btn-sm" type="submit">حفظ</button>
+                </form>
+              </article>
+
+              <div class="card settings-card">
+                <label class="switch-row">
+                  <span class="switch-label"><svg class="ic"><use href="#i-bell"/></svg> تذكير ورد القراءة</span>
+                  <input type="checkbox" id="notif-toggle">
+                  <span class="switch" aria-hidden="true"></span>
+                </label>
+                <button class="switch-row as-btn" type="button" data-action="reset-demo">
+                  <span class="switch-label"><svg class="ic"><use href="#i-info"/></svg> إعادة تعيين بيانات التجربة</span>
+                  <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+                </button>
+                <button class="switch-row as-btn danger" type="button" data-action="logout">
+                  <span class="switch-label"><svg class="ic"><use href="#i-logout"/></svg> تسجيل الخروج</span>
+                  <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+                </button>
+              </div>
+
+              <p class="profile-foot">نادي جليس القرائي · منطقة القصيم<br>لأن القراءة تجمعنا</p>
+            </section>
+
+          </main>
+
+          <!-- ========== شريط التنقل السفلي ========== -->
+          <nav class="tabbar" aria-label="التنقل الرئيسي">
+            <button class="tab active" type="button" data-nav="home" aria-current="page">
+              <svg class="ic"><use href="#i-home"/></svg><span>الرئيسية</span>
+            </button>
+            <button class="tab" type="button" data-nav="readings">
+              <svg class="ic"><use href="#i-book"/></svg><span>القراءات</span>
+            </button>
+            <button class="tab" type="button" data-nav="quotes">
+              <svg class="ic"><use href="#i-quote"/></svg><span>الاقتباسات</span>
+            </button>
+            <button class="tab" type="button" data-nav="library">
+              <svg class="ic"><use href="#i-library"/></svg><span>المكتبة</span>
+            </button>
+            <button class="tab" type="button" data-nav="articles">
+              <svg class="ic"><use href="#i-article"/></svg><span>المقالات</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- ========== النوافذ السفلية والتنبيهات ========== -->
+        <div class="sheet-root" id="sheet-root" hidden></div>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        <div class="confetti-layer" id="confetti" aria-hidden="true"></div>
+
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="noscript">هذه المساحة تحتاج تفعيل جافاسكريبت في المتصفح.</div>
+  </noscript>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

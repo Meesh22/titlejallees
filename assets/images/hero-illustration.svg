@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 520" width="700" height="520" fill="none">
+  <defs>
+    <linearGradient id="wallBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F7F3E9" />
+      <stop offset="100%" stop-color="#ECE5D4" />
+    </linearGradient>
+    <linearGradient id="woodGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8A5A36" />
+      <stop offset="100%" stop-color="#5B381E" />
+    </linearGradient>
+    <linearGradient id="plantGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2D553F" />
+      <stop offset="100%" stop-color="#1E3A2B" />
+    </linearGradient>
+    <linearGradient id="lampGlow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FBE6B5" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#F7F3E9" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1E3A2B" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base Canvas -->
+  <rect width="700" height="520" rx="24" fill="url(#wallBg)" />
+
+  <!-- Arch Accent / Cultural Architecture Window -->
+  <path d="M 120 460 L 120 220 A 130 130 0 0 1 380 220 L 380 460 Z" fill="#EFE8D8" opacity="0.6"/>
+
+  <!-- Warm Reading Lamp Light Beam -->
+  <polygon points="510,80 340,460 680,460" fill="url(#lampGlow)" opacity="0.65" />
+
+  <!-- Elegant Wall Lamp -->
+  <g transform="translate(480, 40)">
+    <path d="M 0 50 Q 30 10 30 -20" stroke="#8C532D" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <path d="M 10 50 L 50 50 L 40 85 L 20 85 Z" fill="#C59B63"/>
+    <circle cx="30" cy="90" r="12" fill="#FFE59E" filter="drop-shadow(0px 0px 10px #FFD56B)"/>
+  </g>
+
+  <!-- Bookshelf Level 1 -->
+  <rect x="70" y="320" width="340" height="14" rx="4" fill="url(#woodGrad)" filter="url(#softShadow)"/>
+  <rect x="80" y="334" width="20" height="20" fill="#5B381E" rx="2"/>
+  <rect x="370" y="334" width="20" height="20" fill="#5B381E" rx="2"/>
+
+  <!-- Books on Shelf -->
+  <!-- Book 1 (Forest Green) -->
+  <rect x="95" y="210" width="30" height="110" rx="3" fill="#1E3A2B"/>
+  <line x1="110" y1="220" x2="110" y2="300" stroke="#C59B63" stroke-width="2" stroke-dasharray="4 2"/>
+  <!-- Book 2 (Leather Brown) -->
+  <rect x="130" y="190" width="36" height="130" rx="3" fill="#8C532D"/>
+  <line x1="148" y1="205" x2="148" y2="305" stroke="#F4EEDB" stroke-width="2"/>
+  <!-- Book 3 (Burgundy/Warm Clay) -->
+  <rect x="171" y="230" width="28" height="90" rx="3" fill="#A3503B"/>
+  <!-- Leaning Books -->
+  <g transform="rotate(15 220 320)">
+    <rect x="200" y="210" width="26" height="110" rx="3" fill="#3D5A45"/>
+  </g>
+  <g transform="rotate(22 240 320)">
+    <rect x="220" y="210" width="24" height="110" rx="3" fill="#C59B63"/>
+  </g>
+
+  <!-- Potted Plant on Shelf -->
+  <g transform="translate(320, 240)">
+    <!-- Pot -->
+    <path d="M 15 50 L 5 80 L 45 80 L 35 50 Z" fill="#D38C65"/>
+    <!-- Vines / Leaves -->
+    <path d="M 25 50 Q 5 20 -15 35 Q -5 50 15 52" fill="url(#plantGrad)"/>
+    <path d="M 25 50 Q 30 10 50 20 Q 40 40 25 52" fill="url(#plantGrad)"/>
+    <path d="M 25 50 Q 45 50 55 75 Q 40 75 25 55" fill="url(#plantGrad)"/>
+    <path d="M 20 60 Q 5 85 -5 110" stroke="#2D553F" stroke-width="2" fill="none"/>
+    <circle cx="-5" cy="110" r="4" fill="#2D553F"/>
+    <circle cx="2" cy="90" r="3.5" fill="#3D5A45"/>
+  </g>
+
+  <!-- Big Cultural Wooden Reading Table -->
+  <path d="M 50 430 L 650 430 L 670 470 L 30 470 Z" fill="url(#woodGrad)" filter="url(#softShadow)"/>
+  <!-- Table Legs -->
+  <rect x="80" y="470" width="28" height="50" fill="#4A2E19"/>
+  <rect x="590" y="470" width="28" height="50" fill="#4A2E19"/>
+
+  <!-- Stack of Books on Table -->
+  <g transform="translate(130, 350)" filter="url(#softShadow)">
+    <rect x="0" y="55" width="160" height="25" rx="4" fill="#1E3A2B"/>
+    <rect x="10" y="60" width="145" height="15" fill="#FAF6EE" rx="2"/>
+    <rect x="15" y="32" width="140" height="23" rx="4" fill="#8C532D"/>
+    <rect x="25" y="37" width="125" height="13" fill="#FAF6EE" rx="2"/>
+    <rect x="30" y="12" width="120" height="20" rx="4" fill="#3E634F"/>
+    <rect x="38" y="16" width="105" height="12" fill="#FAF6EE" rx="2"/>
+  </g>
+
+  <!-- Large Open Book on Reading Stand -->
+  <g transform="translate(330, 310)" filter="url(#softShadow)">
+    <!-- Wooden Book Stand (Rehal) -->
+    <polygon points="120,120 60,80 80,120 120,105 160,120 180,80" fill="#5B381E"/>
+    <!-- Left Page -->
+    <path d="M 120 95 C 100 85 40 85 15 95 C 10 96 10 35 15 35 C 40 25 100 25 120 35 Z" fill="#FCFAF5" stroke="#E6DEC9" stroke-width="1.5"/>
+    <!-- Right Page -->
+    <path d="M 120 95 C 140 85 200 85 225 95 C 230 96 230 35 225 35 C 200 25 140 25 120 35 Z" fill="#FCFAF5" stroke="#E6DEC9" stroke-width="1.5"/>
+    <!-- Page text simulation lines (Right) -->
+    <line x1="135" y1="45" x2="210" y2="45" stroke="#2D553F" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+    <line x1="135" y1="54" x2="205" y2="54" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <line x1="135" y1="63" x2="195" y2="63" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <line x1="135" y1="72" x2="210" y2="72" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <!-- Page text simulation lines (Left) -->
+    <line x1="30" y1="45" x2="105" y2="45" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <line x1="35" y1="54" x2="105" y2="54" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <line x1="45" y1="63" x2="105" y2="63" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <line x1="30" y1="72" x2="105" y2="72" stroke="#8C532D" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <!-- Golden bookmark cord -->
+    <path d="M 120 35 C 122 65 118 95 126 125" stroke="#C59B63" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Reading Glasses -->
+  <g transform="translate(305, 415)">
+    <circle cx="15" cy="15" r="13" stroke="#C59B63" stroke-width="2.5" fill="none" opacity="0.9"/>
+    <circle cx="47" cy="15" r="13" stroke="#C59B63" stroke-width="2.5" fill="none" opacity="0.9"/>
+    <path d="M 28 12 Q 31 8 34 12" stroke="#C59B63" stroke-width="2" fill="none"/>
+    <path d="M 2 15 L -8 20" stroke="#C59B63" stroke-width="2" stroke-linecap="round"/>
+    <path d="M 60 15 L 70 20" stroke="#C59B63" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Saudi Coffee Cup (Finjan) & Tea/Dallah vibe -->
+  <g transform="translate(560, 395)">
+    <!-- Small saucer -->
+    <ellipse cx="25" cy="30" rx="24" ry="7" fill="#E8DEC8"/>
+    <!-- Ceramic cup -->
+    <path d="M 10 10 L 14 26 C 16 30 34 30 36 26 L 40 10 Z" fill="#FBF8F2" stroke="#C59B63" stroke-width="1.5"/>
+    <!-- Coffee liquid -->
+    <ellipse cx="25" cy="12" rx="14" ry="4" fill="#693B18"/>
+    <!-- Steam -->
+    <path d="M 22 4 Q 20 -6 25 -14" stroke="#C59B63" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <path d="M 28 6 Q 30 -4 26 -12" stroke="#C59B63" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  </g>
+
+  <!-- Badge Pill: نادي جليس القرائي -->
+  <g transform="translate(40, 40)" filter="url(#softShadow)">
+    <rect width="210" height="42" rx="21" fill="#FFFFFF" opacity="0.95"/>
+    <circle cx="24" cy="21" r="12" fill="#1E3A2B"/>
+    <!-- Small leaf/book inside circle -->
+    <path d="M20 24 C20 18 28 17 28 17 C28 17 28 23 20 24 Z" fill="#C59B63"/>
+    <text x="44" y="26" font-family="'IBM Plex Sans Arabic', 'Tajawal', sans-serif" font-weight="700" font-size="13" fill="#1E3A2B">
+      جلسات حوارية وقرائية ملهمة
+    </text>
+  </g>
+</svg>

@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ملامح الأثر وثمار مسيرة نادي جليس القرائي | القصيم</title>
+  
+  <meta name="description" content="صفحة ملامح الأثر وثمار نادي جليس القرائي في منطقة القصيم: إنجازات القراءة، الصور الميدانية، وجلسات الحوار والاستضافات الثقافية.">
+  <meta name="theme-color" content="#1E3A2B">
+
+  <!-- Open Graph / معاينة المشاركة (واتساب) -->
+  <meta property="og:title" content="ملامح الأثر وثمار مسيرة نادي جليس القرائي">
+  <meta property="og:description" content="إنجازات القراءة، الصور الميدانية، وجلسات الحوار والاستضافات الثقافية لنادي جليس القرائي في القصيم.">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ar_SA">
+  <meta property="og:site_name" content="نادي جليس القرائي">
+  <meta property="og:url" content="https://jallees.vercel.app/proofs.html">
+  <meta property="og:image" content="https://jallees.vercel.app/assets/images/og-jalees-logo.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="شعار نادي جليس القرائي">
+
+  <!-- Twitter / X: بطاقة مربعة -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ملامح الأثر وثمار مسيرة نادي جليس القرائي">
+  <meta name="twitter:description" content="إنجازات القراءة، الصور الميدانية، وجلسات الحوار والاستضافات الثقافية لنادي جليس القرائي في القصيم.">
+  <meta name="twitter:image" content="https://jallees.vercel.app/assets/images/og-jalees-logo.jpg">
+  <meta name="twitter:image:alt" content="شعار نادي جليس القرائي">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/images/logo-icon.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    /* تنسيقات مخصصة لصفحة الشواهد والإثباتات */
+    .proof-page-header {
+      background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+      color: #FFFFFF;
+      padding: 64px 0 54px;
+      text-align: center;
+      position: relative;
+    }
+
+    .proof-page-header::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: linear-gradient(90deg, var(--color-primary), var(--color-gold), var(--color-wood));
+    }
+
+    .back-nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+
+    .btn-back-home {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background-color: rgba(255, 255, 255, 0.12);
+      color: #FFFFFF;
+      padding: 8px 18px;
+      border-radius: var(--radius-full);
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      transition: var(--transition-fast);
+    }
+
+    .btn-back-home:hover {
+      background-color: var(--color-gold);
+      color: var(--color-primary-dark);
+      border-color: var(--color-gold);
+    }
+
+    .proof-page-title {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 16px;
+    }
+
+    .proof-page-lead {
+      font-size: clamp(16px, 1.3vw, 19px);
+      color: #D6DEC8;
+      max-width: 800px;
+      margin-inline: auto;
+      line-height: 1.8;
+    }
+
+    .proof-section-card {
+      background-color: var(--color-surface);
+      border: 1.5px solid var(--color-secondary-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      margin-bottom: 48px;
+      transition: var(--transition-normal);
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+    }
+
+    .impact-gallery-section,
+    .gallery-card {
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+    }
+
+    .proof-section-card:hover {
+      border-color: var(--color-gold);
+      box-shadow: var(--shadow-elevated);
+    }
+
+    .proof-section-body {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 36px;
+      padding: 36px;
+      align-items: center;
+    }
+
+    .proof-section-body.reverse {
+      grid-template-columns: 0.85fr 1.15fr;
+    }
+
+    .proof-media-wrap {
+      position: relative;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-subtle);
+      border: 1px solid var(--color-secondary-border);
+      background-color: var(--color-primary-dark);
+    }
+
+    .proof-media-wrap img {
+      width: 100%;
+      height: auto;
+      display: block;
+      transition: transform var(--transition-slow);
+    }
+
+    .proof-section-card:hover .proof-media-wrap img {
+      transform: scale(1.02);
+    }
+
+    .proof-media-tag {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background-color: rgba(18, 36, 26, 0.92);
+      color: #FAF6EE;
+      padding: 6px 16px;
+      border-radius: var(--radius-full);
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid rgba(197, 155, 99, 0.4);
+      backdrop-filter: blur(6px);
+    }
+
+    .proof-content-header {
+      margin-bottom: 20px;
+    }
+
+    .proof-content-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: var(--radius-full);
+      background-color: rgba(197, 155, 99, 0.15);
+      color: var(--color-wood);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .proof-content-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--color-primary);
+      margin-bottom: 12px;
+    }
+
+    .proof-content-desc {
+      font-size: 16px;
+      color: var(--color-text-muted);
+      line-height: 1.8;
+      margin-bottom: 24px;
+    }
+
+    .proof-fact-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .proof-fact-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 15px;
+      color: var(--color-text-main);
+      background-color: var(--color-surface-soft);
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      border-right: 3px solid var(--color-primary);
+    }
+
+    .proof-fact-icon {
+      color: var(--color-gold);
+      font-weight: 800;
+      font-size: 16px;
+      margin-top: 2px;
+    }
+
+    /* معرض صور الأثر التوثيقية */
+    .impact-gallery-section {
+      margin-top: 60px;
+      margin-bottom: 50px;
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-top: 30px;
+    }
+
+    .proof-header-logo {
+      height: 58px;
+      width: auto;
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .gallery-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .proof-page-header {
+        padding: 22px 0 28px;
+      }
+
+      .back-nav-bar {
+        flex-direction: column-reverse;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .proof-header-logo {
+        height: 52px;
+      }
+
+      .proof-page-title {
+        font-size: 22px;
+        margin-bottom: 10px;
+      }
+
+      .proof-page-lead {
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .proof-section-card {
+        margin-bottom: 20px;
+      }
+
+      .proof-content-header {
+        margin-bottom: 10px;
+      }
+
+      .proof-content-title {
+        font-size: 17px;
+        margin-bottom: 8px;
+      }
+
+      .proof-content-desc {
+        font-size: 13px;
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+
+      .proof-fact-list {
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .proof-fact-item {
+        padding: 7px 10px;
+        font-size: 12px;
+        gap: 8px;
+        line-height: 1.45;
+      }
+
+      .proof-fact-icon {
+        font-size: 12px;
+        margin-top: 1px;
+      }
+
+      .gallery-img-wrap img {
+        height: 200px;
+      }
+
+      .gallery-caption {
+        padding: 12px 14px 14px;
+        gap: 4px;
+      }
+
+      .gallery-title {
+        font-size: 15px;
+      }
+
+      .gallery-desc {
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+
+      .proof-media-tag,
+      .gallery-badge {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+
+      .impact-gallery-section {
+        margin-top: 28px;
+        margin-bottom: 24px;
+      }
+    }
+
+    .gallery-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-secondary-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      transition: var(--transition-normal);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .gallery-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-elevated);
+      border-color: var(--color-gold);
+    }
+
+    .gallery-img-wrap {
+      position: relative;
+      overflow: hidden;
+      background: #1E3A2B;
+    }
+
+    .gallery-img-wrap img {
+      width: 100%;
+      height: 380px;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.5s ease;
+    }
+
+    .gallery-card:hover .gallery-img-wrap img {
+      transform: scale(1.03);
+    }
+
+    .gallery-badge {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(18, 36, 26, 0.9);
+      color: #FAF6EE;
+      padding: 5px 14px;
+      border-radius: var(--radius-full);
+      font-size: 12.5px;
+      font-weight: 700;
+      border: 1px solid rgba(197, 155, 99, 0.4);
+      backdrop-filter: blur(6px);
+    }
+
+    .gallery-caption {
+      padding: 18px 22px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .gallery-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--color-primary);
+    }
+
+    .gallery-desc {
+      font-size: 14px;
+      color: var(--color-text-muted);
+      line-height: 1.6;
+    }
+
+    /* تفاصيل موسعة داخل كروت المعرض (حكاية كتاب، الزيارات العلمية) */
+    .gallery-details {
+      font-size: 13.5px;
+      color: var(--color-text-muted);
+      line-height: 1.75;
+    }
+    .gallery-details p { margin: 0 0 6px; }
+    .gallery-details ul { margin: 0 0 6px; padding-right: 18px; }
+    .gallery-details li { margin-bottom: 4px; }
+    .gallery-details ul ul { margin: 4px 0 4px; }
+    .gallery-details strong { color: var(--color-primary); font-weight: 700; }
+
+    @media (max-width: 992px) {
+      .proof-section-body,
+      .proof-section-body.reverse {
+        grid-template-columns: 1fr;
+        padding: 24px;
+        gap: 24px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .proof-section-body,
+      .proof-section-body.reverse {
+        padding: 14px;
+        gap: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- شريط الترويسة لصفحة الشواهد -->
+  <header class="proof-page-header">
+    <div class="container">
+      
+      <div class="back-nav-bar">
+        <a href="index.html" class="btn-back-home">
+          <span>← العودة إلى الصفحة الرئيسية</span>
+        </a>
+        <a href="index.html" class="site-logo">
+          <img src="assets/images/logo-on-dark.png" alt="نادي جليس القرائي" class="proof-header-logo">
+        </a>
+      </div>
+
+      <span class="section-badge badge-light">ملامح الأثر والأنشطة</span>
+      <h1 class="proof-page-title">ملامح الأثر وثمار مسيرة نادي جليس</h1>
+      <p class="proof-page-lead">
+        هنا نضع بين أيديكم ملامح مسيرة النادي وأبرز اللقاءات والأنشطة المصورة التي تعكس ما حققه نادي جليس القرائي وأعضاؤه في منطقة القصيم.
+      </p>
+
+    </div>
+  </header>
+
+  <main class="section" style="padding-top: 60px;">
+    <div class="container">
+
+      <!-- ==============================================
+           1. ملامح تعزيز ثقافة القراءة
+           ============================================== -->
+      <section class="proof-section-card" id="reading">
+        <div class="proof-section-body">
+          
+          <div class="proof-media-wrap">
+            <img src="assets/images/impact-books-discussion.jpg" alt="جلسة عرض ومناقشة كتاب المريدسية ماض وحاضر في نادي جليس" width="700" height="700">
+            <span class="proof-media-tag">📖 لقطات حية من جلسة عرض ومناقشة الكتاب</span>
+          </div>
+
+          <div class="proof-content">
+            <div class="proof-content-header">
+              <span class="proof-content-badge">لقاء خاص</span>
+              <h2 class="proof-content-title">عرض ومناقشة كتاب «المريدسية ماضٍ وحاضر»</h2>
+            </div>
+            
+            <p class="proof-content-desc">
+              أُقيم اللقاء مساء بتاريخ ٢٥/١١/١٤٤٧هـ، وحضر فيه (١٨) مشاركاً من الأعضاء والضيوف، وكان الحضور في غالبه من ضيوف النادي:
+            </p>
+
+            <div class="proof-fact-list">
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>الكتاب الناقش:</strong> «المريدسية ماضٍ وحاضر» من تأليف صالح السعوي.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>إدارة المجلس:</strong> مقدمة أدبية وتعريف بالمؤلف وسيرته من الأستاذ محمد العمر.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>عرض الكتاب:</strong> علماء المريدسية وزهادها ومساجدها وبساتينها بأسلوب مشوّق.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>مداخلات ثرية:</strong> مشاركات وحوادث وقصص ممتعة أثرت المجلس.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+
+      <!-- ==============================================
+           2. شاهد بناء مجتمع من القرّاء
+           ============================================== -->
+      <section class="proof-section-card" id="community">
+        <div class="proof-section-body reverse">
+          
+          <div class="proof-content">
+            <div class="proof-content-header">
+              <span class="proof-content-badge">الهدف الثاني</span>
+              <h2 class="proof-content-title">بناء مجتمع حيوي لقرّاء القصيم</h2>
+            </div>
+            
+            <p class="proof-content-desc">
+              بيئة دافئة تجمع قرّاء القصيم دورياً بمقر «إنماء» بالمريدسية؛ ففي لقاء ليلة ١٠/٥/١٤٤٨هـ وحده حضر (٥٠) عضواً من أعضاء النادي وضيوفه:
+            </p>
+
+            <div class="proof-fact-list">
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>لقاء الأسبوع:</strong> «معالم من مملكتنا - نجد نموذجاً» باستضافة الأستاذ محمد عبدالله الشاوي.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>حضور حي:</strong> خمسون عضواً وضيفاً في المجلس، تفاعل بالحوار والمشاركات.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>محاور مثرية:</strong> حدود نجد والقصيم، وادي الرمة، جبال نجد ومعالمها التاريخية، والنقوش القديمة.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="proof-media-wrap">
+            <img src="assets/images/impact-members-collage.jpg" alt="مجلس قراء نادي جليس" width="700" height="700">
+            <span class="proof-media-tag">📸 مجتمع قرّاء القصيم في مقر الجمعية</span>
+          </div>
+
+        </div>
+      </section>
+
+
+      <!-- ==============================================
+           3. ملامح استضافة المهتمين بالثقافة والتاريخ
+           ============================================== -->
+      <section class="proof-section-card" id="history">
+        <div class="proof-section-body">
+          
+          <div class="proof-media-wrap">
+            <img src="assets/images/impact-banner-speakers.jpg" alt="لقاء القراءة في بناء الطفل مع د. عبدالعزيز المقبل في نادي جليس" width="700" height="700">
+            <span class="proof-media-tag">🎙️ جلسة القراءة في بناء الطفل بمقر جمعية إنماء</span>
+          </div>
+
+          <div class="proof-content">
+            <div class="proof-content-header">
+              <span class="proof-content-badge">سلسلة التربية والقراءة</span>
+              <h2 class="proof-content-title">القراءة في بناء الطفل</h2>
+            </div>
+            
+            <p class="proof-content-desc">
+              أقامه النادي ليلة بتاريخ ٢٧/١١/١٤٤٧هـ، وهو اللقاء الثالث من سلسلة لقاءات التربية والقراءة، باستضافة الدكتور عبدالعزيز المقبل، وحضره (٢٥) عضواً من أعضاء النادي وضيوفه. أبرز محاور اللقاء:
+            </p>
+
+            <div class="proof-fact-list">
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>بناء القلب والتربية الدينية:</strong> تربية القلب والعقل معاً، وصطحب الأبناء إلى المسجد حتى تصير العادة إحدى وسائل التربية.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>تنمية العقل وبناء الشخصية:</strong> الألغاز وكتب المغامرات تُنمّي التفكير والاستدلال، ومن الجميل تخيير الابن بين شيئين مع توضيح الفروق والفوائد.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>القيم والعلاقة مع الأبناء:</strong> كل طفل مجبول على إثبات ذاته، والتربية خيط مشدود فإذا كان الأطفال مرتبطين بوالديهم اقتفوا أثرهم.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>الجانب التقني:</strong> التقنية سلاح ذو حدين لا تفرّق بين المستقيم وغير المستقيم؛ فلا بد من التحديد والتقييد والرقابة، وملء وقت الطفل.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>الجانب النفسي والتربية الجنسية:</strong> قرب الأبناء من الوالدين في كل وقت ومشكلة، وشرح اللمسات والنظرات المقبولة وغير المقبولة بحسب مراحل العمر.</div>
+              </div>
+              <div class="proof-fact-item">
+                <span class="proof-fact-icon">✓</span>
+                <div><strong>ختام اللقاء:</strong> عرض الدكتور مجموعة كبيرة من الكتب في مجال الطفولة، وفتح المجال للأسئلة من الحضور.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ==============================================
+           4. معرض الصور التوثيقية لملامح الأثر
+           ============================================== -->
+      <section class="impact-gallery-section">
+        <div class="section-header text-center">
+          <span class="section-badge">أرشيف اللقاءات المصورة</span>
+          <h2 class="section-title">معرض صور حيّة من مسيرة نادي جليس</h2>
+          <div class="section-title-divider"></div>
+          <p class="section-lead">
+            لقطات توثيقية حقيقية تجسد روح اللقاءات والحوارات المعرفية التي يقيمها النادي بمقر جمعية التنمية الأهلية بالمريدسية.
+          </p>
+        </div>
+
+        <div class="gallery-grid">
+          
+          <!-- صورة: طاولات القراءة المستديرة -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-reading-tables.jpg" alt="لقاء مناقشة كتاب ترياق في نادي جليس" loading="lazy">
+              <span class="gallery-badge">ترياق</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">«ترياق»</h3>
+              <div class="gallery-details">
+                <p><strong>البرنامج:</strong> مناقشة كتاب | <strong>التاريخ:</strong> ٢ ذو الحجة ١٤٤٧هـ</p>
+                <p><strong>تقديم:</strong> أ. محمد العييري | <strong>الحضور:</strong> ١٥ عضواً</p>
+                <p><strong>📌 المحاور الرئيسية</strong></p>
+                <ul>
+                  <li><strong>قصة الكتاب:</strong> التصدّي للشبهات وتفنيدها بتأصيل شرعي، وسد القصور في هذا المجال.</li>
+                  <li><strong>الوقاية والاستعداد:</strong> التأكيد على ضرورة العلم قبل النقاش، والتحذير من سماع الشبهات لأن «القلوب ضعيفة».</li>
+                  <li><strong>المعرفة والأسس:</strong> الوحي لا يعارض العقل الصحيح، والشبهات تقوم على الكذب والخلل المرجعي.</li>
+                  <li><strong>خطوات العلاج والنقض:</strong> دفع الوسواس بالتاءات الأربع، ونقض الشبهة عبر (التفكيك ➔ التثبت ➔ طلب الدليل).</li>
+                  <li><strong>قضايا ومواضيع:</strong> الرد على شبهات مثل مشكلة الشر، حد الردة، وزواج النبي ﷺ.</li>
+                  <li><strong>وصايا اللقاء:</strong> قوة المنطق خير من منطق القوة، والاعتزاز بالدين مع الاستمرار في التعلم.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- صورة 4: نقاش أمهات الكتب -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-books-discussion.jpg" alt="حلقات قراءة ونقاش أمهات الكتب" loading="lazy">
+              <span class="gallery-badge">نقاش أمهات الكتب</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">حلقات نقاش وتداول أمهات الكتب والتاريخ المحلي</h3>
+              <p class="gallery-desc">تداول المؤلفات التاريخية والأدبية في جلسات قراءة معمقة.</p>
+            </div>
+          </div>
+
+          <!-- لقاء حكاية كتاب -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-presentation-hall.jpg" alt="لقاء البرنامج حكاية كتاب - بيتر دركر" loading="lazy">
+              <span class="gallery-badge">حكاية كتاب</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">البرنامج: حكاية كتاب</h3>
+              <div class="gallery-details">
+                <p><strong>«بيتر دركر | أبو الإدارة الحديثة»</strong></p>
+                <p><strong>البرنامج:</strong> حكاية كتاب | <strong>التاريخ:</strong> ٢ جمادى الأولى ١٤٤٨هـ</p>
+                <p><strong>تقديم:</strong> أ. رائد القرعاوي | <strong>الحضور:</strong> ١٤ عضواً وضيفاً</p>
+                <p><strong>📌 المحاور الرئيسية</strong></p>
+                <ul>
+                  <li><strong>السيرة والمحطات:</strong> نشأته بين فيينا وأمريكا، وتحليله الداخلي للمؤسسات (مثل جنرال موتورز) لترسيخ الإدارة كعلم وممارسة.</li>
+                  <li><strong>ركائز الإدارة:</strong> الإدارة بالأهداف (MBO)، تقديم الأثر والفاعلية، محورية العميل، واستثمار «العامل المعرفي».</li>
+                  <li><strong>صناعة العقل الاستثنائي:</strong> تحويل المعرفة لخبرة عبر (اقرأ ➔ راقب ➔ اسأل ➔ اربط ➔ جرب).</li>
+                  <li><strong>الاقتصاد السعودي:</strong> استغلال التحولات الوطنية (الرؤية والذكاء الاصطناعي) للانتقال من التلقي إلى صناعة الفرص.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- صالون جليس الأدبي: زيارة جليس السابعة والأخيرة -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-majlis-diwaniya.jpg" alt="زيارة جليس السابعة والأخيرة - د. خالد الجعيثن" loading="lazy">
+              <span class="gallery-badge">د. خالد الجعيثن</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">زيارة جليس السابعة والأخيرة</h3>
+              <div class="gallery-details">
+                <p><strong>التاريخ:</strong> ١٦ ذو الحجة ١٤٤٧هـ | <strong>الحضور:</strong> ١٥ عضواً وضيفاً</p>
+                <p><strong>المستضيف:</strong> د. خالد الجعيثن</p>
+                <ul>
+                  <li><strong>أهمية القراءة:</strong> تُنمي الفكر واللغة، والتنوع فيها يوسّع المدارك.</li>
+                  <li><strong>منهجيتها:</strong> إكمال الكتاب لالتزام الانضباط، وتكرار القراءة يُعمّق الفائدة.</li>
+                </ul>
+                <p><strong>📌 أبرز التوصيات</strong></p>
+                <ul>
+                  <li><strong>السير والأدب:</strong> سير الأعلام (ابن باز، ابن عثيمين)، «جواهر الأدب»، «روضة العقلاء».</li>
+                  <li><strong>الشرعية والتطوير:</strong> «رياض الصالحين»، «جوامع الأخبار»، «ما تحت الأقنعة».</li>
+                  <li><strong>التربية بالقراءة:</strong> القدوة أمام الأبناء، وتحقيق التوازن بين جوانب التربية المختلفة.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- صورة 7: مجتمع القرّاء واللقاءات -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-members-collage.jpg" alt="ملتقى قرّاء القصيم" loading="lazy">
+              <span class="gallery-badge">مجتمع القرّاء</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">ملتقى قرّاء القصيم وبناء مجتمع المعرفة</h3>
+              <p class="gallery-desc">لقاءات دورية تجمع قرّاء القصيم وتوسّع آفاقهم المعرفية.</p>
+            </div>
+          </div>
+
+          <!-- (حُذفت بطاقة منصة الحوار السابقة) -->
+          <!-- صورة 9: تكريم الأعضاء والرواد -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-member-honors.jpg" alt="تكريم أعضاء ورواد نادي جليس" loading="lazy">
+              <span class="gallery-badge">تكريم الأعضاء</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">تكريم أعضاء ورواد نادي جليس القرائي</h3>
+              <p class="gallery-desc">لقطات لتكريم القرّاء المميزين تقديراً لعطائهم المستمر.</p>
+            </div>
+          </div>
+
+          <!-- صورة 10: زيارة متحف العقيلات التاريخي -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-heritage-museum.jpg" alt="زيارة متحف العقيلات التاريخي" loading="lazy">
+              <span class="gallery-badge">متحف العقيلات</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">زيارة متحف العقيلات التاريخي</h3>
+              <div class="gallery-details">
+                <p>تهدف الزيارة إلى التعرف عن قرب على تاريخ العقيلات وأثرهم الاقتصادي والثقافي، والتعرف على الجهود الكبيرة للتعريف بهم في هذا المتحف المميز.</p>
+                <p>يركّز المتحف على حفظ الوثائق والسجلات المكتوبة والمرئية التي تعكس الجوانب الاجتماعية والاقتصادية لتاريخ القصيم.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- لقاء أمسيات مع شخصيات (اللقاء الخامس) -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-club-library.jpg" alt="لقاء أمسيات مع شخصيات - ابن خلدون" loading="lazy">
+              <span class="gallery-badge">أمسيات مع شخصيات</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">البرنامج: أمسيات مع شخصيات (اللقاء الخامس)</h3>
+              <div class="gallery-details">
+                <p><strong>التاريخ:</strong> ٢٩ محرم ١٤٤٨هـ</p>
+                <p><strong>تقديم:</strong> أ. عبدالرحمن الصعب</p>
+                <p><strong>الحضور:</strong> ١٥ عضوًا</p>
+                <p><strong>📌 أبرز محاور اللقاء</strong></p>
+                <ul>
+                  <li><strong>النشأة والحياة:</strong> أصله حضرمي ينتهي للصحابي وائل بن حجر، ولد عام 732هـ، وجمع بين العلم والسياسة.</li>
+                  <li><strong>المسيرة السياسية:</strong> تنقل بين بجاية وقُفصة والأندلس، وتولى مناصب عدة، وتعرض للحبس في أول نكبة سياسية له.</li>
+                  <li><strong>مواقف وأقوال:</strong> شاعر، صاحب مقولة «الأمة المغلوبة يسرع إليها الفناء»، ويرى أن عرب البادية أبعد الأمم عن الملك والسياسة.</li>
+                  <li><strong>أبرز المؤتمرات والمؤلفات:</strong> المقدمة (علم الاجتماع والعمران)، كتاب العبر، لباب المحصل، وشرح البردة.</li>
+                  <li><strong>النقاش:</strong> دار حول تميزه في علم الاجتماع.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- صورة 12: الزيارة العلمية -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-library-visit.jpg" alt="الزيارة العلمية" loading="lazy">
+              <span class="gallery-badge">زيارة علمية</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">زيارة علمية</h3>
+              <div class="gallery-details">
+                <p><strong>التاريخ:</strong> الأربعاء ٢٦ ربيع الآخر ١٤٤٨هـ (عصراً)</p>
+                <p><strong>الحضور:</strong> ١٤ عضوًا من نادي جليس</p>
+                <p><strong>الهدف:</strong> تعزيز التواصل المعرفي، والاطلاع على جهود الجمعية وبنائها التعليمي في خدمة السنة النبوية</p>
+                <p><strong>📌 أبرز محطات الزيارة</strong></p>
+                <ul>
+                  <li><strong>التعريف بالجمعية:</strong> العرض الشامل لنشأتها ورسالتها في تأهيل وتخريج جيل علمي مؤصل في السنة النبوية.</li>
+                  <li><strong>البرامج والمسارات العلمية:</strong> التعرف على البرامج المتخصصة (الجمع بين الصحيحين، زوائد السنن، بلوغ المرام، عمدة الأحكام، المتون العلمية، فقه العلماء) والاطلاع على مؤشرات الأداء والإحصائيات.</li>
+                  <li><strong>جلسة الحوار:</strong> مناقشة سبل العناية بالحديث الشريف وتدارسه ونشره.</li>
+                  <li><strong>الجولة والختام:</strong> الاطلاع على أقسام الجمعية ومرافقها، والتأكيد على بناء شراكة مستدامة بين الطرفين.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- لقاء مناقشة كتاب كيف تقنع الآخرون -->
+          <div class="gallery-card">
+            <div class="gallery-img-wrap">
+              <img src="assets/images/impact-reading-circles.jpg" alt="لقاء مناقشة كتاب كيف تقنع الآخرون في نادي جليس" loading="lazy">
+              <span class="gallery-badge">لقاء مناقشة</span>
+            </div>
+            <div class="gallery-caption">
+              <h3 class="gallery-title">«كيف تقنع الآخرون»</h3>
+              <div class="gallery-details">
+                <p><strong>البرنامج:</strong> لقاء مناقشة | <strong>التاريخ:</strong> ١٨ ربيع الآخر ١٤٤٨هـ</p>
+                <p><strong>تقديم:</strong> أ. خلف اللهيدي | <strong>الحضور:</strong> ١٥ عضواً وضيفاً</p>
+                <p><strong>📌 المحاور الرئيسية</strong></p>
+                <ul>
+                  <li><strong>عرض الكتاب:</strong> تقديم شامل ومتميز لمحتوى الكتاب وإطاره العام.</li>
+                  <li><strong>الاقتباسات:</strong> استعراض مقاطع مختارة ومناقشتها مع الحضور.</li>
+                  <li><strong>التساؤلات:</strong> طرح أسئلة عميقة وتداول الآراء حولها.</li>
+                  <li><strong>جوانب التحسين:</strong> مناقشة ملحوظات النقاد وفرص التطوير في الكتاب.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- زر العودة النهائي -->
+      <div class="text-center" style="margin-top: 50px;">
+        <a href="index.html" class="btn btn-primary btn-lg">
+          <span>← العودة إلى الصفحة الرئيسية لنادي جليس</span>
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- التذييل الرسمي -->
+  <footer class="site-footer" style="margin-top: 70px;">
+    <div class="container text-center" style="padding-bottom: 30px;">
+      <a href="index.html" class="site-logo" style="display:inline-block; margin-bottom:16px;">
+        <img src="assets/images/logo-on-dark.png" alt="نادي جليس" class="proof-header-logo">
+      </a>
+      <p style="color:#B2BEB5; font-size:14.5px; max-width:600px; margin:0 auto 16px;">
+        نادي جليس القرائي • جمعية التنمية الأهلية بالمريدسية • منطقة القصيم
+      </p>
+      <p style="color:#8C9990; font-size:13px;">
+        جميع الحقوق محفوظة © نادي جليس القرائي
+      </p>
+    </div>
+  </footer>
+
+  <!-- شريط التنقل السفلي (نمط التطبيقات) -->
+  <nav class="site-tabbar" aria-label="التنقل السريع">
+    <ul>
+      <li><a href="index.html">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        <span>الرئيسية</span>
+      </a></li>
+      <li><a href="index.html#recorded-meetings">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span>اللقاءات</span>
+      </a></li>
+      <li><a href="proofs.html" class="active" aria-current="page">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span>الشواهد</span>
+      </a></li>
+      <li><a href="quotes.html">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10.7 5.6C7.2 6.8 5 9.4 5 12.6v5.8h5.7v-5.8H8.3c.1-1.9 1.1-3.2 3-3.8l-.6-3.2zm8.6 0c-3.5 1.2-5.7 3.8-5.7 7v5.8h5.7v-5.8h-2.4c.1-1.9 1.1-3.2 3-3.8l-.6-3.2z"/></svg>
+        <span>الاقتباسات</span>
+      </a></li>
+      <li><a href="index.html#join">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        <span>انضم لنا</span>
+      </a></li>
+    </ul>
+  </nav>
+
+</body>
+</html>

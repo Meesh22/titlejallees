@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" width="280" height="80" fill="none">
+  <defs>
+    <linearGradient id="jaleesGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A2B" />
+      <stop offset="100%" stop-color="#2D553F" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C59B63" />
+      <stop offset="100%" stop-color="#9C6B32" />
+    </linearGradient>
+  </defs>
+
+  <!-- Open Book Symbol -->
+  <g transform="translate(10, 14)">
+    <!-- Book Spine Glow / Shadow -->
+    <path d="M26 44 L26 12 C26 12 18 10 6 12 C1.5 12.8 0 16 0 16 L0 46 C0 46 16 42 26 44 Z" fill="url(#jaleesGrad)" opacity="0.95" />
+    <path d="M26 44 L26 12 C26 12 34 10 46 12 C50.5 12.8 52 16 52 16 L52 46 C52 46 36 42 26 44 Z" fill="url(#jaleesGrad)" />
+    <!-- Pages lines -->
+    <path d="M5 20 C14 18 22 20 25 21" stroke="#F4EEDB" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M5 27 C14 25 22 27 25 28" stroke="#F4EEDB" stroke-width="1.8" stroke-linecap="round" opacity="0.75"/>
+    <path d="M5 34 C14 32 22 34 25 35" stroke="#F4EEDB" stroke-width="1.8" stroke-linecap="round" opacity="0.5"/>
+    <path d="M47 20 C38 18 30 20 27 21" stroke="#F4EEDB" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M47 27 C38 25 30 27 27 28" stroke="#F4EEDB" stroke-width="1.8" stroke-linecap="round" opacity="0.75"/>
+    <path d="M47 34 C38 32 30 34 27 35" stroke="#F4EEDB" stroke-width="1.8" stroke-linecap="round" opacity="0.5"/>
+    <!-- Bookmark ribbon -->
+    <path d="M26 10 L26 28 L22 25 L18 28 L18 10 Z" fill="url(#goldGrad)"/>
+    <!-- Small spark of knowledge -->
+    <circle cx="26" cy="4" r="3" fill="#C59B63" />
+  </g>
+
+  <!-- Typography -->
+  <g transform="translate(74, 48)">
+    <text font-family="'IBM Plex Sans Arabic', 'Tajawal', sans-serif" font-weight="800" font-size="32" fill="#1E3A2B" letter-spacing="-0.5">
+      جَـلِـيـس
+    </text>
+    <text x="96" y="-14" font-family="'IBM Plex Sans Arabic', 'Tajawal', sans-serif" font-weight="600" font-size="13" fill="#8C532D" letter-spacing="0.5">
+      نَادِي قِرَائِيّ ثَقَافِيّ
+    </text>
+  </g>
+  <text x="74" y="66" font-family="'IBM Plex Sans Arabic', 'Tajawal', sans-serif" font-weight="500" font-size="12" fill="#6A736D">
+    منطقة القصيم • المملكة العربية السعودية
+  </text>
+</svg>

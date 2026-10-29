@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>اقتباسات الأعضاء | نادي جليس القرائي - القصيم</title>
+
+  <meta name="description" content="اقتباسات وتدوينات أعضاء نادي جليس القرائي من لقاءاتهم في منطقة القصيم: لقطات قرائية ومقتطفات من الكتب وعبارات لامستهم.">
+  <meta name="theme-color" content="#1E3A2B">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="اقتباسات الأعضاء | نادي جليس القرائي">
+  <meta property="og:description" content="لقطات قرائية وتدوينات أعضاء نادي جليس القرائي من قلب اللقاءات في منطقة القصيم.">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ar_SA">
+  <meta property="og:site_name" content="نادي جليس القرائي">
+  <meta property="og:url" content="https://jallees.vercel.app/quotes.html">
+  <meta property="og:image" content="https://jallees.vercel.app/assets/images/og-jalees-logo.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="شعار نادي جليس القرائي - أصدقاء القراءة">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="اقتباسات الأعضاء | نادي جليس القرائي">
+  <meta name="twitter:description" content="لقطات قرائية وتدوينات أعضاء نادي جليس القرائي من قلب اللقاءات في منطقة القصيم.">
+  <meta name="twitter:image" content="https://jallees.vercel.app/assets/images/og-jalees-logo.jpg">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/images/logo-icon.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- التنسيق الرئيسي المشترك -->
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    /* ===== تنسيقات خاصة بصفحة الاقتباسات ===== */
+    body {
+      font-family: "IBM Plex Sans Arabic", sans-serif;
+      background: #F4EFE6;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    .proof-page-header {
+      background: linear-gradient(150deg, #14281D 0%, #1E3A2B 60%, #24503A 100%);
+      color: #FAF6EE;
+      padding: 26px 0 34px;
+    }
+
+    .back-nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 26px;
+    }
+
+    .btn-back-home {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #FAF6EE;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 9px 18px;
+      border-radius: var(--radius-full, 40px);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.2s ease;
+    }
+    .btn-back-home:hover { background: rgba(255,255,255,0.16); }
+
+    .proof-header-logo { height: 46px; width: auto; display: block; }
+
+    .proof-page-title { font-size: 30px; font-weight: 800; margin: 10px 0 8px; }
+    .proof-page-lead { color: #D8E2DB; font-size: 15.5px; max-width: 640px; line-height: 1.8; margin: 0; }
+
+    /* شبكة الاقتباسات */
+    .quotes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .quote-card {
+      background: #FFFFFF;
+      border: 1px solid #E5DCC9;
+      border-radius: 16px;
+      padding: 26px 26px 22px;
+      box-shadow: 0 8px 24px rgba(20, 40, 29, 0.07);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: relative;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .quote-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 14px 32px rgba(20, 40, 29, 0.12);
+      border-color: #C59B63;
+    }
+
+    .quote-mark {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      font-size: 42px;
+      line-height: 1;
+      color: #C59B63;
+      opacity: 0.35;
+      font-family: Georgia, serif;
+    }
+
+    .quote-text {
+      font-size: 16px;
+      line-height: 2;
+      color: #2C3B32;
+      margin: 0;
+      font-family: "Tajawal", "IBM Plex Sans Arabic", sans-serif;
+      font-weight: 500;
+    }
+
+    .quote-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px dashed #E7DFCE;
+      flex-wrap: wrap;
+    }
+
+    .quote-author {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1E3A2B;
+    }
+
+    .quote-book {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #8C6B3F;
+      background: rgba(197, 155, 99, 0.14);
+      border: 1px solid rgba(197, 155, 99, 0.35);
+      padding: 3px 12px;
+      border-radius: 30px;
+    }
+
+    .quote-ordinal {
+      font-size: 12px;
+      font-weight: 700;
+      color: #98A69D;
+    }
+
+    /* حالة عدم توفر اقتباسات منشورة بعد */
+    .quotes-empty {
+      background: #FFFFFF;
+      border: 1px dashed #D5CBB4;
+      border-radius: 18px;
+      padding: 56px 24px 48px;
+      text-align: center;
+    }
+    .quotes-empty-icon { font-size: 44px; margin-bottom: 12px; }
+    .quotes-empty-title { font-size: 21px; font-weight: 800; color: #1E3A2B; margin: 0 0 8px; }
+    .quotes-empty-desc { color: #6E7B72; font-size: 14.5px; max-width: 520px; margin: 0 auto; line-height: 1.9; }
+
+    /* نموذج إضافة اقتباس */
+    .quote-form-card {
+      background: #FFFFFF;
+      border: 1px solid #E5DCC9;
+      border-radius: 18px;
+      padding: 30px 30px 26px;
+      box-shadow: 0 10px 30px rgba(20, 40, 29, 0.08);
+      margin-bottom: 40px;
+    }
+
+    .quote-form-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1E3A2B;
+      margin: 0 0 6px;
+    }
+
+    .quote-form-desc {
+      color: #6E7B72;
+      font-size: 14px;
+      margin: 0 0 20px;
+      line-height: 1.8;
+    }
+
+    .quote-form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .quote-field { margin-bottom: 18px; }
+    .quote-row-field { margin-bottom: 18px; }
+
+    .quote-field label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      color: #1E3A2B;
+      margin-bottom: 7px;
+    }
+
+    .quote-field label span {
+      font-weight: 500;
+      color: #98A69D;
+      font-size: 12px;
+    }
+
+    .quote-field input,
+    .quote-field textarea {
+      width: 100%;
+      border: 1.5px solid #E2D9C6;
+      border-radius: 12px;
+      background: #FBF9F4;
+      padding: 12px 14px;
+      font-family: "IBM Plex Sans Arabic", sans-serif;
+      font-size: 14.5px;
+      color: #26332C;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      resize: vertical;
+    }
+
+    .quote-field input:focus,
+    .quote-field textarea:focus {
+      outline: none;
+      border-color: #C59B63;
+      background: #FFFFFF;
+    }
+
+    .quote-field input.invalid,
+    .quote-field textarea.invalid {
+      border-color: #C1554E;
+      background: #FDF6F5;
+    }
+
+    .quote-form-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .quote-form-msg {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #2E7D4F;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .quote-form-msg.visible { opacity: 1; }
+    .quote-form-msg.error { color: #C1554E; }
+
+    /* زر حذف الاقتباسات المضافة محلياً */
+    .quote-delete {
+      margin-right: auto;
+      border: none;
+      background: transparent;
+      color: #C1554E;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-family: "IBM Plex Sans Arabic", sans-serif;
+      transition: background 0.2s ease;
+    }
+    .quote-delete:hover { background: rgba(193, 85, 78, 0.1); }
+
+    @media (max-width: 640px) {
+      .quote-form-row { grid-template-columns: 1fr; gap: 0; }
+      .quote-form-card { padding: 22px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- شريط الترويسة لصفحة الاقتباسات -->
+  <header class="proof-page-header">
+    <div class="container">
+
+      <div class="back-nav-bar">
+        <a href="index.html" class="btn-back-home">
+          <span>← العودة إلى الصفحة الرئيسية</span>
+        </a>
+        <a href="index.html" class="site-logo">
+          <img src="assets/images/logo-on-dark.png" alt="نادي جليس القرائي" class="proof-header-logo">
+        </a>
+      </div>
+
+      <span class="section-badge badge-light">💬 من صوت الأعضاء</span>
+      <h1 class="proof-page-title">اقتباسات الأعضاء</h1>
+      <p class="proof-page-lead">
+        هنا نوثّق أجمل ما خطه أعضاء نادي جليس القرائي: لقطات قرائية ومقتطفات من الكتب وعبارات لامستهم من اللقاءات — لتكون شاهدًا مكتوبًا على إثمار القراءة.
+      </p>
+
+    </div>
+  </header>
+
+  <main class="section" style="padding-top: 56px;">
+    <div class="container">
+
+      <!-- نموذج إضافة اقتباس جديد -->
+      <section class="quote-form-card" aria-labelledby="quote-form-title">
+        <h2 class="quote-form-title" id="quote-form-title">✍️ أضف اقتباسك</h2>
+        <p class="quote-form-desc">
+          شارك أعضاء النادي أجمل فقرة قرأتها — يظهر اقتباسك في أعلى القائمة فور النشر.
+        </p>
+        <form id="quote-form" novalidate>
+          <div class="quote-form-row">
+            <div class="quote-field">
+              <label for="qf-author">اسم العضو</label>
+              <input id="qf-author" type="text" maxlength="60" placeholder="اكتب اسم العضو هنا" autocomplete="off">
+            </div>
+            <div class="quote-field">
+              <label for="qf-book">عنوان الكتاب <span>(اختياري)</span></label>
+              <input id="qf-book" type="text" maxlength="80" placeholder="مثال: المقدمة - ابن خلدون" autocomplete="off">
+            </div>
+          </div>
+          <div class="quote-field">
+            <label for="qf-text">نص الاقتباس</label>
+            <textarea id="qf-text" rows="4" maxlength="500" placeholder="اكتب نص الاقتباس هنا…" required></textarea>
+          </div>
+          <div class="quote-form-actions">
+            <button type="submit" class="btn btn-primary">
+              <span>نشر الاقتباس</span>
+            </button>
+            <span class="quote-form-msg" id="qf-msg" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- شبكة الاقتباسات (تُملأ من مصفوفة memberQuotes في أسفل الصفحة) -->
+      <div class="quotes-grid" id="quotes-grid"></div>
+
+      <!-- حالة عدم توفر اقتباسات منشورة بعد -->
+      <div class="quotes-empty" id="quotes-empty">
+        <div class="quotes-empty-icon">💬</div>
+        <h3 class="quotes-empty-title">نجمع اقتباسات الأعضاء ونوثقها</h3>
+        <p class="quotes-empty-desc">
+          نعمل على جمع أجمل الاقتباسات والتدوينات من أعضاء النادي من لقاءاتنا، وسيتم نشرها هنا فور جاهزيتها، تابعونا.
+        </p>
+      </div>
+
+      <!-- زر العودة النهائي -->
+      <div class="text-center" style="margin-top: 46px;">
+        <a href="index.html" class="btn btn-primary btn-lg">
+          <span>← العودة إلى الصفحة الرئيسية لنادي جليس</span>
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- التذييل الرسمي -->
+  <footer class="site-footer" style="margin-top: 70px;">
+    <div class="container text-center" style="padding-bottom: 30px;">
+      <a href="index.html" class="site-logo" style="display:inline-block; margin-bottom:16px;">
+        <img src="assets/images/logo-on-dark.png" alt="نادي جليس" class="proof-header-logo" style="height:auto;">
+      </a>
+      <p style="color:#B2BEB5; font-size:14.5px; max-width:600px; margin:0 auto 16px;">
+        نادي جليس القرائي • بريدة • جمعية التنمية الأهلية بالمريدسية • منطقة القصيم
+      </p>
+      <p style="color:#8C9990; font-size:13px;">
+        جميع الحقوق محفوظة © نادي جليس القرائي
+      </p>
+    </div>
+  </footer>
+
+  <!-- JavaScript الخاص بصفحة الاقتباسات -->
+  <script>
+    /*
+      ============================================================
+      ربط النشر المشترك (يظهر الاقتباس لجميع الأجهزة والزوار)
+      ============================================================
+      1) اتبع خطوات الإعداد في الملف: quotes-backend/الخطوات.md
+      2) الصق رابط تطبيق الويب (Web App URL) في المتغير أدناه QUOTES_API_URL
+      3) بمجرد وضع الرابط: كل اقتباس يُنشر من الموقع يُخزن في جدول جوجل
+         ويظهر فوراً لجميع الزوار على جميع الأجهزة.
+      أما إن بقي فارغاً: تعمل الاقتباسات محلياً على جهاز الكاتب فقط (وضع تجريبي).
+    */
+    const QUOTES_API_URL = "https://script.google.com/macros/s/AKfycbxBAjFD3tU3gqIynImONQzyiFysdsLO3KHyTYW-aDt7-aibhZCvUG3E0pUvFG445w2W/exec";
+
+    /*
+      مصفوفة الاقتباسات الثابتة (تظهر للجميع دون الحاجة للخدمة السحابية)
+      لإضافة اقتباس: أضف عنصراً بهذا الشكل:
+      { text: "نص الاقتباس", author: "اسم العضو", book: "اسم الكتاب (اختياري)", ordinal: "اقتباس ٣" }
+    */
+    const memberQuotes = [];
+
+    /* الاقتباسات التي تُجلبها من الخدمة السحابية (Google Sheets) */
+    let sharedQuotes = [];
+
+    /* الاقتباسات المحفوظة من النموذج قبل ربط الخدمة (تُحفظ في متصفح الجهاز نفسه) */
+    const STORAGE_KEY = "jaleesMemberQuotes";
+    const userQuotes = (function loadUserQuotes() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    })();
+
+    function saveUserQuotes() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(userQuotes));
+      } catch { /* التخزين غير متاح */ }
+    }
+
+    /* جلب الاقتباسات المشتركة من جدول جوجل (عند ربط الخدمة) */
+    function loadSharedQuotes() {
+      if (!QUOTES_API_URL) return Promise.resolve();
+      return fetch(QUOTES_API_URL)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.ok) sharedQuotes = (data.quotes || []).map(q => ({
+            text: q.text,
+            author: q.author,
+            book: q.book || "",
+            ordinal: q.date ? "نُشر في " + q.date : ""
+          }));
+          renderAll();
+        })
+        .catch(() => { /* الخدمة غير متاحة الآن — تبقى الاقتباسات المحلية */ });
+    }
+
+    /* نشر اقتباس إلى الخدمة السحابية */
+    function publishSharedQuote(quote) {
+      const body = new URLSearchParams({
+        author: quote.author,
+        book: quote.book || "",
+        text: quote.text
+      });
+      return fetch(QUOTES_API_URL, {
+        method: "POST",
+        body: body,
+        redirect: "follow"
+      }).then(r => r.json());
+    }
+
+    function esc(text) {
+      const d = document.createElement("div");
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    function buildCard(q, deletable) {
+      const card = document.createElement("article");
+      card.className = "quote-card";
+
+      const mark = document.createElement("span");
+      mark.className = "quote-mark";
+      mark.innerHTML = "&rdquo;";
+      card.appendChild(mark);
+
+      const p = document.createElement("p");
+      p.className = "quote-text";
+      p.textContent = q.text;
+      card.appendChild(p);
+
+      const meta = document.createElement("div");
+      meta.className = "quote-meta";
+
+      const author = document.createElement("span");
+      author.className = "quote-author";
+      author.textContent = "✍️ " + q.author;
+      meta.appendChild(author);
+
+      if (q.book) {
+        const book = document.createElement("span");
+        book.className = "quote-book";
+        book.textContent = "📘 " + q.book;
+        meta.appendChild(book);
+      }
+
+      if (q.ordinal) {
+        const ord = document.createElement("span");
+        ord.className = "quote-ordinal";
+        ord.textContent = "• " + q.ordinal;
+        meta.appendChild(ord);
+      }
+
+      if (deletable) {
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "quote-delete";
+        del.textContent = "حذف";
+        del.setAttribute("aria-label", "حذف اقتباسك من هذا الجهاز");
+        del.addEventListener("click", function () {
+          const idx = userQuotes.indexOf(q);
+          if (idx > -1) {
+            userQuotes.splice(idx, 1);
+            saveUserQuotes();
+            renderAll();
+          }
+        });
+        meta.appendChild(del);
+      }
+
+      card.appendChild(meta);
+      return card;
+    }
+
+    function renderAll() {
+      const grid = document.getElementById("quotes-grid");
+      const empty = document.getElementById("quotes-empty");
+      if (!grid) return;
+
+      grid.innerHTML = "";
+
+      const total = userQuotes.length + sharedQuotes.length + memberQuotes.length;
+      if (total === 0) {
+        grid.style.display = "none";
+        if (empty) empty.style.display = "block";
+        return;
+      }
+      if (empty) empty.style.display = "none";
+      grid.style.display = "";
+
+      /* الترتيب: الاقتباس الأحدث في الأعلى */
+      userQuotes.forEach(q => grid.appendChild(buildCard(q, true)));
+      sharedQuotes.forEach(q => grid.appendChild(buildCard(q, false)));
+      memberQuotes.forEach((q, i) => {
+        if (!q.ordinal) q.ordinal = "اقتباس " + (memberQuotes.length - i);
+        grid.appendChild(buildCard(q, false));
+      });
+    }
+
+    function showMsg(text, isError) {
+      const msg = document.getElementById("qf-msg");
+      if (!msg) return;
+      msg.textContent = text;
+      msg.classList.toggle("error", !!isError);
+      msg.classList.add("visible");
+      clearTimeout(showMsg._t);
+      showMsg._t = setTimeout(() => msg.classList.remove("visible"), 4000);
+    }
+
+    (function initQuoteForm() {
+      const form = document.getElementById("quote-form");
+      if (!form) return;
+
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const authorEl = document.getElementById("qf-author");
+        const bookEl = document.getElementById("qf-book");
+        const textEl = document.getElementById("qf-text");
+
+        const author = authorEl.value.trim();
+        const book = bookEl.value.trim();
+        const text = textEl.value.trim();
+
+        [authorEl, textEl].forEach(el => el.classList.remove("invalid"));
+
+        if (!author || author.length < 2) {
+          authorEl.classList.add("invalid");
+          authorEl.focus();
+          showMsg("يرجى كتابة اسم العضو", true);
+          return;
+        }
+        if (!text || text.length < 10) {
+          textEl.classList.add("invalid");
+          textEl.focus();
+          showMsg("يرجى كتابة نص الاقتباس (١٠ أحرف على الأقل)", true);
+          return;
+        }
+
+        const quote = {
+          text: text,
+          author: author,
+          book: book,
+          ordinal: "اقتباس جديد",
+          ts: Date.now()
+        };
+
+        if (QUOTES_API_URL) {
+          /* وضع النشر المشترك: يظهر الاقتباس لجميع الزوار عبر جدول جوجل */
+          showMsg("جارٍ نشر الاقتباس…");
+          publishSharedQuote(quote)
+            .then(data => {
+              form.reset();
+              showMsg("✓ تم نشر اقتباسك — يظهر الآن لجميع الزوار");
+              loadSharedQuotes();
+            })
+            .catch(() => {
+              /* فشل الاتصال: نحفظه محلياً حتى لا يضيع */
+              quote.ordinal = "اقتباسك (بانتظار المزامنة)";
+              userQuotes.unshift(quote);
+              saveUserQuotes();
+              renderAll();
+              form.reset();
+              showMsg("تعذر الاتصال بالخدمة — حُفظ اقتباسك محلياً مؤقتاً", true);
+            });
+        } else {
+          /* الوضع التجريبي: يظهر على جهاز الكاتب فقط */
+          userQuotes.unshift(quote);
+          saveUserQuotes();
+          renderAll();
+
+          form.reset();
+          showMsg("✓ تم نشر اقتباسك في أعلى القائمة");
+        }
+
+        const firstCard = document.getElementById("quotes-grid").firstElementChild;
+        if (firstCard) firstCard.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    })();
+
+    renderAll();
+    loadSharedQuotes();
+    /* تحديث تلقائي لقائمة الاقتباسات المشتركة كل دقيقة حتى يرى الزوار الجديدون الاقتباسات دون تحديث الصفحة */
+    setInterval(loadSharedQuotes, 60000);
+  </script>
+  <!-- شريط التنقل السفلي (نمط التطبيقات) -->
+  <nav class="site-tabbar" aria-label="التنقل السريع">
+    <ul>
+      <li><a href="index.html">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        <span>الرئيسية</span>
+      </a></li>
+      <li><a href="index.html#recorded-meetings">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span>اللقاءات</span>
+      </a></li>
+      <li><a href="proofs.html">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span>الشواهد</span>
+      </a></li>
+      <li><a href="quotes.html" class="active" aria-current="page">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10.7 5.6C7.2 6.8 5 9.4 5 12.6v5.8h5.7v-5.8H8.3c.1-1.9 1.1-3.2 3-3.8l-.6-3.2zm8.6 0c-3.5 1.2-5.7 3.8-5.7 7v5.8h5.7v-5.8h-2.4c.1-1.9 1.1-3.2 3-3.8l-.6-3.2z"/></svg>
+        <span>الاقتباسات</span>
+      </a></li>
+      <li><a href="index.html#join">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        <span>انضم لنا</span>
+      </a></li>
+    </ul>
+  </nav>
+
+</body>
+</html>

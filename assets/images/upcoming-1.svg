@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" fill="none">
+  <defs>
+    <linearGradient id="upBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B382B"/>
+      <stop offset="100%" stop-color="#3A2312"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="400" fill="url(#upBg)"/>
+  
+  <rect x="24" y="24" width="592" height="352" rx="16" stroke="#D4AF37" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.6"/>
+
+  <!-- Upcoming Badge -->
+  <g transform="translate(480, 48)">
+    <rect width="115" height="32" rx="16" fill="#D4AF37"/>
+    <text x="57" y="21" text-anchor="middle" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="13" font-weight="700" fill="#1A2D23">لقاء مرتقب</text>
+  </g>
+
+  <!-- Open Book Silhouette -->
+  <g transform="translate(270, 70)" opacity="0.15">
+    <path d="M50 80 C20 60 0 65 0 65 L0 20 C0 20 20 15 50 35 C80 15 100 20 100 20 L100 65 C100 65 80 60 50 80 Z" fill="#FFFFFF"/>
+  </g>
+
+  <text x="590" y="160" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="32" font-weight="800" fill="#FCFAF5">
+    فلسفة المكان في الرواية السعودية
+  </text>
+  <text x="590" y="200" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="17" font-weight="500" fill="#DFD7C7">
+    قراءة نقدية في حضور البيئة والتاريخ في السرد الأدبي المعاصر
+  </text>
+
+  <!-- Details box -->
+  <g transform="translate(48, 270)">
+    <rect width="544" height="85" rx="10" fill="#11221A" stroke="#254B38" stroke-width="1"/>
+    <text x="520" y="34" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="15" font-weight="700" fill="#FAF6EE">
+      الضيف المستضاف: روائي وباحث ثقافي
+    </text>
+    <text x="520" y="62" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="14" fill="#C59B63">
+      المكان: بريدة - القصيم (مقر النادي) • سيتم الإعلان عن الموعد الدقيق قريباً
+    </text>
+  </g>
+</svg>

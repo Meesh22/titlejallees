@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نادي جليس القرائي | لأن القراءة تجمعنا - القصيم</title>
+  
+  <!-- SEO & Meta Description -->
+  <meta name="description" content="نادي جليس القرائي في منطقة القصيم: مساحة ثقافية تجمع محبي القراءة والحوار حول الكتب والتاريخ والفكر عبر لقاءات واستضافات دورية ملهمة.">
+  <meta name="keywords" content="نادي جليس, نادي قراءة, كتب, القصيم, بريدة, ثقافة, لقاءات ثقافية, نوادي القراءة السعودية">
+  <meta name="author" content="نادي جليس القرائي">
+  <meta name="theme-color" content="#1E3A2B">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="نادي جليس القرائي | لأن القراءة تجمعنا">
+  <meta property="og:description" content="مساحة ثقافية تجمع محبي القراءة في منطقة القصيم للحوار حول الكتب والأفكار والتاريخ.">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ar_SA">
+  <meta property="og:site_name" content="نادي جليس القرائي">
+  <meta property="og:url" content="https://jallees.vercel.app/">
+
+  <!-- معاينة المشاركة (واتساب) -->
+  <meta property="og:image" content="https://jallees.vercel.app/assets/images/og-jalees-logo.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="شعار نادي جليس القرائي">
+
+  <!-- Twitter / X: بطاقة مربعة -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="نادي جليس القرائي | لأن القراءة تجمعنا">
+  <meta name="twitter:description" content="مساحة ثقافية تجمع محبي القراءة في منطقة القصيم للحوار حول الكتب والأفكار والتاريخ.">
+  <meta name="twitter:image" content="https://jallees.vercel.app/assets/images/og-jalees-logo.jpg">
+  <meta name="twitter:image:alt" content="شعار نادي جليس القرائي">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/images/logo-icon.png">
+
+  <!-- Google Fonts: IBM Plex Sans Arabic & Tajawal -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ==============================================
+       1. الترويسة وشريط التنقل العلوي (Header & Navbar)
+       ============================================== -->
+  <header class="site-header" id="header">
+    <div class="container header-container">
+      
+      <!-- شعار النادي (Logo) -->
+      <a href="#hero" class="site-logo" aria-label="الذهاب إلى الصفحة الرئيسية لنادي جليس">
+        <img src="assets/images/logo-header.png" alt="شعار نادي جليس القرائي - أصدقاء القراءة" class="logo-image" width="165" height="75">
+      </a>
+
+      <!-- القائمة الرئيسية للشاشات الكبيرة (Desktop Navigation) -->
+      <nav class="main-nav" id="main-nav" aria-label="التنقل الرئيسي">
+        <ul class="nav-list">
+          <li class="nav-item"><a href="#hero" class="nav-link active">الرئيسية</a></li>
+          <li class="nav-item"><a href="#about" class="nav-link">عن النادي</a></li>
+          <li class="nav-item"><a href="#recorded-meetings" class="nav-link">اللقاءات</a></li>
+          <li class="nav-item"><a href="#upcoming-meetings" class="nav-link">اللقاءات القادمة</a></li>
+          <li class="nav-item"><a href="#join" class="nav-link">للانضمام للنادي</a></li>
+        </ul>
+      </nav>
+
+      <!-- إجراء مباشر / زر الاستبيان في الترويسة -->
+      <div class="header-actions">
+        <a href="https://forms.gle/UZY6DnS9W2X5ft9w8" target="_blank" rel="noopener noreferrer" class="btn btn-outline-header">
+          استبيان الانضمام
+        </a>
+
+        <!-- زر القائمة للهواتف (Hamburger Toggle) -->
+        <button type="button" class="mobile-menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="فتح قائمة التنقل">
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- قائمة الجوال المنسدلة (Mobile Drawer) -->
+    <div class="mobile-nav-drawer" id="mobile-nav" aria-hidden="true">
+      <div class="mobile-nav-header">
+        <img src="assets/images/logo-header.png" alt="نادي جليس" width="145" height="65">
+        <button type="button" class="mobile-close-btn" id="mobile-close-btn" aria-label="إغلاق القائمة">&times;</button>
+      </div>
+      <ul class="mobile-nav-list">
+        <li><a href="#hero" class="mobile-nav-link">الرئيسية</a></li>
+        <li><a href="#about" class="mobile-nav-link">عن النادي</a></li>
+        <li><a href="#recorded-meetings" class="mobile-nav-link">اللقاءات المسجلة</a></li>
+        <li><a href="#upcoming-meetings" class="mobile-nav-link">اللقاءات القادمة</a></li>
+        <li><a href="#join" class="mobile-nav-link">للانضمام للنادي</a></li>
+      </ul>
+      <div class="mobile-drawer-footer">
+        <a href="https://forms.gle/UZY6DnS9W2X5ft9w8" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block">
+          التسجيل عبر الاستبيان ↗
+        </a>
+      </div>
+    </div>
+    <div class="mobile-nav-backdrop" id="mobile-backdrop"></div>
+  </header>
+
+  <!-- محتوى الصفحة الرئيسي -->
+  <main id="main-content">
+
+    <!-- ==============================================
+         2. القسم الأول: الصفحة الرئيسية (Hero Section)
+         ============================================== -->
+    <section class="hero-section" id="hero">
+      <div class="container hero-container">
+        
+        <div class="hero-content reveal-on-scroll">
+          <div class="hero-tag">
+            <span class="tag-dot"></span>
+            نادي جليس القرائي • بريدة، منطقة القصيم
+          </div>
+          
+          <h1 class="hero-title">
+            لأن القراءة <span class="highlight-text">تجمعنا</span>
+          </h1>
+
+          <p class="hero-description">
+            مساحة ثقافية تجمع محبي القراءة، وتفتح أبواب الحوار حول الكتب والأفكار والتاريخ، من خلال لقاءات واستضافات ثقافية في منطقة القصيم.
+          </p>
+
+          <div class="hero-buttons">
+            <a href="https://forms.gle/UZY6DnS9W2X5ft9w8" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="hero-join-btn">
+              انضم إلى جليس
+              <span class="btn-icon">↗</span>
+            </a>
+            <a href="#recorded-meetings" class="btn btn-secondary btn-lg">
+              اكتشف لقاءاتنا
+              <span class="btn-icon">↓</span>
+            </a>
+            <a href="quotes.html" class="btn btn-secondary btn-lg">
+              اقتباسات الأعضاء
+              <span class="btn-icon">💬</span>
+            </a>
+          </div>
+
+          <!-- ملامح سريعة عن أجواء النادي -->
+          <div class="hero-highlights">
+            <div class="highlight-item">
+              <span class="highlight-icon">📖</span>
+              <span class="highlight-label">نقاشات وحوارات متعلقة بالكتب</span>
+            </div>
+            <div class="highlight-item">
+              <span class="highlight-icon">🏛️</span>
+              <span class="highlight-label">استضافات تاريخية وثقافية</span>
+            </div>
+            <div class="highlight-item">
+              <span class="highlight-icon">📍</span>
+              <span class="highlight-label">مجلس قرائي في القصيم</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-visual reveal-on-scroll">
+          <div class="hero-image-wrapper">
+            <img src="assets/images/headquarters.png" alt="مقر جمعية التنمية الأهلية بالمريدسية - حاضنة نادي جليس القرائي" class="hero-image" width="599" height="1020" fetchpriority="high">
+            <div class="hero-photo-tag">
+              📍 مقر جمعية التنمية بالمريدسية • القصيم
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ==============================================
+           شريط الإحصائيات البارز في منتصف الأعلى (Hero Stats)
+           ============================================== -->
+      <div class="container hero-stats-container">
+        <div class="stats-banner reveal-on-scroll">
+          
+          <div class="stat-box">
+            <div class="stat-icon-wrap">
+              <span class="stat-icon">📄</span>
+            </div>
+            <div class="stat-info">
+              <span class="stat-number">+1 مليون</span>
+              <span class="stat-label">صفحة مقروءة</span>
+            </div>
+          </div>
+
+          <div class="stat-separator" aria-hidden="true"></div>
+
+          <div class="stat-box">
+            <div class="stat-icon-wrap">
+              <span class="stat-icon">📚</span>
+            </div>
+            <div class="stat-info">
+              <span class="stat-number">+5,230</span>
+              <span class="stat-label">كتاب مقروء</span>
+            </div>
+          </div>
+
+          <div class="stat-separator" aria-hidden="true"></div>
+
+          <div class="stat-box">
+            <div class="stat-icon-wrap">
+              <span class="stat-icon">👥</span>
+            </div>
+            <div class="stat-info">
+              <span class="stat-number">63</span>
+              <span class="stat-label">عضواً نشطاً</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ==============================================
+         3. قسم «عن النادي» (About Club)
+         ============================================== -->
+    <section class="section about-section" id="about">
+      <div class="container">
+        
+        <div class="section-header text-center reveal-on-scroll">
+          <span class="section-badge">رسالتنا ورؤيتنا</span>
+          <h2 class="section-title">عن نادي جليس القرائي</h2>
+          <div class="section-title-divider"></div>
+          <p class="section-lead">
+            نادي جليس القرائي مساحة تجمع المهتمين بالقراءة والثقافة والتاريخ في منطقة القصيم، وتهدف إلى تعزيز حضور القراءة في المجتمع، وخلق بيئة للحوار وتبادل المعرفة، والتعرف على تجارب القراء والكتّاب والمهتمين بالتاريخ من خلال اللقاءات والاستضافات الثقافية.
+          </p>
+        </div>
+
+        <!-- بطاقات الأهداف الثلاثة (قابلة للتوسع لاستعراض ملامح الأثر وثمار المبادرة) -->
+        <div class="about-grid">
+          
+          <!-- بطاقة 1: تعزيز ثقافة القراءة -->
+          <div class="card about-card proof-card reveal-on-scroll" id="proof-reading">
+            <div class="about-card-header" onclick="toggleProofCard('reading')" role="button" tabindex="0">
+              <div class="about-icon-wrapper">
+                <span class="about-icon">📚</span>
+              </div>
+              <h3 class="about-card-title">تعزيز ثقافة القراءة</h3>
+              <p class="about-card-text">
+                نشر شغف القراءة وجعلها سلوكاً يومياً ممتعاً، ومساعدة القرّاء على تجاوز الفتور وتطوير مهارات النقد والتحليل.
+              </p>
+              <div class="card-proof-hint">
+                <span class="hint-text">📸 انقر للاطلاع على ملامح الأثر</span>
+                <span class="arrow-hint">▼</span>
+              </div>
+            </div>
+
+            <!-- لوحة التوثيق الحية القابلة للتوسع داخل نفس البطاقة -->
+            <div class="proof-drawer" id="drawer-reading">
+              <div class="proof-drawer-inner">
+                <div class="proof-details">
+                  <h4 class="proof-details-title">أبرز ثمار تعزيز ثقافة القراءة:</h4>
+                  <ul class="proof-points">
+                    <li>✓ إنجاز تراكمي مستمر تجاوز <strong>1,006,651 صفحة مقروءة</strong>.</li>
+                    <li>✓ إنهاء قراءة أكثر من <strong>5,232 كتاباً</strong> عبر تحديات أسبوعية متواصلة.</li>
+                    <li>✓ التزام قرائي أسبوعي يجمع أعضاء النادي بنشاط وتفاعل دائم.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- بطاقة 2: بناء مجتمع من القراء -->
+          <div class="card about-card proof-card reveal-on-scroll" id="proof-community">
+            <div class="about-card-header" onclick="toggleProofCard('community')" role="button" tabindex="0">
+              <div class="about-icon-wrapper">
+                <span class="about-icon">🤝</span>
+              </div>
+              <h3 class="about-card-title">بناء مجتمع من القراء</h3>
+              <p class="about-card-text">
+                إيجاد بيئة دافئة وآمنة للحوار، يتلاقى فيها عشاق الكتب من منطقة القصيم لتبادل الآراء والتجارب وإثراء المعارف المشتركة.
+              </p>
+              <div class="card-proof-hint">
+                <span class="hint-text">📸 انقر للاطلاع على ملامح الأثر والصور</span>
+                <span class="arrow-hint">▼</span>
+              </div>
+            </div>
+
+            <div class="proof-drawer" id="drawer-community">
+              <div class="proof-drawer-inner">
+                <div class="proof-img-container">
+                  <img src="assets/images/meeting-gharnati.png" alt="مجلس قراء نادي جليس" class="proof-img" loading="lazy">
+                  <span class="proof-badge">لقطة من مجلس الحوار</span>
+                </div>
+                <div class="proof-details">
+                  <h4 class="proof-details-title">ملامح مجتمع القرّاء ولقاءاتهم:</h4>
+                  <ul class="proof-points">
+                    <li>✓ لقاءات دورية حضورية وافتراضية تجمع <strong>63 قارئاً فاعلاً</strong> من القصيم.</li>
+                    <li>✓ جلسات نقاش أدبي وفكري في مقر الجمعية بالمريدسية تتناول شتى فروع المعرفة.</li>
+                    <li>✓ بيئة تشاركية تعزز الروابط بين عشاق الكتب وتتبادل ترشيحات القراءة.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- بطاقة 3: استضافة المهتمين بالثقافة والتاريخ -->
+          <div class="card about-card proof-card reveal-on-scroll" id="proof-history">
+            <div class="about-card-header" onclick="toggleProofCard('history')" role="button" tabindex="0">
+              <div class="about-icon-wrapper">
+                <span class="about-icon">📜</span>
+              </div>
+              <h3 class="about-card-title">استضافة المهتمين بالثقافة والتاريخ</h3>
+              <p class="about-card-text">
+                استقطاب الباحثين والكتّاب والمؤرخين في جلسات حوارية نوعية تسلّط الضوء على الإرث التاريخي والفكر الإنساني.
+              </p>
+              <div class="card-proof-hint">
+                <span class="hint-text">📸 انقر للاطلاع على ملامح الأثر والصور</span>
+                <span class="arrow-hint">▼</span>
+              </div>
+            </div>
+
+            <div class="proof-drawer" id="drawer-history">
+              <div class="proof-drawer-inner">
+                <div class="proof-img-container">
+                  <img src="assets/images/guest-shawi.png" alt="لقاء معالم من مملكتنا نجد نموذجا - أ. محمد بن عبدالله الشاوي" class="proof-img" style="object-position: top center;" loading="lazy">
+                  <span class="proof-badge">لقاء معالم من مملكتنا (نجد نموذجاً)</span>
+                </div>
+                <div class="proof-details">
+                  <h4 class="proof-details-title">ملامح الاستضافات الثقافية والتاريخية:</h4>
+                  <ul class="proof-points">
+                    <li>✓ استضافة نخبة من الباحثين والرحالة (مثل أ. محمد الشاوي، أ.د. إبراهيم الدغيري).</li>
+                    <li>✓ تسليط الضوء على معالم نجد والقصيم ودرب الحج والنقوش التراثية.</li>
+                    <li>✓ حوارات نوعية تُثري التراث الوطني والفكر الإنساني.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- زر الانتقال لصفحة ملامح الأثر -->
+        <div class="impact-cta-wrap">
+          <a href="proofs.html" class="btn btn-outline-header btn-lg impact-cta">
+            <span>📖 استعراض ملامح الأثر وثمار النادي بالتفصيل</span>
+            <span class="btn-icon">←</span>
+          </a>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==============================================
+         4. قسم «اللقاءات المسجلة» (Recorded Meetings)
+         ============================================== -->
+    <section class="section recorded-meetings-section bg-warm" id="recorded-meetings">
+      <div class="container">
+        
+        <div class="section-header text-center reveal-on-scroll">
+          <span class="section-badge">أرشيف المعرفة</span>
+          <h2 class="section-title">من لقاءات جليس</h2>
+          <div class="section-title-divider"></div>
+          <p class="section-lead">
+            تسجيلات وتوثيق لأبرز جلسات واستضافات نادي جليس القرائي، لمشاركتها مع مجتمع القرّاء والمهتمين.
+          </p>
+        </div>
+
+        <!-- شبكة اللقاءات المسجلة المنشأة بواسطة JavaScript -->
+        <div class="recorded-grid" id="recorded-meetings-grid">
+          <!-- يتم عرض اللقاءات ديناميكياً بواسطة JavaScript -->
+        </div>
+
+        <!-- حالة عدم وجود لقاءات مسجلة -->
+        <div class="empty-state hidden" id="recorded-meetings-empty">
+          <div class="empty-state-icon">🎥</div>
+          <h3 class="empty-state-title">نعمل على توثيق لقاءاتنا القادمة، ترقبوا المزيد</h3>
+          <p class="empty-state-desc">سيتم إدراج تسجيلات اللقاءات الثقافية فور جاهزيتها.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==============================================
+         6. قسم «اللقاءات القادمة» (Upcoming Meetings)
+         ============================================== -->
+    <section class="section upcoming-meetings-section bg-warm" id="upcoming-meetings">
+      <div class="container">
+        
+        <div class="section-header text-center reveal-on-scroll">
+          <span class="section-badge">الأجندة والفعاليات</span>
+          <h2 class="section-title">اللقاءات القادمة</h2>
+          <div class="section-title-divider"></div>
+          <p class="section-lead">
+            تعرف على فعالياتنا وجلساتنا الحوارية القادمة، وبادر بحجز مقعدك للمشاركة في إثراء النقاش.
+          </p>
+        </div>
+
+        <!-- شبكة اللقاءات القادمة المنشأة بواسطة JavaScript -->
+        <div class="upcoming-grid" id="upcoming-meetings-grid">
+          <!-- يتم حقن البطاقات ديناميكياً بواسطة JavaScript -->
+        </div>
+
+        <!-- حالة عدم توفر لقاءات قادمة -->
+        <div class="empty-state hidden" id="upcoming-meetings-empty">
+          <div class="empty-state-icon">🗓️</div>
+          <h3 class="empty-state-title">نستعد للقاءات جديدة، تابعونا لمعرفة التفاصيل</h3>
+          <p class="empty-state-desc">يجري الترتيب لجدول اللقاءات والاستضافات القادمة وسيتم الإعلان عنها هنا.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==============================================
+         7. قسم «للإنضمام للنادي» (Join Club Section)
+         ============================================== -->
+    <section class="section join-section" id="join">
+      <div class="container">
+        
+        <div class="join-wrapper reveal-on-scroll">
+          
+          <div class="join-info">
+            <span class="section-badge badge-light">انضم إلى مجتمعنا</span>
+            <h2 class="join-title">مكانك بين جليسنا</h2>
+            <p class="join-description">
+              إذا كنت من عشاق القراءة والبحث في التاريخ والثقافة، يسعدنا أن تكون فرداً في عائلة «جليس». نلتقي لنتبادل الرأي، ونسمو بالفكر، ونحتفي بالكلمة في رحاب القصيم.
+            </p>
+
+            <div class="join-perks">
+              <div class="perk-item">
+                <span class="perk-check">✓</span>
+                <span>المشاركة في الجلسات الحوارية الدورية ومناقشات الكتب.</span>
+              </div>
+              <div class="perk-item">
+                <span class="perk-check">✓</span>
+                <span>حضور استضافات الكتّاب والباحثين والمؤرخين.</span>
+              </div>
+              <div class="perk-item">
+                <span class="perk-check">✓</span>
+                <span>بيئة قرائية محفزة تعين على الاستمرار في القراءة.</span>
+              </div>
+            </div>
+
+            <!-- الزر المباشر لاستبيان Google Forms الرسمي -->
+            <div class="official-survey-box">
+              <h4 class="survey-box-title">التسجيل الرسمي في النادي:</h4>
+              <p class="survey-box-desc">نرحب بانضمامك ومشاركتنا اللقاءات الثقافية عبر تعبئة استبيان العضوية المعتمد:</p>
+              <a href="https://forms.gle/UZY6DnS9W2X5ft9w8" target="_blank" rel="noopener noreferrer" class="btn btn-gold btn-lg">
+                <span>التسجيل عبر الاستبيان المعتمد</span>
+                <span class="btn-icon">↗</span>
+              </a>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==============================================
+       8. التذييل (Footer)
+       ============================================== -->
+  <footer class="site-footer">
+    <div class="container footer-container">
+      
+      <div class="footer-col footer-about">
+        <a href="#hero" class="footer-logo">
+          <div class="footer-logo-badge">
+            <img src="assets/images/logo-header.png" alt="نادي جليس القرائي" width="155" height="65">
+          </div>
+        </a>
+        <p class="footer-desc">
+          نادي جليس القرائي: مساحة فكرية وثقافية تجمع القراء والمهتمين بالكتب والتاريخ في منطقة القصيم، نسعى إلى غرس حب القراءة وخلق حوار معرفي راقٍ.
+        </p>
+        <div class="footer-location">
+          <span>📍 القصيم، المملكة العربية السعودية</span>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-heading">روابط سريعة</h4>
+        <ul class="footer-links">
+          <li><a href="#hero">الرئيسية</a></li>
+          <li><a href="#about">عن النادي</a></li>
+          <li><a href="#recorded-meetings">اللقاءات المسجلة</a></li>
+          <li><a href="#upcoming-meetings">اللقاءات القادمة</a></li>
+          <li><a href="#join">طلب الانضمام</a></li>
+          <li><a href="quotes.html">اقتباسات الأعضاء</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-heading">العضوية والتواصل</h4>
+        <ul class="footer-links">
+          <li>
+            <a href="https://forms.gle/UZY6DnS9W2X5ft9w8" target="_blank" rel="noopener noreferrer" class="footer-highlight-link">
+              استبيان العضوية المعتمد ↗
+            </a>
+          </li>
+          <li><span class="footer-contact-info">لقاءات دورية حضورية وافتراضية</span></li>
+          <li><span class="footer-contact-info">نرحب بكافة القرّاء والمهتمين</span></li>
+        </ul>
+
+        <!-- روابط التواصل الاجتماعي الرسمية -->
+        <div class="social-links-wrapper">
+          <span class="social-label">قنواتنا الرقمية:</span>
+          <div class="social-icons">
+            <a href="https://x.com/ccsd_m?s=20" target="_blank" rel="noopener noreferrer" class="social-icon-btn" aria-label="حساب نادي جليس على منصة إكس">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 22.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a href="https://www.youtube.com/channel/UClU055dJb-b3z6l1ERUXSmQ" target="_blank" rel="noopener noreferrer" class="social-icon-btn" aria-label="قناة نادي جليس على يوتيوب">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.376.55 9.376.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- الشريط السفلي للحقوق -->
+    <div class="footer-bottom">
+      <div class="container footer-bottom-container">
+        <p class="copyright-text">
+          جميع الحقوق محفوظة © <span id="current-year"></span> نادي جليس القرائي.
+        </p>
+        <p class="footer-tagline">
+          صُمم بشغف لدعم القراءة والثقافة في القصيم.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==============================================
+       نافذة منبثقة لعرض الصور التوثيقية الحية (Photo Proof Lightbox)
+       ============================================== -->
+  <div class="photo-modal" id="photo-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="photo-modal-backdrop" id="photo-modal-backdrop"></div>
+    <div class="photo-modal-dialog">
+      <button type="button" class="photo-modal-close" id="photo-modal-close" aria-label="إغلاق">&times;</button>
+      <div class="photo-modal-img-wrap">
+        <img src="" alt="" id="photo-modal-img">
+        <span class="photo-live-badge">📸 توثيق حي من واقع لقاءات جليس</span>
+      </div>
+      <div class="photo-modal-caption">
+        <h3 class="photo-modal-title" id="photo-modal-title"></h3>
+        <p class="photo-modal-desc" id="photo-modal-desc"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==============================================
+       9. نافذة منبثقة لعرض الفيديو (Video Player Modal)
+       ============================================== -->
+  <div class="video-modal" id="video-modal" role="dialog" aria-modal="true" aria-labelledby="modal-video-title" aria-hidden="true">
+    <div class="video-modal-backdrop" id="modal-backdrop"></div>
+    <div class="video-modal-dialog">
+      <div class="video-modal-header">
+        <h3 class="video-modal-title" id="modal-video-title">تسجيل اللقاء</h3>
+        <button type="button" class="modal-close-btn" id="modal-close-btn" aria-label="إغلاق النافذة">&times;</button>
+      </div>
+      <div class="video-modal-body">
+        <div class="video-iframe-container" id="modal-video-container">
+          <!-- يتم إدراج مشغل الفيديو هنا بواسطة JavaScript -->
+        </div>
+        <div class="modal-video-meta" id="modal-video-meta">
+          <!-- تفاصيل اللقاء -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==============================================
+       10. زر العودة للأعلى وعنصر التنبيه السريع (Toast)
+       ============================================== -->
+  <button type="button" class="back-to-top" id="back-to-top" aria-label="العودة إلى أعلى الصفحة">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+  </button>
+
+  <div class="toast-notification" id="toast" role="alert" aria-live="assertive"></div>
+
+  <!-- JavaScript المنفصل -->
+  <script src="script.js"></script>
+  <!-- شريط التنقل السفلي (نمط التطبيقات) -->
+  <nav class="site-tabbar" aria-label="التنقل السريع">
+    <ul>
+      <li><a href="index.html" class="active" aria-current="page">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        <span>الرئيسية</span>
+      </a></li>
+      <li><a href="index.html#recorded-meetings">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span>اللقاءات</span>
+      </a></li>
+      <li><a href="proofs.html">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span>الشواهد</span>
+      </a></li>
+      <li><a href="quotes.html">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10.7 5.6C7.2 6.8 5 9.4 5 12.6v5.8h5.7v-5.8H8.3c.1-1.9 1.1-3.2 3-3.8l-.6-3.2zm8.6 0c-3.5 1.2-5.7 3.8-5.7 7v5.8h5.7v-5.8h-2.4c.1-1.9 1.1-3.2 3-3.8l-.6-3.2z"/></svg>
+        <span>الاقتباسات</span>
+      </a></li>
+      <li><a href="index.html#join">
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        <span>انضم لنا</span>
+      </a></li>
+    </ul>
+  </nav>
+
+</body>
+</html>

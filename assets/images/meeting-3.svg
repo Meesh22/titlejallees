@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" fill="none">
+  <defs>
+    <linearGradient id="m3bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#263E36"/>
+      <stop offset="100%" stop-color="#14211D"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#m3bg)"/>
+  <rect x="24" y="24" width="592" height="312" rx="12" stroke="#C59B63" stroke-width="1.5" stroke-opacity="0.35"/>
+
+  <g transform="translate(48, 48)">
+    <rect width="110" height="28" rx="14" fill="#C59B63" fill-opacity="0.2"/>
+    <text x="55" y="19" text-anchor="middle" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="12" font-weight="700" fill="#E6DEC9">اللقاء الثالث [تجريبي]</text>
+  </g>
+
+  <text x="590" y="145" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="30" font-weight="800" fill="#FAF6EE">
+    كيف نبني عادة القراءة المستمرة؟
+  </text>
+  <text x="590" y="185" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="17" font-weight="500" fill="#D3C9B5">
+    حوار مفتوح حول آليات التغلب على فتور القراءة واختيار الكتب
+  </text>
+
+  <g transform="translate(48, 260)">
+    <rect width="544" height="48" rx="8" fill="#1C2D27" stroke="#2D553F" stroke-width="1"/>
+    <text x="30" y="30" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="14" fill="#C59B63">١٤٤٥ هـ • جلسة نقاشية</text>
+    <text x="520" y="30" text-anchor="end" font-family="'IBM Plex Sans Arabic', sans-serif" font-size="15" font-weight="700" fill="#FAF6EE">الضيف: باحث في أساليب التعلم الذاتي</text>
+  </g>
+
+  <circle cx="320" cy="180" r="32" fill="#C59B63" fill-opacity="0.9"/>
+  <polygon points="314,166 332,180 314,194" fill="#14211D"/>
+</svg>

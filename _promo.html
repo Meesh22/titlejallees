@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>jalees promo</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 1600px; height: 1000px; overflow: hidden; background: #0B1711; }
+  #stage { position: absolute; inset: 0; width: 1600px; height: 1000px; border: 0; display: block; }
+</style>
+</head>
+<body>
+  <iframe id="stage" src="app.html?demo=1"></iframe>
+  <script>
+    var frame = document.getElementById('stage');
+    frame.addEventListener('load', inject);
+
+    function row(rank, name, color, pages) {
+      return '' +
+        '<div class="board-row is-top">' +
+          '<span class="board-rank">' + rank + '</span>' +
+          '<span class="board-avatar" style="background:linear-gradient(135deg,' + color + ',#14291D)">' + name.charAt(0) + '</span>' +
+          '<div class="board-info"><strong>' + name + '</strong><span>عضو</span></div>' +
+          '<div class="board-pages"><strong>' + pages + '</strong><span>صفحة</span></div>' +
+        '</div>';
+    }
+
+    function inject() {
+      var w = frame.contentWindow;
+      var d = w.document;
+      var rtl = function (v) { return v; };
+
+      try { w.go('home'); } catch (e) {}
+
+      var board = row('١', 'محمد الدبيخي', '#1E3A2B', '٢٤٦') +
+                  row('٢', 'خالد الواصل', '#8C532D', '٢١٨') +
+                  row('٣', 'مشعل الحفير', '#A3503B', '١٨٤');
+      var homeBoard = d.getElementById('home-board');
+      if (homeBoard) homeBoard.innerHTML = board;
+
+      d.querySelector('.stage-kicker').textContent = 'إعلان الموقع الجديد · مساحة الأعضاء';
+      d.querySelector('.stage-brand h2').innerHTML = 'أطلقنا<br><span>مساحة الأعضاء.</span>';
+      d.querySelector('.stage-text').textContent = 'ورد القراءة الأسبوعي، لوحة الأعضاء، الاقتباسات، مكتبة النادي، ومقالات الأعضاء… كل ذلك في مساحة واحدة صُممت بهوية النادي.';
+      d.querySelector('.stage-foot').innerHTML = '<span class="stage-url">jallees.vercel.app</span><span class="stage-note">دخول برمز العضوية</span>';
+
+      var list = d.querySelector('.stage-list');
+      if (list) {
+        list.outerHTML = '' +
+          '<div class="stage-board">' +
+            '<div class="stage-board-head"><span>أبطال هذا الأسبوع</span><b>أكثر الأعضاء قراءة</b></div>' +
+            board +
+          '</div>';
+      }
+
+      var css = d.createElement('style');
+      css.textContent = `
+        body { padding: 0 !important; }
+        .stage { max-width: 1600px; gap: 96px; padding: 0 120px; box-sizing: border-box; }
+        .stage-brand { width: 420px; }
+        .stage-brand h2 { font-size: 46px; }
+        .stage-text { font-size: 15px; margin: 20px 0 24px; }
+        .stage-kicker { font-size: 12px; margin-bottom: 18px; }
+
+        .stage-board { display: grid; gap: 9px; }
+        .stage-board-head {
+          display: flex; align-items: baseline; justify-content: space-between;
+          margin-bottom: 4px; padding-bottom: 9px;
+          border-bottom: 1px solid rgba(197, 155, 99, 0.22);
+        }
+        .stage-board-head span { font-size: 15px; font-weight: 700; color: #F8F5EE; }
+        .stage-board-head b { font-size: 10px; font-weight: 500; color: rgba(248, 245, 238, 0.45); letter-spacing: 0.3px; }
+
+        .stage-board .board-row {
+          padding: 10px 13px;
+          border-radius: 15px;
+          background: rgba(248, 245, 238, 0.045);
+          border: 1px solid rgba(197, 155, 99, 0.16);
+          gap: 11px;
+        }
+        .stage-board .board-row.is-top .board-rank {
+          background: rgba(197, 155, 99, 0.16);
+          border: 1px solid rgba(197, 155, 99, 0.32);
+          color: #E3C393;
+        }
+        .stage-board .board-row:first-child { background: rgba(197, 155, 99, 0.09); border-color: rgba(197, 155, 99, 0.34); }
+        .stage-board .board-rank { width: 27px; height: 27px; border-radius: 9px; font-size: 12px; }
+        .stage-board .board-avatar { width: 36px; height: 36px; font-size: 13px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+        .stage-board .board-row:first-child .board-avatar { box-shadow: 0 0 0 2px rgba(197, 155, 99, 0.55); }
+        .stage-board .board-info strong { font-size: 14px; color: #F8F5EE; }
+        .stage-board .board-info span { font-size: 9.5px; color: rgba(248, 245, 238, 0.42); }
+        .stage-board .board-pages strong { font-size: 17px; color: #E3C393; }
+        .stage-board .board-pages span { font-size: 9px; color: rgba(248, 245, 238, 0.42); }
+
+        .stage-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 30px; }
+        .stage-url {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 7px 14px; border-radius: 999px;
+          border: 1px solid rgba(197, 155, 99, 0.5);
+          background: rgba(197, 155, 99, 0.12);
+          color: #E3C393; font-size: 13px; font-weight: 600;
+          direction: ltr; letter-spacing: 0.4px;
+        }
+        .stage-note { font-size: 10.5px; color: rgba(248, 245, 238, 0.42); }
+      `;
+      d.head.appendChild(css);
+
+      document.title = 'READY';
+    }
+  </script>
+</body>
+</html>
