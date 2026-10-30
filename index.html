@@ -297,6 +297,9 @@
                 <button class="btn btn-sm btn-primary" type="button" data-action="open-quote">
                   <svg class="ic"><use href="#i-plus"/></svg> اقتبس
                 </button>
+                <button class="btn btn-sm btn-ghost" type="button" data-action="open-saved-quotes-sheet">
+                  <svg class="ic"><use href="#i-bookmark"/></svg> محفوظاتك
+                </button>
               </div>
 
               <article class="quote-promo" data-action="open-quote" role="button" tabindex="0">
@@ -332,6 +335,9 @@
                   <svg class="ic"><use href="#i-search"/></svg>
                   <input id="club-search" type="search" placeholder="ابحث عن كتاب أو مؤلف…" autocomplete="off" aria-label="ابحث في مكتبة النادي">
                 </div>
+                <button class="btn btn-sm btn-primary" type="button" data-action="open-add-book">
+                  <svg class="ic"><use href="#i-plus"/></svg> أضف كتاب
+                </button>
                 <div class="chips-row wrap" id="category-chips"></div>
                 <div class="sec-head">
                   <div><h3 id="library-count-label">كتب النادي</h3><p>متاحة للاستعارة من مقر النادي</p></div>
@@ -341,6 +347,9 @@
 
               <div class="pane" id="pane-mine" hidden>
                 <div class="reading-summary" id="my-summary"></div>
+                <button class="btn btn-sm btn-primary" type="button" data-action="open-add-book">
+                  <svg class="ic"><use href="#i-plus"/></svg> أضف كتاب
+                </button>
                 <div class="chips-row" id="my-filters">
                   <button class="chip-filter active" type="button" data-mfilter="reading">أقرأ الآن</button>
                   <button class="chip-filter" type="button" data-mfilter="want">أريد قراءتها</button>

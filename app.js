@@ -56,6 +56,7 @@ const SESSION_KEY = 'jalees-session-v2';
 const MEMBER_KEY_PREFIX = 'jalees-member-v2:';
 const LEGACY_KEY = 'jalees-members-v1';
 const CLUB_GOAL = 12000;
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRSgGjhVS29jBPgXxKc_dhz-5ZGbcrg6QIjWN-2HtuKym8dymUyP5IK/exec';
 
 const CLUB = {
   name: 'نادي جليس القرائي',
@@ -312,11 +313,123 @@ function createInitialState(member) {
     myFilter: 'reading',
     articleFilter: 'all',
     articleCategory: 'all',
-    articleCategorySearch: ''
+    articleCategorySearch: '',
+    clubBooks: []
   };
 }
 
 const stateKey = (id) => `${MEMBER_KEY_PREFIX}${id}`;
+
+/* ============================================================================
+   مزامنة البيانات مع Google Sheets (السحابة)
+   ============================================================================ */
+async function cloudRequest(action, data = null, memberId = null) {
+  try {
+    const url = memberId
+      ? `${APPS_SCRIPT_URL}?action=${action}&memberId=${encodeURIComponent(memberId)}`
+      : APPS_SCRIPT_URL;
+
+    const options = data
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `action=${action}&data=${encodeURIComponent(JSON.stringify(data))}`
+        }
+      : {};
+
+    const response = await fetch(url, options);
+    return await response.json();
+  } catch (error) {
+    console.error('Cloud request error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function saveProfileToCloud(member) {
+  return cloudRequest('saveProfile', {
+    memberId: member.id,
+    name: member.name,
+    role: member.role,
+    joined: '٢٠٢٤',
+    goal: state.profile.goal,
+    lastWeekPages: member.lastWeek,
+    notifications: state.profile.notifications
+  });
+}
+
+async function saveEntriesToCloud(member) {
+  for (const entry of state.entries) {
+    await cloudRequest('saveEntry', {
+      id: entry.id,
+      memberId: member.id,
+      memberName: state.profile.name,
+      bookId: entry.bookId || null,
+      bookTitle: entry.bookTitle || '',
+      pages: entry.pages,
+      date: entry.date,
+      createdAt: entry.ts || Date.now()
+    });
+  }
+}
+
+async function saveMyBooksToCloud(member) {
+  for (const book of state.myBooks) {
+    await cloudRequest('saveMyBook', {
+      memberId: member.id,
+      memberName: state.profile.name,
+      bookId: book.bookId,
+      status: book.status,
+      currentPage: book.currentPage
+    });
+  }
+}
+
+async function saveClubBooksToCloud(member) {
+  for (const book of state.clubBooks) {
+    await cloudRequest('saveClubBook', {
+      id: book.id,
+      memberId: member.id,
+      memberName: state.profile.name,
+      title: book.title,
+      author: book.author,
+      category: book.category,
+      coverColor: book.coverColor,
+      report: book.report || '',
+      pages: book.pages || 0,
+      createdAt: book.createdAt || Date.now()
+    });
+  }
+}
+
+async function loadClubBooksFromCloud(memberId) {
+  const result = await cloudRequest('getClubBooks', null, memberId);
+  return result.success ? result.data : [];
+}
+
+async function loadProfileFromCloud(memberId) {
+  const result = await cloudRequest('getProfile', null, memberId);
+  return result.success && result.data.length > 0 ? result.data[0] : null;
+}
+
+async function loadEntriesFromCloud(memberId) {
+  const result = await cloudRequest('getEntries', null, memberId);
+  return result.success ? result.data : [];
+}
+
+async function loadMyBooksFromCloud(memberId) {
+  const result = await cloudRequest('getMyBooks', null, memberId);
+  return result.success ? result.data : [];
+}
+
+async function loadQuotesFromCloud(memberId) {
+  const result = await cloudRequest('getQuotes', null, memberId);
+  return result.success ? result.data : [];
+}
+
+async function loadArticlesFromCloud(memberId) {
+  const result = await cloudRequest('getArticles', null, memberId);
+  return result.success ? result.data : [];
+}
 
 let currentMember = null;
 let state = null;
@@ -335,9 +448,11 @@ function readLegacyFor(member) {
   }
 }
 
-function loadStateFor(member) {
+async function loadStateFor(member) {
   const base = createInitialState(member);
   let parsed = null;
+
+  /* 1. أولوية للتخزين المحلي — بيانات المستخدم الحالية لا تُمسح أبداً */
   try {
     const raw = localStorage.getItem(stateKey(member.id));
     if (raw) parsed = JSON.parse(raw);
@@ -345,6 +460,44 @@ function loadStateFor(member) {
     parsed = null;
   }
   if (!parsed) parsed = readLegacyFor(member);
+
+  /* 2. إذا لم تكن هناك بيانات محلية، جلب من السحابة كبديل */
+  if (!parsed || Object.keys(parsed).length <= 1) {
+    try {
+      const [profile, entries, myBooks, quotes, articles, clubBooks] = await Promise.all([
+        loadProfileFromCloud(member.id),
+        loadEntriesFromCloud(member.id),
+        loadMyBooksFromCloud(member.id),
+        loadQuotesFromCloud(member.id),
+        loadArticlesFromCloud(member.id),
+        loadClubBooksFromCloud(member.id)
+      ]);
+
+      if (profile) {
+        parsed = {
+          profile: {
+            name: profile.name || member.name,
+            role: profile.role || member.role,
+            joined: profile.joined || '٢٠٢٤',
+            goal: Number(profile.goal) || 200,
+            lastWeekPages: Number(profile.lastWeekPages) || member.lastWeek,
+            notifications: profile.notifications !== 'false'
+          },
+          entries: Array.isArray(entries) ? entries : [],
+          myBooks: Array.isArray(myBooks) ? myBooks : [],
+          quotes: Array.isArray(quotes) && quotes.length ? quotes : base.quotes,
+          articles: Array.isArray(articles) && articles.length ? articles : base.articles,
+          clubBooks: Array.isArray(clubBooks) ? clubBooks : [],
+          savedQuotes: [],
+          likedQuotes: [],
+          savedArticles: []
+        };
+      }
+    } catch (error) {
+      console.error('Cloud load failed:', error);
+    }
+  }
+
   if (!parsed) return base;
 
   return {
@@ -364,6 +517,7 @@ function loadStateFor(member) {
       return copy;
     }),
     myBooks: Array.isArray(parsed.myBooks) ? parsed.myBooks : [],
+    clubBooks: Array.isArray(parsed.clubBooks) ? parsed.clubBooks : [],
     quotes: Array.isArray(parsed.quotes) && parsed.quotes.length ? parsed.quotes : base.quotes,
     articles: Array.isArray(parsed.articles) && parsed.articles.length ? parsed.articles : base.articles,
     savedQuotes: Array.isArray(parsed.savedQuotes) ? parsed.savedQuotes : [],
@@ -372,12 +526,22 @@ function loadStateFor(member) {
   };
 }
 
-function saveState() {
+async function saveState() {
   if (!state || !currentMember) return;
+  /* 1. الحفظ المحلي فوري ومتزامن — يضمن ظهور البيانات فوراً في اللوحة */
   try {
     localStorage.setItem(stateKey(currentMember.id), JSON.stringify(state));
   } catch (error) {
     /* التخزين غير متاح — يستمر التطبيق في الذاكرة */
+  }
+  /* 2. المزامنة مع السحابة في الخلفية — لا تعيق عرض الموقع */
+  try {
+    await saveProfileToCloud(currentMember);
+    await saveEntriesToCloud(currentMember);
+    await saveMyBooksToCloud(currentMember);
+    await saveClubBooksToCloud(currentMember);
+  } catch (error) {
+    console.error('Cloud save error:', error);
   }
 }
 
@@ -822,28 +986,146 @@ function renderClubBooks() {
     return matchesCategory && matchesQuery;
   });
 
-  $('#library-count-label').textContent = `كتب النادي · ${toAr(list.length)}`;
-  $('#club-books').innerHTML = list.length ? list.map((book) => {
+  const clubList = state.clubBooks.filter((book) => {
+    const matchesCategory = state.libraryCategory === 'all' || book.category === state.libraryCategory;
+    const matchesQuery = !query || book.title.toLowerCase().includes(query) || book.author.toLowerCase().includes(query);
+    return matchesCategory && matchesQuery;
+  }).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  const allBooks = [...clubList, ...list];
+
+  $('#library-count-label').textContent = `كتب النادي · ${toAr(allBooks.length)}`;
+  $('#club-books').innerHTML = allBooks.length ? allBooks.map((book) => {
     const inLibrary = Boolean(getMyBook(book.id));
+    const isClubBook = !BOOKS.find((b) => b.id === book.id);
     return `
       <article class="lib-card" data-action="book" data-id="${book.id}">
         <div class="lib-cover-wrap">
           ${book.pick ? '<span class="lib-flag">مختار النادي</span>' : ''}
-          <button class="lib-add ${inLibrary ? 'added' : ''}" type="button" data-action="quick-add" data-id="${book.id}" aria-label="${inLibrary ? 'في مكتبتي' : 'أضف إلى مكتبتي'}">
-            <svg class="ic"><use href="#i-${inLibrary ? 'check' : 'plus'}"/></svg>
+          ${isClubBook ? '<span class="lib-flag">مشاركة من عضو</span>' : ''}
+          <button class="lib-more ${inLibrary ? 'added' : ''}" type="button" data-action="book-more" data-id="${book.id}" aria-label="أعرف أكثر عن الكتاب">
+            <span class="lib-more-text">أعرف أكثر عن الكتاب</span>
           </button>
-          ${coverHTML(book)}
+          ${book.coverImage
+            ? `<img class="lib-cover-img" src="${book.coverImage}" alt="${esc(book.title)}">`
+            : `<div class="lib-cover" style="background:linear-gradient(150deg, ${book.coverColor || book.c1 || '#1E3A2B'}, ${book.coverColor2 || book.c2 || '#3D5A4C'})">${esc(book.title.charAt(0))}</div>`}
         </div>
         <div class="lib-info">
           <h4>${esc(book.title)}</h4>
           <p>${esc(book.author)}</p>
           <div class="lib-meta">
-            <span class="lib-rating"><svg class="ic"><use href="#i-star"/></svg>${toAr(book.rating)}</span>
+            ${isClubBook ? `<span class="lib-added-by"><svg class="ic"><use href="#i-user"/></svg>${esc(book.memberName || 'عضو جليس')}</span>` : ''}
+            <span class="lib-rating"><svg class="ic"><use href="#i-star"/></svg>${toAr(book.rating || 0)}</span>
             <span class="lib-avail ${book.available ? '' : 'out'}"><i></i>${book.available ? `${toAr(book.available)} نسخ` : 'قائمة انتظار'}</span>
           </div>
+          ${book.report ? `<p class="lib-report" data-full="${esc(book.report)}" data-short="${esc(book.report.substring(0, 120))}…">${esc(book.report.length > 120 ? book.report.substring(0, 120) + '…' : book.report)}</p> <span class="report-toggle" data-action="toggle-report" data-id="${book.id}" style="cursor:pointer;color:var(--gold-700);font-size:7.5px;font-weight:700;margin-left:4px;">أعرف أكثر</span>` : ''}
         </div>
       </article>`;
   }).join('') : emptyHTML('search', 'لا توجد نتائج', 'جرّب عنواناً آخر أو أزل تصفية التصنيف.');
+}
+
+function openAddBook() {
+  openSheet(`
+    ${sheetHead('إضافة كتاب لمكتبة النادي', 'أضف كتاباً تود مشاركته مع أعضاء جليس.')}
+    <form id="add-book-form" novalidate>
+      <div class="field">
+        <label for="add-book-title">عنوان الكتاب <span class="label-opt">مطلوب</span></label>
+        <input class="input" id="add-book-title" maxlength="120" placeholder="مثال: حياة في الإدارة" required>
+      </div>
+      <div class="field">
+        <label for="add-book-author">المؤلف</label>
+        <input class="input" id="add-book-author" maxlength="100" placeholder="مثال: غازي القصيبي">
+      </div>
+      <div class="field">
+        <label for="add-book-category">التصنيف</label>
+        <select class="input" id="add-book-category">
+          <option>تطوير</option>
+          <option>سيرة</option>
+          <option>رواية</option>
+          <option>فكر</option>
+          <option>أدب</option>
+          <option>تاريخ</option>
+          <option>إدارة</option>
+          <option>تجارب</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="add-book-report">تقرير عن الكتاب</label>
+        <textarea class="input" id="add-book-report" rows="4" placeholder="اكتب تقريراً قصيراً عن الكتاب وماذا يحتوي…"></textarea>
+      </div>
+      <div class="field">
+        <label for="add-book-pages">عدد الصفحات (اختياري)</label>
+        <input class="input" id="add-book-pages" type="number" min="1" max="5000" placeholder="مثال: 320">
+      </div>
+      <div class="field">
+        <label for="add-book-color">لون الغلاف (إذا لم تختر صورة)</label>
+        <input class="input" id="add-book-color" type="color" value="#1E3A2B">
+      </div>
+      <div class="field">
+        <label for="add-book-image">صورة غلاف الكتاب (اختياري)</label>
+        <input class="input" id="add-book-image" type="file" accept="image/*">
+        <div class="image-preview" id="image-preview" hidden></div>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">
+        <svg class="ic"><use href="#i-plus"/></svg> إضافة الكتاب
+      </button>
+    </form>`, (root) => {
+    const imageInput = root.querySelector('#add-book-image');
+    const preview = root.querySelector('#image-preview');
+    let imageData = null;
+
+    imageInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        imageData = e.target.result;
+        preview.innerHTML = `<img src="${imageData}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px">`;
+        preview.hidden = false;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    root.querySelector('#add-book-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#add-book-title').value.trim();
+      const author = root.querySelector('#add-book-author').value.trim() || 'مؤلف غير محدد';
+      const category = root.querySelector('#add-book-category').value;
+      const report = root.querySelector('#add-book-report').value.trim();
+      const pages = Number(root.querySelector('#add-book-pages').value) || 0;
+      const color = root.querySelector('#add-book-color').value;
+
+      if (!title) {
+        toast('يرجى إدخال عنوان الكتاب', 'info');
+        return;
+      }
+
+      const newBook = {
+        id: `club-${Date.now()}`,
+        title,
+        author,
+        category,
+        report,
+        pages,
+        coverColor: color,
+        coverImage: imageData,
+        coverColor2: '#14291D',
+        createdAt: Date.now(),
+        memberId: currentMember.id,
+        memberName: state.profile.name,
+        available: 1,
+        rating: 0
+      };
+
+      state.clubBooks.unshift(newBook);
+      saveState();
+      closeSheet();
+      renderClubBooks();
+      renderHome();
+      toast(`تمت إضافة «${title}» لمكتبة النادي`, 'book');
+      celebrate();
+    });
+  });
 }
 
 const STATUS_LABEL = {
@@ -1164,7 +1446,7 @@ async function copyText(text) {
    12. نوافذ المحتوى
    -------------------------------------------------------------------------- */
 function openBookSheet(id) {
-  const book = getBook(id);
+  const book = getBook(id) || state.clubBooks.find((b) => b.id === id);
   if (!book) return;
   const mine = getMyBook(id);
   const status = mine ? STATUS_LABEL[mine.status] : '';
@@ -1184,20 +1466,21 @@ function openBookSheet(id) {
   openSheet(`
     ${sheetHead('من مكتبة النادي', book.pick ? 'مختار النادي لهذا الشهر' : '')}
     <div class="book-sheet-top">
-      <div class="book-sheet-cover">${coverHTML(book)}</div>
+      <div class="book-sheet-cover" style="background:linear-gradient(150deg, ${book.coverColor || book.c1 || '#1E3A2B'}, ${book.coverColor2 || book.c2 || '#3D5A4C'})">${esc(book.title.charAt(0))}</div>
       <div class="book-sheet-info">
         <span class="chip chip-soft">${esc(book.category)}</span>
         <h2>${esc(book.title)}</h2>
         <p class="author">${esc(book.author)}</p>
         <div class="book-sheet-meta">
-          <span><svg class="ic"><use href="#i-star"/></svg> ${toAr(book.rating)}</span>
-          <span><svg class="ic"><use href="#i-book"/></svg> ${toAr(book.pages)} صفحة</span>
+          ${book.memberName ? `<span class="lib-added-by"><svg class="ic"><use href="#i-user"/></svg>${esc(book.memberName)}</span>` : ''}
+          <span><svg class="ic"><use href="#i-star"/></svg> ${toAr(book.rating || 0)}</span>
+          <span><svg class="ic"><use href="#i-book"/></svg> ${toAr(book.pages || 0)} صفحة</span>
           <span><svg class="ic"><use href="#i-calendar"/></svg> ${book.available ? `${toAr(book.available)} نسخة متاحة` : 'قائمة انتظار'}</span>
         </div>
+        ${book.report ? `<p class="lib-report">${esc(book.report)}</p>` : ''}
         ${mine ? `<span class="my-status ${mine.status}" style="margin-top:9px">${status}</span>${progress}` : ''}
       </div>
     </div>
-    <p class="book-desc">${esc(book.desc)}</p>
     <div class="book-sheet-actions">${actions}</div>
   `);
 }
@@ -1537,15 +1820,15 @@ function showLibraryPane(name) {
   renderLibrary();
 }
 
-function setSessionMember(member) {
+async function setSessionMember(member) {
   currentMember = member;
-  state = loadStateFor(member);
+  state = await loadStateFor(member);
   try {
     localStorage.setItem(SESSION_KEY, member.id);
   } catch (error) {
     /* التخزين غير متاح */
   }
-  saveState();
+  await saveState();
 }
 
 function showGate() {
@@ -1701,6 +1984,9 @@ function handleGlobalClick(event) {
       break;
     case 'open-article-compose':
       openArticleComposer();
+      break;
+    case 'open-add-book':
+      openAddBook();
       break;
     case 'meeting':
       openMeetingSheet();
@@ -1935,8 +2221,8 @@ function handleLogSubmit(event) {
   }
 }
 
-function init() {
-  $('#login-form').addEventListener('submit', (event) => {
+async function init() {
+  $('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const name = $('#login-name').value.trim();
     const error = $('#login-error');
@@ -1951,7 +2237,7 @@ function init() {
       return;
     }
     error.hidden = true;
-    setSessionMember(member);
+    await setSessionMember(member);
     enterApp(true);
   });
 
@@ -2064,7 +2350,7 @@ function init() {
   setInterval(renderLogStamp, 30000);
 
   if (member) {
-    setSessionMember(member);
+    await setSessionMember(member);
     enterApp(false);
     const requested = params.get('screen');
     if (requested) go(requested);
