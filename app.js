@@ -57,6 +57,49 @@ const MEMBER_KEY_PREFIX = 'jalees-member-v2:';
 const LEGACY_KEY = 'jalees-members-v1';
 const CLUB_GOAL = 12000;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRSgGjhVS29jBPgXxKc_dhz-5ZGbcrg6QIjWN-2HtuKym8dymUyP5IK/exec';
+const QUOTES_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyUvJexsviIa-2nedbRPQa1NN9thBogDIcL5gYNtxIg3vL5LtZEd17udgQpKLxGDtloYw/exec';
+const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
+
+function mergeQuoteLists(...lists) {
+  const out = [];
+  const seenText = new Set();
+  const seenId = new Set();
+  lists.forEach((list) => {
+    if (!Array.isArray(list)) return;
+    list.forEach((quote) => {
+      if (!quote || !quote.text) return;
+      const text = normalizeName(quote.text);
+      if (!text || seenText.has(text)) return;
+      if (quote.id && seenId.has(quote.id)) return;
+      seenText.add(text);
+      if (quote.id) seenId.add(quote.id);
+      out.push(quote);
+    });
+  });
+  return out;
+}
+
+function getLocalSharedQuotes() {
+  try {
+    const raw = localStorage.getItem(SHARED_QUOTES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      /* الاقتباسات الأساسية تبقى دائماً في المقدمة حتى لو حُذفت من التخزين */
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return mergeQuoteLists(QUOTE_SEED.map((q) => ({ ...q })), parsed);
+      }
+    }
+  } catch (e) {}
+  return QUOTE_SEED.map((q) => ({ ...q }));
+}
+
+function saveLocalSharedQuotes(quotes) {
+  try {
+    if (Array.isArray(quotes)) {
+      localStorage.setItem(SHARED_QUOTES_KEY, JSON.stringify(quotes));
+    }
+  } catch (e) {}
+}
 
 const CLUB = {
   name: 'نادي جليس القرائي',
@@ -314,7 +357,8 @@ function createInitialState(member) {
     articleFilter: 'all',
     articleCategory: 'all',
     articleCategorySearch: '',
-    clubBooks: []
+    clubBooks: [],
+    personalBooks: []
   };
 }
 
@@ -324,6 +368,8 @@ const stateKey = (id) => `${MEMBER_KEY_PREFIX}${id}`;
    مزامنة البيانات مع Google Sheets (السحابة)
    ============================================================================ */
 async function cloudRequest(action, data = null, memberId = null) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const url = memberId
       ? `${APPS_SCRIPT_URL}?action=${action}&memberId=${encodeURIComponent(memberId)}`
@@ -333,16 +379,69 @@ async function cloudRequest(action, data = null, memberId = null) {
       ? {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `action=${action}&data=${encodeURIComponent(JSON.stringify(data))}`
+          body: `action=${action}&data=${encodeURIComponent(JSON.stringify(data))}`,
+          signal: controller.signal
         }
-      : {};
+      : { signal: controller.signal };
 
     const response = await fetch(url, options);
     return await response.json();
   } catch (error) {
     console.error('Cloud request error:', error);
     return { success: false, error: error.message };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/* ---- مزامنة ذكية: تُرسل الصفوف الجديدة فقط، مؤجلة ومتسلسلة ----
+   السبب: إعادة رفع كل السجلات في كل حفظ كانت تُغرق الموقع بمئات الطلبات. */
+const SYNC_KEY_PREFIX = 'jalees-sync-v2:';
+const syncKey = (id) => `${SYNC_KEY_PREFIX}${id}`;
+let syncState = { profile: false, entries: new Set(), myBooks: new Set(), clubBooks: new Set() };
+let syncTimer = null;
+let syncRunning = false;
+let syncAgain = false;
+let syncBlockedUntil = 0;
+let loadedFromCloud = false;
+
+function emptySyncState() {
+  return { profile: false, entries: new Set(), myBooks: new Set(), clubBooks: new Set() };
+}
+
+function loadSyncState(memberId) {
+  try {
+    const raw = localStorage.getItem(syncKey(memberId));
+    if (!raw) return emptySyncState();
+    const parsed = JSON.parse(raw);
+    return {
+      profile: Boolean(parsed.profile),
+      entries: new Set(parsed.entries || []),
+      myBooks: new Set(parsed.myBooks || []),
+      clubBooks: new Set(parsed.clubBooks || [])
+    };
+  } catch (error) {
+    return emptySyncState();
+  }
+}
+
+function persistSyncState(memberId) {
+  try {
+    localStorage.setItem(syncKey(memberId), JSON.stringify({
+      profile: syncState.profile,
+      entries: [...syncState.entries],
+      myBooks: [...syncState.myBooks],
+      clubBooks: [...syncState.clubBooks]
+    }));
+  } catch (error) { /* التخزين غير متاح */ }
+}
+
+function resetSyncState(memberId) {
+  syncState = loadSyncState(memberId);
+}
+
+function myBookSyncKey(book) {
+  return `${book.bookId}:${book.status}:${Number(book.currentPage) || 0}`;
 }
 
 async function saveProfileToCloud(member) {
@@ -357,47 +456,103 @@ async function saveProfileToCloud(member) {
   });
 }
 
-async function saveEntriesToCloud(member) {
-  for (const entry of state.entries) {
-    await cloudRequest('saveEntry', {
-      id: entry.id,
-      memberId: member.id,
-      memberName: state.profile.name,
-      bookId: entry.bookId || null,
-      bookTitle: entry.bookTitle || '',
-      pages: entry.pages,
-      date: entry.date,
-      createdAt: entry.ts || Date.now()
-    });
-  }
+async function saveEntryToCloud(member, entry) {
+  return cloudRequest('saveEntry', {
+    id: entry.id,
+    memberId: member.id,
+    memberName: state.profile.name,
+    bookId: entry.bookId || null,
+    bookTitle: entry.bookTitle || '',
+    pages: entry.pages,
+    date: entry.date,
+    createdAt: entry.ts || Date.now()
+  });
 }
 
-async function saveMyBooksToCloud(member) {
-  for (const book of state.myBooks) {
-    await cloudRequest('saveMyBook', {
-      memberId: member.id,
-      memberName: state.profile.name,
-      bookId: book.bookId,
-      status: book.status,
-      currentPage: book.currentPage
-    });
-  }
+async function saveMyBookRowToCloud(member, book) {
+  return cloudRequest('saveMyBook', {
+    memberId: member.id,
+    memberName: state.profile.name,
+    bookId: book.bookId,
+    status: book.status,
+    currentPage: book.currentPage
+  });
 }
 
-async function saveClubBooksToCloud(member) {
-  for (const book of state.clubBooks) {
-    await cloudRequest('saveClubBook', {
-      id: book.id,
-      memberId: member.id,
-      memberName: state.profile.name,
-      title: book.title,
-      author: book.author,
-      category: book.category,
-      coverColor: book.coverColor,
-      report: book.report || '',
-      pages: book.pages || 0,
-      createdAt: book.createdAt || Date.now()
-    });
+async function saveClubBookToCloud(member, book) {
+  return cloudRequest('saveClubBook', {
+    id: book.id,
+    memberId: member.id,
+    memberName: state.profile.name,
+    title: book.title,
+    author: book.author,
+    category: book.category,
+    coverColor: book.coverColor,
+    report: book.report || '',
+    pages: book.pages || 0,
+    createdAt: book.createdAt || Date.now()
+  });
+}
+
+function scheduleCloudSync(delay = 1200) {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => { syncTimer = null; runCloudSync(); }, delay);
+}
+
+async function runCloudSync() {
+  if (!state || !currentMember) return;
+  if (Date.now() < syncBlockedUntil) return;
+  if (syncRunning) { syncAgain = true; return; }
+  syncRunning = true;
+  const member = currentMember;
+  const memberId = member.id;
+  try {
+    if (!syncState.profile) {
+      const result = await saveProfileToCloud(member);
+      if (result && result.success !== false) {
+        syncState.profile = true;
+        persistSyncState(memberId);
+      } else {
+        syncBlockedUntil = Date.now() + 60000;
+        return;
+      }
+    }
+
+    for (const entry of state.entries) {
+      if (currentMember !== member) return;
+      if (syncState.entries.has(entry.id)) continue;
+      const result = await saveEntryToCloud(member, entry);
+      if (!result || result.success === false) { syncBlockedUntil = Date.now() + 60000; break; }
+      syncState.entries.add(entry.id);
+      persistSyncState(memberId);
+    }
+
+    for (const book of state.myBooks) {
+      if (currentMember !== member) return;
+      const key = myBookSyncKey(book);
+      if (syncState.myBooks.has(key)) continue;
+      const result = await saveMyBookRowToCloud(member, book);
+      if (!result || result.success === false) { syncBlockedUntil = Date.now() + 60000; break; }
+      syncState.myBooks.add(key);
+      persistSyncState(memberId);
+    }
+
+    for (const book of state.clubBooks) {
+      if (currentMember !== member) return;
+      if (syncState.clubBooks.has(book.id)) continue;
+      const result = await saveClubBookToCloud(member, book);
+      if (!result || result.success === false) { syncBlockedUntil = Date.now() + 60000; break; }
+      syncState.clubBooks.add(book.id);
+      persistSyncState(memberId);
+    }
+  } catch (error) {
+    console.error('Cloud sync error:', error);
+  } finally {
+    syncRunning = false;
+    if (syncAgain && currentMember === member) {
+      syncAgain = false;
+      scheduleCloudSync(1500);
+    }
   }
 }
 
@@ -421,7 +576,73 @@ async function loadMyBooksFromCloud(memberId) {
   return result.success ? result.data : [];
 }
 
+async function saveQuoteToSheet(quoteData) {
+  if (!QUOTES_SHEET_URL) return;
+  try {
+    const payload = {
+      created_at: new Date().toLocaleString('ar-SA'),
+      author_name: (state && state.profile && state.profile.name) || quoteData.authorName || 'عضو جليس',
+      page_number: quoteData.page || '',
+      book_title: quoteData.book || '',
+      quote_text: quoteData.text || ''
+    };
+
+    await fetch(QUOTES_SHEET_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(JSON.stringify(payload))}`
+    });
+  } catch (err) {
+    console.error('Failed to save quote to sheet:', err);
+  }
+}
+
+async function loadQuotesFromSheet() {
+  if (!QUOTES_SHEET_URL) return null;
+  try {
+    const response = await fetch(QUOTES_SHEET_URL);
+    const result = await response.json();
+    if (result && result.status === 'success' && Array.isArray(result.data)) {
+      return result.data.map((q, idx) => {
+        const mem = MEMBERS.find((m) => normalizeName(m.name) === normalizeName(q.author_name));
+        return {
+          id: q.id || `sheet-${idx}`,
+          text: q.quote_text,
+          book: q.book_title || 'من هامش القراءة',
+          page: q.page_number ? String(q.page_number) : '',
+          authorId: mem ? mem.id : 'cloud',
+          authorName: q.author_name || 'عضو جليس',
+          color: mem ? mem.color : '#C59B63',
+          time: q.created_at || 'مؤخراً',
+          likes: 0
+        };
+      }).reverse();
+    }
+  } catch (err) {
+    /* تجاوز في حال تعذر جلب السحابة */
+  }
+  return null;
+}
+
+async function syncQuotesFromSheet() {
+  const sheetQuotes = await loadQuotesFromSheet();
+  if (!sheetQuotes || !sheetQuotes.length) return;
+
+  const currentLocal = getLocalSharedQuotes();
+  const merged = mergeQuoteLists(currentLocal, sheetQuotes);
+
+  saveLocalSharedQuotes(merged);
+  if (state) {
+    state.quotes = merged;
+    renderQuotes();
+    renderHome();
+  }
+}
+
 async function loadQuotesFromCloud(memberId) {
+  const fromSheet = await loadQuotesFromSheet();
+  if (fromSheet && fromSheet.length) return fromSheet;
   const result = await cloudRequest('getQuotes', null, memberId);
   return result.success ? result.data : [];
 }
@@ -451,6 +672,7 @@ function readLegacyFor(member) {
 async function loadStateFor(member) {
   const base = createInitialState(member);
   let parsed = null;
+  loadedFromCloud = false;
 
   /* 1. أولوية للتخزين المحلي — بيانات المستخدم الحالية لا تُمسح أبداً */
   try {
@@ -464,7 +686,7 @@ async function loadStateFor(member) {
   /* 2. إذا لم تكن هناك بيانات محلية، جلب من السحابة كبديل */
   if (!parsed || Object.keys(parsed).length <= 1) {
     try {
-      const [profile, entries, myBooks, quotes, articles, clubBooks] = await Promise.all([
+      const cloudLoad = Promise.all([
         loadProfileFromCloud(member.id),
         loadEntriesFromCloud(member.id),
         loadMyBooksFromCloud(member.id),
@@ -472,8 +694,14 @@ async function loadStateFor(member) {
         loadArticlesFromCloud(member.id),
         loadClubBooksFromCloud(member.id)
       ]);
+      /* مهلة قصوى: لا نُجمّد الدخول أكثر من ٤ ثوانٍ لو كان الاتصال بطيئاً */
+      const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 4000));
+      const cloudData = await Promise.race([cloudLoad, timeout]);
+      if (!cloudData) throw new Error('cloud load timeout');
+      const [profile, entries, myBooks, quotes, articles, clubBooks] = cloudData;
 
       if (profile) {
+        loadedFromCloud = true;
         parsed = {
           profile: {
             name: profile.name || member.name,
@@ -485,7 +713,7 @@ async function loadStateFor(member) {
           },
           entries: Array.isArray(entries) ? entries : [],
           myBooks: Array.isArray(myBooks) ? myBooks : [],
-          quotes: Array.isArray(quotes) && quotes.length ? quotes : base.quotes,
+          quotes: mergeQuoteLists(getLocalSharedQuotes(), Array.isArray(quotes) ? quotes : []),
           articles: Array.isArray(articles) && articles.length ? articles : base.articles,
           clubBooks: Array.isArray(clubBooks) ? clubBooks : [],
           savedQuotes: [],
@@ -498,7 +726,12 @@ async function loadStateFor(member) {
     }
   }
 
-  if (!parsed) return base;
+  if (!parsed) {
+    return {
+      ...base,
+      quotes: mergeQuoteLists(getLocalSharedQuotes(), base.quotes)
+    };
+  }
 
   return {
     ...base,
@@ -518,7 +751,8 @@ async function loadStateFor(member) {
     }),
     myBooks: Array.isArray(parsed.myBooks) ? parsed.myBooks : [],
     clubBooks: Array.isArray(parsed.clubBooks) ? parsed.clubBooks : [],
-    quotes: Array.isArray(parsed.quotes) && parsed.quotes.length ? parsed.quotes : base.quotes,
+    personalBooks: Array.isArray(parsed.personalBooks) ? parsed.personalBooks : [],
+    quotes: mergeQuoteLists(getLocalSharedQuotes(), Array.isArray(parsed.quotes) ? parsed.quotes : []),
     articles: Array.isArray(parsed.articles) && parsed.articles.length ? parsed.articles : base.articles,
     savedQuotes: Array.isArray(parsed.savedQuotes) ? parsed.savedQuotes : [],
     likedQuotes: Array.isArray(parsed.likedQuotes) ? parsed.likedQuotes : [],
@@ -534,26 +768,24 @@ async function saveState() {
   } catch (error) {
     /* التخزين غير متاح — يستمر التطبيق في الذاكرة */
   }
-  /* 2. المزامنة مع السحابة في الخلفية — لا تعيق عرض الموقع */
-  try {
-    await saveProfileToCloud(currentMember);
-    await saveEntriesToCloud(currentMember);
-    await saveMyBooksToCloud(currentMember);
-    await saveClubBooksToCloud(currentMember);
-  } catch (error) {
-    console.error('Cloud save error:', error);
-  }
+  /* 2. المزامنة مع السحابة في الخلفية — مؤجلة ولا تعيق الواجهة إطلاقاً */
+  scheduleCloudSync();
 }
 
 /* --------------------------------------------------------------------------
    3. حسابات القراءة
    -------------------------------------------------------------------------- */
-const getBook = (id) => BOOKS.find((b) => b.id === id);
+const getBook = (id) => BOOKS.find((b) => b.id === id)
+  || (state && state.clubBooks ? state.clubBooks.find((b) => b.id === id) : null)
+  || (state && state.personalBooks ? state.personalBooks.find((b) => b.id === id) : null);
 const getMyBook = (id) => state.myBooks.find((b) => b.bookId === id);
 
 function isMine(item) {
-  return Boolean(item && currentMember)
-    && (item.authorId === 'me' || item.authorId === currentMember.id);
+  if (!item || !currentMember) return false;
+  if (item.authorId === currentMember.id) return true;
+  if (item.authorId === 'me' && (!item.authorName || normalizeName(item.authorName) === normalizeName(currentMember.name))) return true;
+  if (item.authorName && normalizeName(item.authorName) === normalizeName(currentMember.name)) return true;
+  return false;
 }
 
 function authorNameOf(item) {
@@ -561,7 +793,10 @@ function authorNameOf(item) {
 }
 
 function authorColorOf(item) {
-  return isMine(item) ? '#C59B63' : ((item && item.color) || '#1E3A2B');
+  if (isMine(item)) return '#C59B63';
+  if (item && item.color) return item.color;
+  const m = item && item.authorName ? MEMBERS.find((mem) => normalizeName(mem.name) === normalizeName(item.authorName)) : null;
+  return m ? m.color : '#1E3A2B';
 }
 
 function weekEntries() {
@@ -1018,7 +1253,9 @@ function renderClubBooks() {
             <span class="lib-rating"><svg class="ic"><use href="#i-star"/></svg>${toAr(book.rating || 0)}</span>
             <span class="lib-avail ${book.available ? '' : 'out'}"><i></i>${book.available ? `${toAr(book.available)} نسخ` : 'قائمة انتظار'}</span>
           </div>
-          ${book.report ? `<p class="lib-report" data-full="${esc(book.report)}" data-short="${esc(book.report.substring(0, 120))}…">${esc(book.report.length > 120 ? book.report.substring(0, 120) + '…' : book.report)}</p> <span class="report-toggle" data-action="toggle-report" data-id="${book.id}" style="cursor:pointer;color:var(--gold-700);font-size:7.5px;font-weight:700;margin-left:4px;">أعرف أكثر</span>` : ''}
+          ${book.report ? (book.report.length > 120
+            ? `<p class="lib-report" data-short="${esc(book.report.substring(0, 120) + '…')}" data-full="${esc(book.report)}">${esc(book.report.substring(0, 120) + '…')}</p><span class="report-toggle" data-action="toggle-report">أعرف أكثر</span>`
+            : `<p class="lib-report">${esc(book.report)}</p>`) : ''}
         </div>
       </article>`;
   }).join('') : emptyHTML('search', 'لا توجد نتائج', 'جرّب عنواناً آخر أو أزل تصفية التصنيف.');
@@ -1123,6 +1360,92 @@ function openAddBook() {
       renderClubBooks();
       renderHome();
       toast(`تمت إضافة «${title}» لمكتبة النادي`, 'book');
+      celebrate();
+    });
+  });
+}
+
+/* إضافة كتاب خاص بمكتبتي — مستقل تماماً عن مكتبة النادي */
+function openAddMyBook() {
+  openSheet(`
+    ${sheetHead('أضف كتاباً إلى مكتبتي', 'كتابك الخاص يظهر لك وحدك، ولا يُضاف إلى مكتبة النادي.')}
+    <form id="add-my-book-form" novalidate>
+      <div class="field">
+        <label for="my-book-title">عنوان الكتاب <span class="label-opt">مطلوب</span></label>
+        <input class="input" id="my-book-title" maxlength="120" placeholder="مثال: الخيميائي" required>
+      </div>
+      <div class="field">
+        <label for="my-book-author">المؤلف</label>
+        <input class="input" id="my-book-author" maxlength="100" placeholder="مثال: باولو كويلو">
+      </div>
+      <div class="field">
+        <label for="my-book-pages">عدد الصفحات</label>
+        <input class="input" id="my-book-pages" type="number" min="1" max="5000" placeholder="مثال: 208" required>
+      </div>
+      <div class="field">
+        <label for="my-book-current">آخر صفحة وصلت إليها</label>
+        <input class="input" id="my-book-current" type="number" min="0" max="5000" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="my-book-status">الحالة</label>
+        <select class="input" id="my-book-status">
+          <option value="reading">أقرأ الآن</option>
+          <option value="want">أريد قراءتها</option>
+          <option value="finished">أنهيتها</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="my-book-color">لون الغلاف</label>
+        <input class="input" id="my-book-color" type="color" value="#1E3A2B">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">
+        <svg class="ic"><use href="#i-plus"/></svg> أضف إلى مكتبتي
+      </button>
+    </form>`, (root) => {
+    root.querySelector('#add-my-book-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#my-book-title').value.trim();
+      const author = root.querySelector('#my-book-author').value.trim() || 'مؤلف غير محدد';
+      const pages = Number(root.querySelector('#my-book-pages').value) || 0;
+      const current = Number(root.querySelector('#my-book-current').value) || 0;
+      const status = root.querySelector('#my-book-status').value;
+      const color = root.querySelector('#my-book-color').value;
+
+      if (!title) {
+        toast('يرجى إدخال عنوان الكتاب', 'info');
+        return;
+      }
+      if (!pages) {
+        toast('يرجى إدخال عدد الصفحات', 'info');
+        return;
+      }
+
+      const id = `my-${Date.now()}`;
+      state.personalBooks.unshift({
+        id,
+        title,
+        author,
+        category: 'مكتبتي',
+        pages,
+        c1: color,
+        c2: '#14291D',
+        coverColor: color,
+        rating: 0,
+        available: 0
+      });
+      state.myBooks.push({
+        bookId: id,
+        status,
+        currentPage: clamp(current, 0, pages)
+      });
+
+      state.myFilter = status;
+      saveState();
+      closeSheet();
+      renderLibrary();
+      renderHome();
+      renderProfile();
+      toast(`أُضيف «${title}» إلى مكتبتك`, 'book');
       celebrate();
     });
   });
@@ -1537,7 +1860,7 @@ function openQuoteComposer() {
         text.focus();
         return;
       }
-      state.quotes.unshift({
+      const newQuote = {
         id: `q-${Date.now()}`,
         text: value,
         book: book.value.trim() || 'من هامش القراءة',
@@ -1547,13 +1870,16 @@ function openQuoteComposer() {
         color: '#C59B63',
         time: 'الآن',
         likes: 0
-      });
+      };
+      state.quotes = mergeQuoteLists([newQuote], state.quotes);
+      saveLocalSharedQuotes(state.quotes);
       state.quoteFilter = 'all';
       saveState();
+      saveQuoteToSheet(newQuote).then(() => syncQuotesFromSheet());
       closeSheet();
       renderQuotes();
       renderHome();
-      toast('نُشر اقتباسك بين أعضاء جليس', 'quote');
+      toast('نُشر اقتباسك وسُجّل في الشيت السحابي', 'quote');
       celebrate();
     });
   });
@@ -1823,6 +2149,15 @@ function showLibraryPane(name) {
 async function setSessionMember(member) {
   currentMember = member;
   state = await loadStateFor(member);
+  resetSyncState(member.id);
+  if (loadedFromCloud) {
+    /* البيانات جلبت من الشيت — لا داعي لإعادة رفعها */
+    syncState.profile = true;
+    state.entries.forEach((entry) => syncState.entries.add(entry.id));
+    state.myBooks.forEach((book) => syncState.myBooks.add(myBookSyncKey(book)));
+    state.clubBooks.forEach((book) => syncState.clubBooks.add(book.id));
+    persistSyncState(member.id);
+  }
   try {
     localStorage.setItem(SESSION_KEY, member.id);
   } catch (error) {
@@ -1855,6 +2190,8 @@ function enterApp(welcome = false) {
   $('#shell').hidden = false;
   renderAll();
   go('home');
+  /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
+  if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
   if (welcome) {
     const firstName = state.profile.name.trim().split(/\s+/)[0];
     setTimeout(() => toast(`أهلاً ${firstName}… مجلسك جاهز`, 'sparkles'), 550);
@@ -1988,6 +2325,22 @@ function handleGlobalClick(event) {
     case 'open-add-book':
       openAddBook();
       break;
+    case 'open-add-my-book':
+      openAddMyBook();
+      break;
+    case 'book-more':
+      openBookSheet(id);
+      break;
+    case 'toggle-report': {
+      const report = actionEl.previousElementSibling;
+      if (report && report.classList.contains('lib-report')) {
+        const expanded = report.dataset.expanded === '1';
+        report.dataset.expanded = expanded ? '0' : '1';
+        report.textContent = expanded ? report.dataset.short : report.dataset.full;
+        actionEl.textContent = expanded ? 'أعرف أكثر' : 'أقل';
+      }
+      break;
+    }
     case 'meeting':
       openMeetingSheet();
       break;

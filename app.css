@@ -1772,6 +1772,31 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .lib-add .ic { width: 14px; height: 14px; }
 .lib-add:hover { transform: scale(1.08); background: var(--white); }
 .lib-add.added { background: var(--green-700); color: var(--gold); }
+.lib-more {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  z-index: 3;
+  padding: 4px 8px;
+  border-radius: var(--r-full);
+  background: rgba(248, 245, 238, 0.95);
+  color: var(--green-700);
+  font-size: 7px;
+  font-weight: 800;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  transition: background 0.2s, color 0.2s;
+}
+.lib-more:hover { background: var(--white); }
+.lib-more.added { background: var(--green-700); color: var(--gold); }
+.report-toggle {
+  display: inline-block;
+  margin-top: 3px;
+  cursor: pointer;
+  color: var(--gold-700);
+  font-size: 8px;
+  font-weight: 800;
+}
+.report-toggle:hover { text-decoration: underline; }
 .lib-info { padding: 7px 2px 0; }
 .lib-info h4 { font-size: 11.5px; font-weight: 700; color: var(--green-700); line-height: 1.45; }
 .lib-info p { font-size: 9px; color: var(--muted-2); margin-top: 1px; }
