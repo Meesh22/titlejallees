@@ -76,21 +76,40 @@ function mergeQuoteLists(...lists) {
       out.push(quote);
     });
   });
+  /* الأحدث أولاً: الاقتباسات الجديدة تظهر في المقدمة */
+  return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+function collectAllMemberQuotes() {
+  const out = [];
+  try {
+    Object.keys(localStorage).forEach((key) => {
+      if (!key.startsWith(MEMBER_KEY_PREFIX)) return;
+      let parsed = null;
+      try { parsed = JSON.parse(localStorage.getItem(key)); } catch (e) { parsed = null; }
+      if (!parsed || !Array.isArray(parsed.quotes)) return;
+      const memberId = parsed.memberId || key.slice(MEMBER_KEY_PREFIX.length);
+      parsed.quotes.forEach((quote) => {
+        if (!quote || !quote.text) return;
+        /* اقتباس نُشر قديماً بـ «me» يُنسب لصاحبه الأصلي حتى لا يظهر كاقتباسك */
+        out.push({ ...quote, authorId: quote.authorId === 'me' ? memberId : quote.authorId });
+      });
+    });
+  } catch (e) {}
   return out;
 }
 
 function getLocalSharedQuotes() {
+  let stored = [];
   try {
     const raw = localStorage.getItem(SHARED_QUOTES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      /* الاقتباسات الأساسية تبقى دائماً في المقدمة حتى لو حُذفت من التخزين */
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return mergeQuoteLists(QUOTE_SEED.map((q) => ({ ...q })), parsed);
-      }
+      if (Array.isArray(parsed)) stored = parsed;
     }
   } catch (e) {}
-  return QUOTE_SEED.map((q) => ({ ...q }));
+  /* ندمج كل المصادر ثم نرتّب بحيث يظهر الأحدث أولاً */
+  return mergeQuoteLists(stored, QUOTE_SEED.map((q) => ({ ...q })), collectAllMemberQuotes());
 }
 
 function saveLocalSharedQuotes(quotes) {
@@ -98,6 +117,39 @@ function saveLocalSharedQuotes(quotes) {
     if (Array.isArray(quotes)) {
       localStorage.setItem(SHARED_QUOTES_KEY, JSON.stringify(quotes));
     }
+  } catch (e) {}
+}
+
+function getStoredSharedQuotes() {
+  try {
+    const raw = localStorage.getItem(SHARED_QUOTES_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/* حذف الاقتباسات من كل مكان على هذا الجهاز (الشيت هو المصدر): Member state + الكاش */
+function pruneQuotesEverywhere(texts) {
+  const isRemoved = (quote) => Boolean(quote && quote.text && texts.has(normalizeName(quote.text)));
+  try {
+    /* 1. حالة العضو الحالي */
+    if (state && Array.isArray(state.quotes) && state.quotes.some(isRemoved)) {
+      state.quotes = state.quotes.filter((q) => !isRemoved(q));
+      saveState();
+    }
+    /* 2. سجلات كل الأعضاء الآخرين على هذا الجهاز */
+    Object.keys(localStorage).forEach((key) => {
+      if (!key.startsWith(MEMBER_KEY_PREFIX)) return;
+      let parsed = null;
+      try { parsed = JSON.parse(localStorage.getItem(key)); } catch (e) { parsed = null; }
+      if (!parsed || !Array.isArray(parsed.quotes)) return;
+      const filtered = parsed.quotes.filter((q) => !isRemoved(q));
+      if (filtered.length === parsed.quotes.length) return;
+      parsed.quotes = filtered;
+      localStorage.setItem(key, JSON.stringify(parsed));
+    });
   } catch (e) {}
 }
 
@@ -615,7 +667,8 @@ async function loadQuotesFromSheet() {
           authorName: q.author_name || 'عضو جليس',
           color: mem ? mem.color : '#C59B63',
           time: q.created_at || 'مؤخراً',
-          likes: 0
+          likes: 0,
+          createdAt: q.created_at ? new Date(q.created_at).getTime() : 0
         };
       }).reverse();
     }
@@ -625,16 +678,29 @@ async function loadQuotesFromSheet() {
   return null;
 }
 
+let lastQuoteSyncAt = 0;
+
 async function syncQuotesFromSheet() {
   const sheetQuotes = await loadQuotesFromSheet();
-  if (!sheetQuotes || !sheetQuotes.length) return;
+  if (!sheetQuotes) return; /* فشل الاتصال — نحتفظ بالبيانات الموجودة */
 
-  const currentLocal = getLocalSharedQuotes();
-  const merged = mergeQuoteLists(currentLocal, sheetQuotes);
+  /* الشيت هو المصدر القياسي: اقتباس كان موجوداً محلياً ثم اختفى من الشيت = محذوف.
+     الاقتباسات الجديدة (أقل من ٣ دقائق) تُستثنى ريثما يصلها الشيت. */
+  const sheetSet = new Set(sheetQuotes.map((q) => normalizeName(q.text)).filter(Boolean));
+  const grace = Date.now() - 180000;
+  const removedTexts = new Set(collectAllMemberQuotes().map((q) => {
+    const text = normalizeName(q.text);
+    if (!text || sheetSet.has(text)) return null;
+    if (Number(q.createdAt || 0) > grace) return null;
+    return text;
+  }).filter(Boolean));
 
-  saveLocalSharedQuotes(merged);
+  if (removedTexts.size) pruneQuotesEverywhere(removedTexts);
+
+  /* نستبدل الكاش المشترك بمحتوى الشيت، ثم نعيد الدمج مع ما يظل محلياً */
+  saveLocalSharedQuotes(sheetQuotes);
   if (state) {
-    state.quotes = merged;
+    state.quotes = getLocalSharedQuotes();
     renderQuotes();
     renderHome();
   }
@@ -1869,7 +1935,8 @@ function openQuoteComposer() {
         authorName: state.profile.name,
         color: '#C59B63',
         time: 'الآن',
-        likes: 0
+        likes: 0,
+        createdAt: Date.now()
       };
       state.quotes = mergeQuoteLists([newQuote], state.quotes);
       saveLocalSharedQuotes(state.quotes);
@@ -2112,7 +2179,15 @@ function go(name) {
 
   if (name === 'home') renderHome();
   if (name === 'readings') renderReadings();
-  if (name === 'quotes') renderQuotes();
+  if (name === 'quotes') {
+    renderQuotes();
+    /* جلب دوري خفيف من الشيت حتى تنعكس الإضافات والحذفات السحابية */
+    const now = Date.now();
+    if (now - lastQuoteSyncAt > 30000) {
+      lastQuoteSyncAt = now;
+      syncQuotesFromSheet();
+    }
+  }
   if (name === 'library') renderLibrary();
   if (name === 'articles') renderArticles();
   if (name === 'profile') renderProfile();
@@ -2675,6 +2750,16 @@ async function init() {
   });
 
   document.addEventListener('click', handleGlobalClick);
+
+  /* تحديث اقتباسات الأعضاء مشتركاً بين التبويبات/الحسابات */
+  window.addEventListener('storage', (event) => {
+    if (!state) return;
+    if (event.key === SHARED_QUOTES_KEY || event.key === null) {
+      state.quotes = mergeQuoteLists(getLocalSharedQuotes(), state.quotes);
+      renderQuotes();
+      renderHome();
+    }
+  });
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !$('#sheet-root').hidden) {
