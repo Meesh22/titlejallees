@@ -134,6 +134,10 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 
 .brand-lockup { display: flex; align-items: center; gap: 10px; }
 .brand-lockup-text { display: flex; flex-direction: column; line-height: 1.1; }
+.brand-logo { display: block; object-fit: contain; border: 0; max-width: 100%; height: auto; }
+.brand-logo-lg { width: 190px; }
+.brand-logo-md { width: 150px; }
+.brand-logo-sm { width: 92px; }
 .brand-lockup-text strong { font-weight: 800; letter-spacing: 0.3px; }
 .brand-lockup-text small { color: var(--gold); letter-spacing: 1.1px; font-weight: 500; }
 .brand-emblem { display: grid; place-items: center; color: var(--paper); flex: none; }
