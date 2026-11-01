@@ -263,7 +263,7 @@ const seedAuthor = (id) => {
     : { authorId: id, authorName: 'عضو جليس', color: '#1E3A2B' };
 };
 
-const BOOKS = [
+const LEGACY_BOOKS_SEED = [
   {
     id: 'b1', title: 'حياة في الإدارة', author: 'غازي القصيبي', category: 'إدارة',
     pages: 288, rating: 4.8, available: 2, pick: true, c1: '#1B3A2B', c2: '#2E5A43',
@@ -305,6 +305,9 @@ const BOOKS = [
     desc: 'دليل عملي لبناء عادات صغيرة تصنع نتائج كبيرة، عبر تغيير البيئة والهوية لا الإرادة وحدها.'
   }
 ];
+
+/* لا نعرض الكتب التجريبية المضمّنة؛ مكتبة النادي مصدرها الشيت المشترك. */
+const BOOKS = [];
 
 const ARTICLE_CATEGORIES = [
   'الكل',
@@ -632,6 +635,29 @@ async function loadClubBooksFromCloud(memberId) {
   return result.success ? result.data : [];
 }
 
+async function refreshClubBooksFromCloud() {
+  const member = currentMember;
+  if (!member || !state) return;
+  const cloudBooks = await loadClubBooksFromCloud(member.id);
+  if (!Array.isArray(cloudBooks) || currentMember !== member || !state) return;
+
+  const merged = new Map();
+  (state.clubBooks || []).forEach((book) => { if (book && book.id) merged.set(book.id, book); });
+  cloudBooks.forEach((book) => {
+    if (!book || !book.id) return;
+    merged.set(book.id, { ...merged.get(book.id), ...book });
+    if (member.id !== 'guest') syncState.clubBooks.add(book.id);
+  });
+  state.clubBooks = [...merged.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  if (member.id !== 'guest') {
+    persistSyncState(member.id);
+    await saveState();
+  }
+  renderLibrary();
+  renderHome();
+}
+
 async function loadProfileFromCloud(memberId) {
   const result = await cloudRequest('getProfile', null, memberId);
   return result.success && result.data.length > 0 ? result.data[0] : null;
@@ -949,8 +975,10 @@ function weekNumber() {
    4. قوالب مشتركة
    -------------------------------------------------------------------------- */
 function coverHTML(book) {
+  const coverStart = book.c1 || book.coverColor || '#1E3A2B';
+  const coverEnd = book.c2 || book.coverColor2 || '#3D5A4C';
   return `
-    <div class="cover" style="background:linear-gradient(150deg, ${book.c1}, ${book.c2})">
+    <div class="cover" style="background:linear-gradient(150deg, ${coverStart}, ${coverEnd})">
       <span class="cover-frame" aria-hidden="true"></span>
       <div class="cover-kicker">نادي جليس</div>
       <div>
@@ -1023,7 +1051,8 @@ function renderHome() {
     .join('');
   $('#home-board').innerHTML = board || emptyHTML('users', 'لا قراءات بعد', 'كن أول من يسجّل ورداً هذا الأسبوع.');
 
-  $('#home-books').innerHTML = BOOKS.filter((book) => book.pick).slice(0, 4).map((book) => `
+  const featuredBooks = BOOKS.filter((book) => book.pick).concat(state.clubBooks || []).slice(0, 4);
+  $('#home-books').innerHTML = featuredBooks.map((book) => `
     <button class="book-mini" type="button" data-action="book" data-id="${book.id}" aria-label="${esc(book.title)}">
       ${coverHTML(book)}
       <h4>${esc(book.title)}</h4>
@@ -1104,7 +1133,7 @@ function renderBookOptions() {
   mine.sort((a, b) => (a.status === 'reading' ? -1 : 1) - (b.status === 'reading' ? -1 : 1));
 
   const mineIds = new Set(mine.map((item) => item.book.id));
-  const rest = BOOKS.filter((book) => !mineIds.has(book.id));
+  const rest = [...(state.clubBooks || []), ...BOOKS].filter((book) => !mineIds.has(book.id));
 
   list.innerHTML = [
     ...mine.map((item) => `<option value="${esc(item.book.title)}">${esc(item.book.author)}${item.status === 'reading' ? ' · أقرأه الآن' : ''}</option>`),
@@ -1291,7 +1320,9 @@ function renderLibrary() {
 }
 
 function renderCategoryChips() {
-  const categories = ['all', ...Array.from(new Set(BOOKS.map((book) => book.category)))];
+  const categories = ['all', ...Array.from(new Set(
+    [...BOOKS, ...(state.clubBooks || [])].map((book) => book.category).filter(Boolean)
+  ))];
   $('#category-chips').innerHTML = categories.map((category) => {
     const active = state.libraryCategory === category;
     return `<button class="chip-filter ${active ? 'active' : ''}" type="button" data-category="${category}" aria-selected="${active}">${category === 'all' ? 'الكل' : esc(category)}</button>`;
@@ -2313,6 +2344,8 @@ function enterApp(welcome = false) {
   if (guestBtn) guestBtn.hidden = !(currentMember && currentMember.id === 'guest');
   /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
+  /* جلب كتب النادي المشتركة حتى مع وجود حالة محلية قديمة للعضو */
+  refreshClubBooksFromCloud();
   if (welcome) {
     const firstName = state.profile.name.trim().split(/\s+/)[0];
     setTimeout(() => toast(`أهلاً ${firstName}… مجلسك جاهز`, 'sparkles'), 550);
