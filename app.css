@@ -953,6 +953,21 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   font-size: 16px;
   line-height: 1.75;
 }
+.quote-latest { position: relative; }
+.quote-new-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  border-radius: var(--r-full);
+  background: linear-gradient(135deg, #D6AF79, #BE8B4C);
+  color: #261B0C;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 8px rgba(197, 155, 99, 0.35);
+  z-index: 2;
+}
 .greeting { padding: 12px 2px 16px; }
 .date-label { font-size: 10.5px; color: var(--muted-2); font-weight: 600; margin-bottom: 2px; }
 .greeting h1 { font-size: 24px; font-weight: 800; color: var(--green-700); letter-spacing: -0.4px; }
@@ -1248,7 +1263,27 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .ha-meta { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 9px; color: var(--muted-2); }
 .ha-meta b { color: var(--green-600); font-weight: 700; }
 
-/* ---------- شريط التنقل ---------- */
+/* ---------- شارة الإشعارات في شريط التنقل ---------- */
+.nav-badge {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-full);
+  background: var(--clay);
+  color: var(--paper);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(163, 80, 59, 0.4);
+  pointer-events: none;
+}
+.tab { position: relative; }
+.tab .nav-badge { display: block; }
+.tab .nav-badge[hidden] { display: none; }
 .tabbar {
   flex: none;
   display: grid;
@@ -1645,7 +1680,34 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   transition: width 0.8s var(--ease);
 }
 
-/* ---------- الاقتباسات ---------- */
+/* ---------- قائمة «المزيد» ---------- */
+.more-list { display: grid; gap: 8px; }
+.more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--white);
+  border: 1px solid var(--line);
+  text-align: right;
+  transition: background 0.2s, transform 0.15s;
+}
+.more-item:active { transform: scale(0.985); }
+.more-icon {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border-radius: 11px;
+  background: var(--green-50);
+  color: var(--green-600);
+  flex: none;
+}
+.more-icon .ic { width: 18px; height: 18px; }
+.more-body { flex: 1; min-width: 0; }
+.more-body strong { display: block; font-size: 12.5px; font-weight: 800; color: var(--green-700); }
+.more-body p { font-size: 9.5px; color: var(--muted-2); margin-top: 1px; }
+.more-item .chev { width: 14px; height: 14px; color: var(--muted-2); flex: none; }
 .quote-promo {
   position: relative;
   padding: 18px 16px 15px;
@@ -1881,8 +1943,9 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .lib-cover-img {
   width: 100%;
   height: 95px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 12px;
+  background: var(--paper-2);
 }
 
 .lib-added-by {

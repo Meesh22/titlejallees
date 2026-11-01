@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -215,12 +215,6 @@
               </article>
 
               <div class="sec-head">
-                <div><h3>لوحة الأسبوع</h3><p>أكثر الأعضاء قراءة</p></div>
-                <button class="link-btn" type="button" data-action="go-board">الكل <svg class="ic"><use href="#i-chevron-left"/></svg></button>
-              </div>
-              <div class="home-board" id="home-board"></div>
-
-              <div class="sec-head">
                 <div><h3>من مكتبة النادي</h3><p>مختارات جليس لهذا الشهر</p></div>
                 <button class="link-btn" type="button" data-action="go-library">المكتبة <svg class="ic"><use href="#i-chevron-left"/></svg></button>
               </div>
@@ -231,91 +225,6 @@
                 <button class="link-btn" type="button" data-action="go-articles">المقالات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
               </div>
               <article class="home-article" id="home-article"></article>
-            </section>
-            <!-- ========== القراءات ========== -->
-            <section class="screen" data-screen="readings" id="screen-readings">
-              <div class="screen-head">
-                <div><span class="eyebrow">وردك اليومي</span><h1>القراءات</h1></div>
-                <span class="week-badge" id="readings-week-badge">—</span>
-              </div>
-
-              <div class="segmented" id="readings-seg" role="tablist" aria-label="القراءات">
-                <button class="active" type="button" data-seg="pane-log" role="tab" aria-selected="true">سجلي</button>
-                <button type="button" data-seg="pane-board" role="tab" aria-selected="false">لوحة الأعضاء</button>
-              </div>
-
-              <div class="pane active" id="pane-log">
-                <div class="mini-stats" id="log-stats"></div>
-
-                <form class="card form-card" id="log-form" novalidate>
-                  <div class="form-head">
-                    <span class="form-icon"><svg class="ic"><use href="#i-plus"/></svg></span>
-                    <div><h3>سجّل قراءتك</h3><p>كم صفحة أضفت اليوم؟</p></div>
-                  </div>
-                  <div class="field">
-                    <label for="log-book">الكتاب <span class="label-opt">اختياري</span></label>
-                    <input class="input" id="log-book" type="text" list="log-book-list" maxlength="80" placeholder="اكتب عنوان الكتاب…" autocomplete="off">
-                    <datalist id="log-book-list"></datalist>
-                  </div>
-                  <div class="field">
-                    <label for="log-pages">الصفحات</label>
-                    <input class="input" id="log-pages" type="number" min="1" max="2000" inputmode="numeric" placeholder="٢٠" required>
-                  </div>
-                  <div class="field">
-                    <span class="field-label">التاريخ والوقت</span>
-                    <div class="auto-stamp">
-                      <svg class="ic"><use href="#i-calendar"/></svg>
-                      <span id="log-stamp-date">—</span>
-                      <i class="auto-stamp-dot" aria-hidden="true"></i>
-                      <svg class="ic"><use href="#i-clock"/></svg>
-                      <span id="log-stamp-time">—</span>
-                      <span class="auto-badge">تلقائي</span>
-                    </div>
-                  </div>
-                  <div class="field">
-                    <label for="log-note">خاطرة (اختياري)</label>
-                    <textarea class="input" id="log-note" rows="2" maxlength="180" placeholder="ما الفكرة التي توقفت عندها؟"></textarea>
-                  </div>
-                  <button class="btn btn-primary btn-block" type="submit">
-                    <svg class="ic"><use href="#i-check"/></svg> أضف إلى سجل قراءتي
-                  </button>
-                </form>
-
-                <article class="card chart-card">
-                  <div class="card-head"><h3>إيقاع الأسبوع</h3><span class="muted sm">صفحات / يوم</span></div>
-                  <div class="chart" id="week-chart"></div>
-                </article>
-
-                <div class="sec-head">
-                  <div><h3>سجل هذا الأسبوع</h3><p id="entries-count">—</p></div>
-                </div>
-                <div class="entries" id="entries-list"></div>
-              </div>
-
-              <div class="pane" id="pane-board" hidden>
-                <div class="board-hero">
-                  <div class="board-copy">
-                    <span class="eyebrow light">لوحة قراءات الأسبوع</span>
-                    <h2>من يقرأ أكثر هذا الأسبوع؟</h2>
-                    <p>القراءة ليست سباقاً… لكنها أجمل منافسة.</p>
-                  </div>
-                  <div class="board-total"><strong id="board-total">٠</strong><span>صفحة جماعية</span></div>
-                </div>
-
-                <div class="segmented segmented-sm" id="period-seg">
-                  <button class="active" type="button" data-period="week">هذا الأسبوع</button>
-                  <button type="button" data-period="last">الأسبوع الماضي</button>
-                </div>
-
-                <div class="podium" id="board-podium"></div>
-                <div class="board-list" id="board-list"></div>
-
-                <article class="card club-goal">
-                  <div class="card-head"><h3>هدف النادي</h3><span id="club-goal-label">—</span></div>
-                  <div class="progress"><span id="club-goal-bar"></span></div>
-                  <p class="muted sm" id="club-goal-note"></p>
-                </article>
-              </div>
             </section>
 
             <!-- ========== الاقتباسات ========== -->
@@ -467,18 +376,21 @@
             <button class="tab active" type="button" data-nav="home" aria-current="page">
               <svg class="ic"><use href="#i-home"/></svg><span>الرئيسية</span>
             </button>
-            <button class="tab" type="button" data-nav="readings">
-              <svg class="ic"><use href="#i-book"/></svg><span>القراءات</span>
-            </button>
             <button class="tab" type="button" data-nav="quotes">
               <svg class="ic"><use href="#i-quote"/></svg><span>الاقتباسات</span>
+               <span class="nav-badge" id="badge-quotes" hidden>0</span>
             </button>
             <button class="tab" type="button" data-nav="library">
               <svg class="ic"><use href="#i-library"/></svg><span>المكتبة</span>
+               <span class="nav-badge" id="badge-library" hidden>0</span>
             </button>
             <button class="tab" type="button" data-nav="articles">
               <svg class="ic"><use href="#i-article"/></svg><span>المقالات</span>
+               <span class="nav-badge" id="badge-articles" hidden>0</span>
             </button>
+             <button class="tab" type="button" data-action="open-more">
+               <svg class="ic"><use href="#i-users"/></svg><span>أكثر عن جليس</span>
+             </button>
           </nav>
         </div>
 

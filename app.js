@@ -404,6 +404,9 @@ function createInitialState(member) {
     quoteFilter: 'all',
     articles: ARTICLE_SEED.map((a) => ({ ...a })),
     savedArticles: [],
+    seenQuotes: 0,
+    seenArticles: 0,
+    seenClubBooks: 0,
     rsvp: false,
     boardPeriod: 'week',
     libraryPane: 'club',
@@ -556,6 +559,7 @@ async function saveClubBookToCloud(member, book) {
     author: book.author,
     category: book.category,
     coverColor: book.coverColor,
+    coverImage: book.coverImage || '',
     report: book.report || '',
     pages: book.pages || 0,
     createdAt: book.createdAt || Date.now()
@@ -829,7 +833,10 @@ async function loadStateFor(member) {
           clubBooks: Array.isArray(clubBooks) ? clubBooks : [],
           savedQuotes: [],
           likedQuotes: [],
-          savedArticles: []
+          savedArticles: [],
+          seenQuotes: 0,
+          seenArticles: 0,
+          seenClubBooks: 0
         };
       }
     } catch (error) {
@@ -867,7 +874,10 @@ async function loadStateFor(member) {
     articles: Array.isArray(parsed.articles) && parsed.articles.length ? parsed.articles : base.articles,
     savedQuotes: Array.isArray(parsed.savedQuotes) ? parsed.savedQuotes : [],
     likedQuotes: Array.isArray(parsed.likedQuotes) ? parsed.likedQuotes : [],
-    savedArticles: Array.isArray(parsed.savedArticles) ? parsed.savedArticles : []
+    savedArticles: Array.isArray(parsed.savedArticles) ? parsed.savedArticles : [],
+    seenQuotes: Number(parsed.seenQuotes) || 0,
+    seenArticles: Number(parsed.seenArticles) || 0,
+    seenClubBooks: Number(parsed.seenClubBooks) || 0
   };
 }
 
@@ -1036,7 +1046,13 @@ function renderHome() {
   if (latestQuotes) {
     const quotes = (state.quotes || []).slice(0, 3);
     latestQuotes.innerHTML = quotes.length
-      ? quotes.map(quoteCardHTML).join('')
+      ? quotes.map((quote, idx) => {
+          const card = quoteCardHTML(quote);
+          if (idx === 0) {
+            return card.replace('<article class="quote-card">', '<article class="quote-card quote-latest"><span class="quote-new-badge">جديد</span>');
+          }
+          return card;
+        }).join('')
       : '';
   }
 
@@ -1044,12 +1060,6 @@ function renderHome() {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   }).format(new Date());
   $('#home-first-name').textContent = firstName;
-
-  const me = allMembers('week').find((member) => member.isMe);
-  const board = allMembers('week').slice(0, 3)
-    .map((member, index) => memberRowHTML(member, index + 1))
-    .join('');
-  $('#home-board').innerHTML = board || emptyHTML('users', 'لا قراءات بعد', 'كن أول من يسجّل ورداً هذا الأسبوع.');
 
   const featuredBooks = BOOKS.filter((book) => book.pick).concat(state.clubBooks || []).slice(0, 4);
   $('#home-books').innerHTML = featuredBooks.map((book) => `
@@ -1475,6 +1485,7 @@ function openAddBook() {
       closeSheet();
       renderClubBooks();
       renderHome();
+      updateNavBadges();
       toast(`تمت إضافة «${title}» لمكتبة النادي`, 'book');
       celebrate();
     });
@@ -1996,6 +2007,7 @@ function openQuoteComposer() {
       closeSheet();
       renderQuotes();
       renderHome();
+      updateNavBadges();
       toast('نُشر اقتباسك وسُجّل في الشيت السحابي', 'quote');
       celebrate();
     });
@@ -2100,6 +2112,7 @@ function openArticleComposer() {
       renderHome();
       renderProfile();
       go('articles');
+      updateNavBadges();
       toast('نُشر مقالك في مساحة الأعضاء', 'article');
       celebrate();
     });
@@ -2123,6 +2136,35 @@ function openNotificationsSheet() {
         <div class="notif-body"><strong>كتاب جديد في المكتبة</strong><p>أضيف «موسم الهجرة إلى الشمال» إلى رفوف النادي.</p><small>قبل يومين</small></div>
       </div>
     </div>`);
+}
+
+function openMoreSheet() {
+  openSheet(`
+    ${sheetHead('المزيد', 'خدمات و programmes النادي')}
+    <div class="more-list">
+      <button class="more-item" type="button" data-action="meeting">
+        <span class="more-icon"><svg class="ic"><use href="#i-calendar"/></svg></span>
+        <div class="more-body"><strong>اللقاءات</strong><p>لقاءات النادي (المسجلة والقادمة)</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
+      <button class="more-item" type="button" data-action="club-programs">
+        <span class="more-icon"><svg class="ic"><use href="#i-sparkles"/></svg></span>
+        <div class="more-body"><strong>برامج النادي</strong><p>البرامج والدورات الثقافية</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
+      <button class="more-item" type="button" data-action="club-activities">
+        <span class="more-icon"><svg class="ic"><use href="#i-users"/></svg></span>
+        <div class="more-body"><strong>أنشطة النادي</strong><p>الأنشطة والفعاليات</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
+    </div>`, (root) => {
+    root.querySelectorAll('[data-action="club-programs"], [data-action="club-activities"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        closeSheet();
+        toast('قريباً', 'sparkles');
+      });
+    });
+  });
 }
 
 function openMeetingSheet() {
@@ -2211,7 +2253,7 @@ let currentScreen = 'home';
 let profileReturn = 'home';
 
 function go(name) {
-  const allowed = ['home', 'readings', 'quotes', 'library', 'articles', 'profile'];
+  const allowed = ['home', 'quotes', 'library', 'articles', 'profile'];
   if (!allowed.includes(name)) name = 'home';
   currentScreen = name;
 
@@ -2242,16 +2284,19 @@ function go(name) {
   if (name === 'articles') renderArticles();
   if (name === 'profile') renderProfile();
 
-  applyGuestVisibility();
+  if (name === 'quotes') state.seenQuotes = (state.quotes || []).length;
+  if (name === 'library') state.seenClubBooks = (state.clubBooks || []).length;
+  if (name === 'articles') state.seenArticles = (state.articles || []).length;
+  updateNavBadges();
 }
 
 function renderAll() {
   renderHome();
-  renderReadings();
   renderQuotes();
   renderLibrary();
   renderArticles();
   renderProfile();
+  updateNavBadges();
 }
 
 function showReadingsPane(name) {
@@ -2326,6 +2371,25 @@ function hideSplash() {
   setTimeout(() => { if (splash.parentNode) splash.remove(); }, 520);
 }
 
+function updateNavBadges() {
+  if (!state) return;
+  const badges = {
+    quotes: Math.max(0, (state.quotes || []).length - (state.seenQuotes || 0)),
+    library: Math.max(0, (state.clubBooks || []).length - (state.seenClubBooks || 0)),
+    articles: Math.max(0, (state.articles || []).length - (state.seenArticles || 0))
+  };
+  Object.entries(badges).forEach(([key, count]) => {
+    const el = document.getElementById(`badge-${key}`);
+    if (!el) return;
+    if (count > 0) {
+      el.textContent = count > 9 ? '9+' : String(count);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  });
+}
+
 function enterApp(welcome = false) {
   if (!currentMember || !state) return;
   try {
@@ -2341,7 +2405,10 @@ function enterApp(welcome = false) {
   go('home');
   /* إظهار زر «دخول الأعضاء» فقط في وضع الزائر */
   const guestBtn = $('#guest-login-btn');
-  if (guestBtn) guestBtn.hidden = !(currentMember && currentMember.id === 'guest');
+  if (guestBtn) {
+    guestBtn.hidden = !(currentMember && currentMember.id === 'guest');
+    guestBtn.style.display = (currentMember && currentMember.id === 'guest') ? '' : 'none';
+  }
   /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
   /* جلب كتب النادي المشتركة حتى مع وجود حالة محلية قديمة للعضو */
@@ -2442,6 +2509,9 @@ function handleGlobalClick(event) {
     case 'open-gate':
       showGate();
       toast('سجّل دخولك باسمك للتعديل والإضافة', 'user');
+      break;
+    case 'open-more':
+      openMoreSheet();
       break;
     case 'go-home':
       go('home');
@@ -2767,7 +2837,8 @@ async function init() {
     enterApp(true);
   });
 
-  $('#log-form').addEventListener('submit', handleLogSubmit);
+  const logForm = $('#log-form');
+  if (logForm) logForm.addEventListener('submit', handleLogSubmit);
 
   $('#club-search').addEventListener('input', (event) => {
     state.libraryQuery = event.target.value;
@@ -2901,7 +2972,10 @@ async function init() {
       memberId: 'guest',
       profile: { ...base.profile, name: 'زائر', role: 'زائر' },
       quotes: getLocalSharedQuotes(),
-      articles: ARTICLE_SEED.map((a) => ({ ...a }))
+      articles: ARTICLE_SEED.map((a) => ({ ...a })),
+      seenQuotes: getLocalSharedQuotes().length,
+      seenArticles: ARTICLE_SEED.length,
+      seenClubBooks: 0
     };
     enterApp(false);
     const requested = params.get('screen');
