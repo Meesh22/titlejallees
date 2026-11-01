@@ -19,19 +19,19 @@
   <meta property="og:url" content="https://titlejallees.vercel.app/">
 
   <!-- معاينة المشاركة (واتساب) -->
-  <meta property="og:image" content="https://titlejallees.vercel.app/og-jalees-logo.jpg">
-  <meta property="og:image:type" content="image/jpeg">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
+  <meta property="og:image" content="https://titlejallees.vercel.app/logo.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="247">
+  <meta property="og:image:height" content="135">
   <meta property="og:image:alt" content="شعار نادي جليس القرائي">
 
   <!-- Twitter / X: بطاقة مربعة -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="جليس | مساحة الأعضاء">
   <meta name="twitter:description" content="مساحة أعضاء نادي جليس القرائي: ورد القراءة الأسبوعي، لوحة القراءات، الاقتباسات، مكتبة النادي، ومقالات الأعضاء.">
-  <meta name="twitter:image" content="https://titlejallees.vercel.app/og-jalees-logo.jpg">
+  <meta name="twitter:image" content="https://titlejallees.vercel.app/logo.png">
   <meta name="twitter:image:alt" content="شعار نادي جليس القرائي">
-  <link rel="icon" type="image/png" href="logo-icon.png">
+  <link rel="icon" type="image/png" href="logo.png?v=1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -82,8 +82,7 @@
   <div class="stage">
     <aside class="stage-brand" aria-hidden="true">
       <div class="brand-lockup brand-lockup-lg">
-        <span class="brand-emblem"><svg><use href="#i-emblem"/></svg></span>
-        <span class="brand-lockup-text"><strong>جليس</strong><small>نادي قرائي ثقافي</small></span>
+        <img class="brand-logo brand-logo-lg" src="logo.png?v=1" alt="جليس · نادي قرائي ثقافي">
       </div>
       <p class="stage-kicker">مساحة الأعضاء · نسخة التجارب</p>
       <h2>حيث تصير<br><span>القراءة مجلساً.</span></h2>
@@ -107,7 +106,7 @@
           <div class="gate-ornament" aria-hidden="true"></div>
           <header class="gate-head">
             <div class="brand-lockup brand-lockup-gate">
-              <img class="brand-logo brand-logo-md" src="logo-light.png?v=3" alt="جليس · نادي قرائي ثقافي">
+              <img class="brand-logo brand-logo-md" src="logo.png?v=1" alt="جليس · نادي قرائي ثقافي">
             </div>
             <span class="gate-badge"><i></i> مساحة خاصة بالأعضاء</span>
           </header>
@@ -163,10 +162,11 @@
 
           <header class="app-header">
             <button class="brand" type="button" data-action="go-home" aria-label="الرئيسية">
-              <img class="brand-logo brand-logo-sm" src="logo-light.png?v=3" alt="جليس">
+              <img class="brand-logo brand-logo-sm" src="logo.png?v=1" alt="جليس">
             </button>
             <div class="header-actions">
               <button class="btn btn-gold" type="button" id="guest-login-btn" data-action="open-gate" hidden>دخول الأعضاء</button>
+              <button class="btn btn-outline-header btn-sm" type="button" id="join-club-btn" data-action="open-join">انضم للنادي</button>
               <button class="icon-btn" type="button" data-action="notifications" aria-label="التنبيهات">
                 <svg class="ic"><use href="#i-bell"/></svg>
                 <span class="notif-dot"></span>
@@ -182,7 +182,7 @@
               <div class="greeting">
                 <p class="date-label" id="today-label"></p>
                 <h1>أهلاً بك، <span id="home-first-name">مشعل</span></h1>
-                <p class="greeting-sub">أي كتاب بين يديك اليوم؟</p>
+                <p class="greeting-sub">أي كتاب تقرأ اليوم؟</p>
               </div>
 
               <div class="home-actions">
@@ -233,9 +233,6 @@
                 <div><span class="eyebrow">من هامش الكتب</span><h1>الاقتباسات</h1></div>
                 <button class="btn btn-sm btn-primary" type="button" data-action="open-quote">
                   <svg class="ic"><use href="#i-plus"/></svg> اقتبس
-                </button>
-                <button class="btn btn-sm btn-ghost" type="button" data-action="open-saved-quotes-sheet">
-                  <svg class="ic"><use href="#i-bookmark"/></svg> محفوظاتك
                 </button>
               </div>
 
