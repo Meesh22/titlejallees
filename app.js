@@ -57,7 +57,8 @@ const MEMBER_KEY_PREFIX = 'jalees-member-v2:';
 const LEGACY_KEY = 'jalees-members-v1';
 const CLUB_GOAL = 12000;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRSgGjhVS29jBPgXxKc_dhz-5ZGbcrg6QIjWN-2HtuKym8dymUyP5IK/exec';
-const QUOTES_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyUvJexsviIa-2nedbRPQa1NN9thBogDIcL5gYNtxIg3vL5LtZEd17udgQpKLxGDtloYw/exec';
+const CLUB_BOOKS_URL = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
+const QUOTES_SHEET_URL = CLUB_BOOKS_URL;
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 
 function mergeQuoteLists(...lists) {
@@ -423,9 +424,12 @@ async function cloudRequest(action, data = null, memberId = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const url = memberId
-      ? `${APPS_SCRIPT_URL}?action=${action}&memberId=${encodeURIComponent(memberId)}`
+    const endpoint = action === 'getClubBooks' || action === 'saveClubBook'
+      ? CLUB_BOOKS_URL
       : APPS_SCRIPT_URL;
+    const url = memberId
+      ? `${endpoint}?action=${action}&memberId=${encodeURIComponent(memberId)}`
+      : endpoint;
 
     const options = data
       ? {
@@ -828,6 +832,7 @@ async function loadStateFor(member) {
 
 async function saveState() {
   if (!state || !currentMember) return;
+  if (currentMember.id === 'guest') return; /* لا نحفظ حالة الزائر */
   /* 1. الحفظ المحلي فوري ومتزامن — يضمن ظهور البيانات فوراً في اللوحة */
   try {
     localStorage.setItem(stateKey(currentMember.id), JSON.stringify(state));
@@ -984,6 +989,14 @@ function miniStatHTML(value, label, note) {
 function renderHome() {
   const firstName = state.profile.name.trim().split(/\s+/)[0] || 'عضو جليس';
 
+  const latestQuotes = $('#home-latest-quotes');
+  if (latestQuotes) {
+    const quotes = (state.quotes || []).slice(0, 3);
+    latestQuotes.innerHTML = quotes.length
+      ? quotes.map(quoteCardHTML).join('')
+      : '';
+  }
+
   $('#today-label').textContent = new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   }).format(new Date());
@@ -1001,15 +1014,6 @@ function renderHome() {
       <h4>${esc(book.title)}</h4>
       <p>${esc(book.author)}</p>
     </button>`).join('');
-
-  const quote = state.quotes[yearDay() % Math.max(1, state.quotes.length)];
-  $('#home-quote').innerHTML = quote ? `
-    <p class="dq-text">${esc(quote.text)}</p>
-    <div class="dq-source">${esc(quote.book || 'من هامش القراءة')}${quote.page ? ` · ص ${esc(quote.page)}` : ''}</div>
-    <div class="dq-author">
-      ${avatarHTML(authorNameOf(quote), authorColorOf(quote))}
-      <span>${esc(authorNameOf(quote))}${isMine(quote) ? ' · أنت' : ''}</span>
-    </div>` : '';
 
   const article = state.articles[0];
   $('#home-article').innerHTML = article ? `
@@ -2191,6 +2195,8 @@ function go(name) {
   if (name === 'library') renderLibrary();
   if (name === 'articles') renderArticles();
   if (name === 'profile') renderProfile();
+
+  applyGuestVisibility();
 }
 
 function renderAll() {
@@ -2252,6 +2258,26 @@ function showGate() {
   const input = $('#login-name');
   if (input) input.value = '';
   currentScreen = 'home';
+  hideSplash();
+}
+
+function applyGuestVisibility() {
+  const isGuest = !currentMember || currentMember.id === 'guest';
+  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article']);
+  document.querySelectorAll('[data-action]').forEach((el) => {
+    if (blocked.has(el.dataset.action)) el.style.display = isGuest ? 'none' : '';
+  });
+  const logForm = document.getElementById('log-form');
+  if (logForm) logForm.style.display = isGuest ? 'none' : '';
+  const goalCard = document.querySelector('.goal-card');
+  if (goalCard) goalCard.style.display = isGuest ? 'none' : '';
+}
+
+function hideSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  splash.classList.add('hidden');
+  setTimeout(() => { if (splash.parentNode) splash.remove(); }, 520);
 }
 
 function enterApp(welcome = false) {
@@ -2264,7 +2290,12 @@ function enterApp(welcome = false) {
   $('#gate').hidden = true;
   $('#shell').hidden = false;
   renderAll();
+  applyGuestVisibility();
+  setTimeout(hideSplash, 2500);
   go('home');
+  /* إظهار زر «دخول الأعضاء» فقط في وضع الزائر */
+  const guestBtn = $('#guest-login-btn');
+  if (guestBtn) guestBtn.hidden = !(currentMember && currentMember.id === 'guest');
   /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
   if (welcome) {
@@ -2351,7 +2382,19 @@ function handleGlobalClick(event) {
   const action = actionEl.dataset.action;
   const id = actionEl.dataset.id;
 
+  const isGuest = !currentMember || currentMember.id === 'guest';
+  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article']);
+  if (isGuest && guestBlocked.has(action)) {
+    showGate();
+    toast('سجّل دخولك باسمك للتعديل والإضافة', 'user');
+    return;
+  }
+
   switch (action) {
+    case 'open-gate':
+      showGate();
+      toast('سجّل دخولك باسمك للتعديل والإضافة', 'user');
+      break;
     case 'go-home':
       go('home');
       break;
@@ -2372,6 +2415,11 @@ function handleGlobalClick(event) {
         const form = $('#log-form');
         if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 180);
+      break;
+    case 'go-add-book-report':
+      state.libraryPane = 'club';
+      go('library');
+      setTimeout(openAddBook, 180);
       break;
     case 'go-board':
       go('readings');
@@ -2587,6 +2635,8 @@ function handleGlobalClick(event) {
 
 function handleLogSubmit(event) {
   event.preventDefault();
+  const isGuest = !currentMember || currentMember.id === 'guest';
+  if (isGuest) { showGate(); toast('سجّل دخولك باسمك للتعديل والإضافة', 'user'); return; }
   const bookTitle = $('#log-book').value.trim();
   const pages = Number($('#log-pages').value);
   const note = $('#log-note').value.trim();
@@ -2684,6 +2734,8 @@ async function init() {
 
   $('#goal-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    const isGuest = !currentMember || currentMember.id === 'guest';
+    if (isGuest) { showGate(); toast('سجّل دخولك باسمك للتعديل', 'user'); return; }
     const goal = clamp(Number($('#goal-range').value) || 200, 50, 500);
     state.profile.goal = goal;
     saveState();
@@ -2793,14 +2845,24 @@ async function init() {
     const requested = params.get('screen');
     if (requested) go(requested);
   } else {
-    showGate();
+    /* وضع زائر: تصفح عام بدون تسجيل */
+    currentMember = { id: 'guest', name: 'زائر', role: 'زائر', lastWeek: 0, color: '#1E3A2B' };
+    const base = createInitialState(null);
+    state = {
+      ...base,
+      memberId: 'guest',
+      profile: { ...base.profile, name: 'زائر', role: 'زائر' },
+      quotes: getLocalSharedQuotes(),
+      articles: ARTICLE_SEED.map((a) => ({ ...a }))
+    };
+    enterApp(false);
+    const requested = params.get('screen');
+    if (requested) go(requested);
   }
+  setTimeout(hideSplash, 4000);
 }
 
 init();
 
 /* @@ */
-
-
-
 

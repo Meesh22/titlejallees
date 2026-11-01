@@ -2,21 +2,35 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>جليس | مساحة الأعضاء</title>
   <meta name="description" content="مساحة أعضاء نادي جليس القرائي: ورد القراءة الأسبوعي، لوحة القراءات، الاقتباسات، مكتبة النادي، ومقالات الأعضاء.">
-  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#1E3A2B">
+
+  <!-- Open Graph -->
   <meta property="og:title" content="جليس | مساحة الأعضاء">
   <meta property="og:description" content="مساحة أعضاء نادي جليس القرائي: ورد القراءة الأسبوعي، لوحة القراءات، الاقتباسات، مكتبة النادي، ومقالات الأعضاء.">
-  <meta property="og:image" content="logo-light.png">
-  <meta property="og:image:width" content="600">
-  <meta property="og:image:height" content="310">
-  <meta property="og:site_name" content="جليس">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ar_SA">
+  <meta property="og:site_name" content="نادي جليس القرائي">
+  <meta property="og:url" content="https://titlejallees.vercel.app/">
+
+  <!-- معاينة المشاركة (واتساب) -->
+  <meta property="og:image" content="https://titlejallees.vercel.app/og-jalees-logo.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="شعار نادي جليس القرائي">
+
+  <!-- Twitter / X: بطاقة مربعة -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="جليس | مساحة الأعضاء">
   <meta name="twitter:description" content="مساحة أعضاء نادي جليس القرائي: ورد القراءة الأسبوعي، لوحة القراءات، الاقتباسات، مكتبة النادي، ومقالات الأعضاء.">
-  <meta name="twitter:image" content="logo-light.png">
-  <meta name="theme-color" content="#1E3A2B">
+  <meta name="twitter:image" content="https://titlejallees.vercel.app/og-jalees-logo.jpg">
+  <meta name="twitter:image:alt" content="شعار نادي جليس القرائي">
   <link rel="icon" type="image/png" href="logo-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -61,10 +75,15 @@
     <symbol id="i-send" viewBox="0 0 24 24"><path d="m21 3-7 18-4-8-8-4z"/><path d="M21 3 10 13"/></symbol>
   </svg>
 
+  <div class="splash" id="splash" aria-hidden="true">
+    <img class="splash-logo" src="logo-light.png?v=1" alt="جليس">
+  </div>
+
   <div class="stage">
     <aside class="stage-brand" aria-hidden="true">
       <div class="brand-lockup brand-lockup-lg">
-        <img class="brand-logo brand-logo-lg" src="logo-dark.png?v=1" alt="جليس · نادي قرائي ثقافي">
+        <span class="brand-emblem"><svg><use href="#i-emblem"/></svg></span>
+        <span class="brand-lockup-text"><strong>جليس</strong><small>نادي قرائي ثقافي</small></span>
       </div>
       <p class="stage-kicker">مساحة الأعضاء · نسخة التجارب</p>
       <h2>حيث تصير<br><span>القراءة مجلساً.</span></h2>
@@ -88,7 +107,7 @@
           <div class="gate-ornament" aria-hidden="true"></div>
           <header class="gate-head">
             <div class="brand-lockup brand-lockup-gate">
-              <img class="brand-logo brand-logo-md" src="logo-light.png?v=1" alt="جليس · نادي قرائي ثقافي">
+              <img class="brand-logo brand-logo-md" src="logo-light.png?v=3" alt="جليس · نادي قرائي ثقافي">
             </div>
             <span class="gate-badge"><i></i> مساحة خاصة بالأعضاء</span>
           </header>
@@ -144,9 +163,10 @@
 
           <header class="app-header">
             <button class="brand" type="button" data-action="go-home" aria-label="الرئيسية">
-              <img class="brand-logo brand-logo-sm" src="logo-light.png?v=1" alt="جليس">
+              <img class="brand-logo brand-logo-sm" src="logo-light.png?v=3" alt="جليس">
             </button>
             <div class="header-actions">
+              <button class="btn btn-gold" type="button" id="guest-login-btn" data-action="open-gate" hidden>دخول الأعضاء</button>
               <button class="icon-btn" type="button" data-action="notifications" aria-label="التنبيهات">
                 <svg class="ic"><use href="#i-bell"/></svg>
                 <span class="notif-dot"></span>
@@ -166,19 +186,19 @@
               </div>
 
               <div class="home-actions">
-                <button class="btn btn-gold" type="button" data-action="go-log">
-                  <svg class="ic"><use href="#i-plus"/></svg> سجّل قراءتك
+                <button class="btn btn-gold" type="button" data-action="go-add-book-report">
+                  <svg class="ic"><use href="#i-plus"/></svg> أضف تقريرًا لكتاب
                 </button>
                 <button class="btn btn-on-dark" type="button" data-action="open-quote">
                   <svg class="ic"><use href="#i-quote"/></svg> اقتبس
                 </button>
               </div>
 
-              <div class="sec-head">
-                <div><h3>لوحة الأسبوع</h3><p>أكثر الأعضاء قراءة</p></div>
-                <button class="link-btn" type="button" data-action="go-board">الكل <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              <div class="sec-head home-quotes-head">
+                <div><h3>أحدث اقتباسات الأعضاء</h3><p>من هوامش قراءات جليس</p></div>
+                <button class="link-btn" type="button" data-action="go-quotes">الكل <svg class="ic"><use href="#i-chevron-left"/></svg></button>
               </div>
-              <div class="home-board" id="home-board"></div>
+              <div class="home-latest-quotes" id="home-latest-quotes"></div>
 
               <article class="meeting-card">
                 <div class="meeting-date"><strong>١٦</strong><span>ربيع أول</span></div>
@@ -195,10 +215,10 @@
               </article>
 
               <div class="sec-head">
-                <div><h3>اقتباس اليوم</h3><p>من هامش كتب الأعضاء</p></div>
-                <button class="link-btn" type="button" data-action="go-quotes">المزيد <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+                <div><h3>لوحة الأسبوع</h3><p>أكثر الأعضاء قراءة</p></div>
+                <button class="link-btn" type="button" data-action="go-board">الكل <svg class="ic"><use href="#i-chevron-left"/></svg></button>
               </div>
-              <article class="daily-quote" id="home-quote"></article>
+              <div class="home-board" id="home-board"></div>
 
               <div class="sec-head">
                 <div><h3>من مكتبة النادي</h3><p>مختارات جليس لهذا الشهر</p></div>
@@ -478,4 +498,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-

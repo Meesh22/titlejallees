@@ -109,6 +109,35 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   stroke-linejoin: round;
 }
 
+/* ---------- شاشة التحميل (Splash) ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(600px 380px at 50% 0%, rgba(197, 155, 99, 0.22), transparent 65%),
+    radial-gradient(500px 420px at 50% 100%, rgba(42, 79, 59, 0.6), transparent 70%),
+    linear-gradient(155deg, #152C21 0%, #1E3A2B 48%, #102118 100%);
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+.splash.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.splash-logo {
+  width: 220px;
+  height: auto;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.4));
+  animation: splash-in 0.7s var(--ease) both;
+}
+@keyframes splash-in {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* ---------- مسرح العرض ---------- */
 .stage {
   display: flex;
@@ -910,7 +939,20 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   font-weight: 600;
 }
 
-/* ---------- الرئيسية ---------- */
+/* ---------- آخر 3 اقتباسات (الصفحة الرئيسية) ---------- */
+.home-latest-quotes {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 14px;
+}
+.home-quotes-head { padding-top: 2px; }
+.home-latest-quotes .quote-card {
+  padding: 13px 15px 11px;
+}
+.home-latest-quotes .quote-text {
+  font-size: 16px;
+  line-height: 1.75;
+}
 .greeting { padding: 12px 2px 16px; }
 .date-label { font-size: 10.5px; color: var(--muted-2); font-weight: 600; margin-bottom: 2px; }
 .greeting h1 { font-size: 24px; font-weight: 800; color: var(--green-700); letter-spacing: -0.4px; }
@@ -2515,7 +2557,6 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
     transition-duration: 0.01ms !important;
   }
 }
-
 
 
 
