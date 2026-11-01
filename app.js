@@ -494,6 +494,15 @@ function persistSyncState(memberId) {
 
 function resetSyncState(memberId) {
   syncState = loadSyncState(memberId);
+  /* نقل حالة مزامنة كتب النادي إلى رابط المكتبة الجديد مرة واحدة لكل عضو. */
+  const endpointKey = `jalees-club-books-endpoint:${memberId}`;
+  let previousEndpoint = null;
+  try { previousEndpoint = localStorage.getItem(endpointKey); } catch (error) {}
+  if (previousEndpoint !== CLUB_BOOKS_URL) {
+    syncState.clubBooks.clear();
+    try { localStorage.setItem(endpointKey, CLUB_BOOKS_URL); } catch (error) {}
+    persistSyncState(memberId);
+  }
 }
 
 function myBookSyncKey(book) {
@@ -557,12 +566,26 @@ function scheduleCloudSync(delay = 1200) {
 
 async function runCloudSync() {
   if (!state || !currentMember) return;
-  if (Date.now() < syncBlockedUntil) return;
+  const pendingClubBooks = state.clubBooks.filter((book) => !syncState.clubBooks.has(book.id));
+  /* لا تمنع أعطال مزامنة الملف الشخصي رفع كتب النادي إلى خدمتها المستقلة. */
+  if (Date.now() < syncBlockedUntil && !pendingClubBooks.length) return;
   if (syncRunning) { syncAgain = true; return; }
   syncRunning = true;
   const member = currentMember;
   const memberId = member.id;
   try {
+    for (const book of pendingClubBooks) {
+      if (currentMember !== member) return;
+      const result = await saveClubBookToCloud(member, book);
+      if (!result || result.success === false) {
+        syncBlockedUntil = Date.now() + 60000;
+        break;
+      }
+      syncState.clubBooks.add(book.id);
+      persistSyncState(memberId);
+    }
+    if (Date.now() < syncBlockedUntil) return;
+
     if (!syncState.profile) {
       const result = await saveProfileToCloud(member);
       if (result && result.success !== false) {
@@ -593,14 +616,6 @@ async function runCloudSync() {
       persistSyncState(memberId);
     }
 
-    for (const book of state.clubBooks) {
-      if (currentMember !== member) return;
-      if (syncState.clubBooks.has(book.id)) continue;
-      const result = await saveClubBookToCloud(member, book);
-      if (!result || result.success === false) { syncBlockedUntil = Date.now() + 60000; break; }
-      syncState.clubBooks.add(book.id);
-      persistSyncState(memberId);
-    }
   } catch (error) {
     console.error('Cloud sync error:', error);
   } finally {
@@ -2865,4 +2880,3 @@ async function init() {
 init();
 
 /* @@ */
-
