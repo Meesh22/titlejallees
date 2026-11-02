@@ -1,7 +1,9 @@
 const QUOTES_SHEET = 'الاقتباسات';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
+const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
 const JOIN_REQUESTS_SHEET = 'طلبات الانضمام';
+const MEETINGS_SHEET = 'اللقاءات';
 const OLD_BOOKS_SHEET_ID = 1035156833;
 
 function output(data) {
@@ -22,6 +24,42 @@ function readData(e) {
     }
   }
   return (e && e.parameter) || {};
+}
+
+function getMeetingsSheet(ss) {
+  let sheet = ss.getSheetByName(MEETINGS_SHEET);
+  if (!sheet) sheet = ss.insertSheet(MEETINGS_SHEET);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['id', 'title', 'description', 'date', 'time', 'location', 'image', 'createdAt', 'createdBy']);
+  }
+  return sheet;
+}
+
+function normalizeTabName(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u0640]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function getDataSheet(ss, name, headers) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    const target = normalizeTabName(name);
+    sheet = ss.getSheets().find((item) => normalizeTabName(item.getName()) === target) || null;
+  }
+  if (!sheet) sheet = ss.insertSheet(name);
+  if (sheet.getLastRow() === 0) sheet.appendRow(headers);
+  return sheet;
+}
+
+function getArticlesSheet(ss) {
+  return getDataSheet(ss, ARTICLES_SHEET, ['id', 'memberId', 'memberName', 'title', 'category', 'body', 'excerpt', 'read', 'createdAt']);
+}
+
+function getBookRatingsSheet(ss) {
+  return getDataSheet(ss, BOOK_RATINGS_SHEET, ['id', 'bookId', 'memberId', 'memberName', 'rating', 'review', 'createdAt']);
 }
 
 function doPost(e) {
@@ -71,8 +109,7 @@ function doPost(e) {
     }
 
     if (action === 'saveArticle') {
-      const sheet = ss.getSheetByName(ARTICLES_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب المقالات');
+      const sheet = getArticlesSheet(ss);
 
       const articleId = String(data.id || '');
       if (articleId) {
@@ -104,9 +141,79 @@ function doPost(e) {
       return output({ success: true, message: 'تم حفظ المقال' });
     }
 
+    if (action === 'saveBookRating') {
+      const sheet = getBookRatingsSheet(ss);
+      const bookId = String(data.bookId || '');
+      const memberId = String(data.memberId || '');
+      const ratingValue = Number(data.rating);
+      if (!bookId || !memberId) throw new Error('معرّف الكتاب والعضو مطلوبان للتقييم');
+      if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+        throw new Error('التقييم يجب أن يكون من نجمة إلى خمس نجوم');
+      }
+
+      const rowData = [
+        data.id || `${bookId}:${memberId}`, bookId, memberId,
+        data.memberName || '', ratingValue, data.review || '', data.createdAt || Date.now()
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 3).getDisplayValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][1]) === bookId && String(rows[i][2]) === memberId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, message: 'تم تحديث تقييم الكتاب' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, message: 'تم حفظ تقييم الكتاب' });
+    }
+
+    if (action === 'saveMeeting') {
+      const sheet = getMeetingsSheet(ss);
+      const meetingId = String(data.id || '');
+      if (!meetingId) throw new Error('معرّف اللقاء مطلوب');
+      if (String(data.image || '').length > 48000) {
+        throw new Error('حجم صورة اللقاء أكبر من الحد المسموح');
+      }
+
+      const rowData = [
+        meetingId, data.title || '', data.description || '', data.date || '',
+        data.time || '', data.location || '', data.image || '',
+        data.createdAt || Date.now(), data.createdBy || ''
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0]) === meetingId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, message: 'تم تحديث اللقاء' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, message: 'تم حفظ اللقاء' });
+    }
+
+    if (action === 'deleteMeeting') {
+      const sheet = getMeetingsSheet(ss);
+      const meetingId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0]) === meetingId) {
+            sheet.deleteRow(i + 2);
+            return output({ success: true, message: 'تم حذف اللقاء' });
+          }
+        }
+      }
+      return output({ success: true, message: 'اللقاء غير موجود' });
+    }
+
     if (action === 'deleteArticle') {
-      const sheet = ss.getSheetByName(ARTICLES_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب المقالات');
+      const sheet = getArticlesSheet(ss);
       const articleId = String(data.id || '');
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -177,8 +284,7 @@ function doGet(e) {
     }
 
     if (action === 'getArticles') {
-      const sheet = ss.getSheetByName(ARTICLES_SHEET);
-      if (!sheet) return output({ success: true, data: [] });
+      const sheet = getArticlesSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
       const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
@@ -188,6 +294,32 @@ function doGet(e) {
         excerpt: row[6], read: row[7], createdAt: row[8]
       })).filter(a => a.id);
       return output({ success: true, data: articles });
+    }
+
+    if (action === 'getBookRatings') {
+      const sheet = getBookRatingsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+      const ratings = rows.map(row => ({
+        id: row[0], bookId: row[1], memberId: row[2], memberName: row[3],
+        rating: Number(row[4]) || 0, review: row[5] || '', createdAt: row[6]
+      })).filter(item => item.bookId && item.memberId);
+      return output({ success: true, data: ratings });
+    }
+
+    if (action === 'getMeetings') {
+      const sheet = getMeetingsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const meetings = rows.map(row => ({
+        id: row[0], title: row[1], description: row[2], date: row[3],
+        time: row[4], location: row[5], image: row[6],
+        createdAt: row[7], createdBy: row[8]
+      })).filter(meeting => meeting.id);
+      meetings.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: meetings });
     }
 
     // قراءة الاقتباسات

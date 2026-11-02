@@ -60,6 +60,16 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRS
 const CLUB_BOOKS_URL = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
 const QUOTES_SHEET_URL = CLUB_BOOKS_URL;
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
+const DEFAULT_MEETING = {
+  id: 'meeting-default',
+  title: 'مناقشة كتاب: ابني حبيبي',
+  description: 'لقاء أسبوعي لأعضاء جليس؛ مساحة للحوار وتبادل الأفكار حول الكتاب.',
+  date: '',
+  time: '20:00',
+  location: 'جمعية التنمية الأهلية بالمريداسية',
+  image: '',
+  createdAt: 0
+};
 
 function mergeQuoteLists(...lists) {
   const out = [];
@@ -427,6 +437,7 @@ function createInitialState(member) {
     seenArticles: 0,
     seenClubBooks: 0,
     rsvp: false,
+    meetings: [],
     boardPeriod: 'week',
     libraryPane: 'club',
     libraryCategory: 'all',
@@ -451,20 +462,26 @@ async function cloudRequest(action, data = null, memberId = null) {
   try {
     const endpoint = action === 'getClubBooks' || action === 'saveClubBook'
       || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle'
+      || action === 'getBookRatings' || action === 'saveBookRating'
+      || action === 'getMeetings' || action === 'saveMeeting' || action === 'deleteMeeting'
       ? CLUB_BOOKS_URL
       : APPS_SCRIPT_URL;
-    const url = memberId
-      ? `${endpoint}?action=${action}&memberId=${encodeURIComponent(memberId)}`
-      : endpoint;
+    const query = new URLSearchParams();
+    query.set('action', action);
+    if (memberId) query.set('memberId', memberId);
+    // Apps Script may be served through redirects; bust intermediary caches so new rows appear.
+    if (!data) query.set('_', String(Date.now()));
+    const url = `${endpoint}?${query.toString()}`;
 
     const options = data
       ? {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `action=${action}&data=${encodeURIComponent(JSON.stringify(data))}`,
-          signal: controller.signal
+          signal: controller.signal,
+          cache: 'no-store'
         }
-      : { signal: controller.signal };
+      : { signal: controller.signal, cache: 'no-store' };
 
     const response = await fetch(url, options);
     return await response.json();
@@ -598,7 +615,7 @@ async function saveArticleToCloud(member, article) {
     body: article.body,
     excerpt: article.excerpt,
     read: article.read || 3,
-    createdAt: Date.now()
+    createdAt: article.createdAt || Date.now()
   });
 }
 
@@ -828,7 +845,7 @@ async function loadQuotesFromCloud(memberId) {
 
 async function loadArticlesFromCloud(memberId) {
   const result = await cloudRequest('getArticles', null, memberId);
-  return result.success ? result.data : [];
+  return result && result.success === true && Array.isArray(result.data) ? result.data : null;
 }
 
 async function refreshArticlesFromCloud() {
@@ -852,8 +869,33 @@ async function refreshArticlesFromCloud() {
     createdAt: Number(a.createdAt) || 0
   }));
 
-  /* Merge: cloud articles + local seed articles, dedupe by id, handle deletions */
+  /* Re-try local articles that have not yet reached the shared sheet. */
   const cloudIds = new Set(mapped.map((a) => a.id));
+  if (member.id !== 'guest') {
+    const pendingArticles = (state.articles || []).filter((article) =>
+      article && String(article.id || '').startsWith('a-')
+      && !cloudIds.has(article.id)
+      && !syncState.articles.has(article.id)
+      && isMine(article)
+    );
+    for (const article of pendingArticles) {
+      if (currentMember !== member) return;
+      const result = await saveArticleToCloud(member, article);
+      if (result && result.success !== false) {
+        syncState.articles.add(article.id);
+        persistSyncState(member.id);
+        cloudIds.add(article.id);
+        mapped.push({
+          ...article,
+          authorId: member.id,
+          authorName: article.authorName || member.name,
+          createdAt: Number(article.createdAt) || Date.now()
+        });
+      }
+    }
+  }
+
+  /* Merge cloud articles + local seed articles, dedupe by id, handle deletions */
   const merged = new Map();
   /* Keep seed articles */
   ARTICLE_SEED.forEach((s) => { merged.set(s.id, { ...s }); });
@@ -885,6 +927,124 @@ async function refreshArticlesFromCloud() {
   }
   renderArticles();
   renderHome();
+}
+
+async function loadMeetingsFromCloud() {
+  const result = await cloudRequest('getMeetings');
+  return result && result.success && Array.isArray(result.data) ? result.data : null;
+}
+
+async function refreshMeetingsFromCloud() {
+  const member = currentMember;
+  if (!member || !state) return;
+  const cloudMeetings = await loadMeetingsFromCloud();
+  if (!cloudMeetings || currentMember !== member || !state) return;
+
+  const merged = new Map();
+  cloudMeetings.forEach((meeting) => {
+    if (meeting && meeting.id) merged.set(String(meeting.id), meeting);
+  });
+  // Keep an unsynced local meeting if network was unavailable during creation.
+  (state.meetings || []).forEach((meeting) => {
+    if (meeting && meeting.id && !merged.has(String(meeting.id))) merged.set(String(meeting.id), meeting);
+  });
+  state.meetings = [...merged.values()].sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  if (member.id !== 'guest') await saveState();
+  renderMeetingCard();
+}
+
+async function saveMeetingToCloud(meeting) {
+  return cloudRequest('saveMeeting', meeting);
+}
+
+function getCurrentMeeting() {
+  const meetings = (state && Array.isArray(state.meetings) ? state.meetings : [])
+    .filter(Boolean)
+    .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  return meetings[0] || DEFAULT_MEETING;
+}
+
+function meetingDateLabel(date) {
+  if (!date) return 'موعد اللقاء يحدد قريبًا';
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return String(date);
+  return new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  }).format(parsed);
+}
+
+function meetingTimeLabel(time) {
+  if (!time) return '';
+  const [hourText, minuteText = '00'] = String(time).split(':');
+  const hour = Number(hourText);
+  if (!Number.isFinite(hour)) return String(time);
+  const hour12 = hour % 12 || 12;
+  return `${toAr(hour12)}:${toAr(minuteText)} ${hour >= 12 ? 'م' : 'ص'}`;
+}
+
+function renderMeetingCard() {
+  const root = $('#meeting-event-card');
+  if (!root || !state) return;
+  const meeting = getCurrentMeeting();
+  const dateLabel = meetingDateLabel(meeting.date);
+  const timeLabel = meetingTimeLabel(meeting.time);
+  const imageMarkup = meeting.image
+    ? `<img class="meeting-poster" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy">`
+    : `<div class="meeting-poster-placeholder"><svg class="ic"><use href="#i-calendar"/></svg><span>لقاء جليس القادم</span></div>`;
+
+  root.innerHTML = `
+    <article class="meeting-card">
+      <div class="meeting-poster-wrap">${imageMarkup}</div>
+      <div class="meeting-card-content">
+        <div class="meeting-card-kicker"><span class="meeting-pulse"></span> اللقاء القادم في جليس</div>
+        <h3>${esc(meeting.title || 'لقاء نادي جليس')}</h3>
+        ${meeting.description ? `<p class="meeting-description">${esc(meeting.description)}</p>` : ''}
+        <div class="meeting-details-grid">
+          <div class="meeting-detail"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-calendar"/></svg></span><span><small>التاريخ</small><b>${esc(dateLabel)}</b></span></div>
+          ${timeLabel ? `<div class="meeting-detail"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-clock"/></svg></span><span><small>الوقت</small><b>${esc(timeLabel)}</b></span></div>` : ''}
+          ${meeting.location ? `<div class="meeting-detail meeting-location"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-pin"/></svg></span><span><small>المكان</small><b>${esc(meeting.location)}</b></span></div>` : ''}
+        </div>
+        <div class="meeting-card-actions">
+          <button class="btn btn-sm btn-primary" type="button" data-action="meeting" data-id="${esc(meeting.id)}">تفاصيل اللقاء</button>
+          ${isSupervisor() ? `<button class="btn btn-sm btn-meeting-add" type="button" data-action="add-meeting"><svg class="ic"><use href="#i-plus"/></svg> إضافة لقاء</button>` : ''}
+        </div>
+      </div>
+    </article>`;
+}
+
+function compressMeetingImage(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      let scale = Math.min(1, 640 / image.width, 1000 / image.height);
+      let dataUrl = '';
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const quality = Math.max(0.38, 0.76 - attempt * 0.035);
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (dataUrl.length <= 44000) break;
+        scale *= 0.84;
+      }
+      URL.revokeObjectURL(objectUrl);
+      if (!dataUrl || dataUrl.length > 48000) {
+        reject(new Error('تعذر ضغط الصورة للحجم المناسب. اختر صورة أصغر.'));
+        return;
+      }
+      resolve(dataUrl);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('تعذر قراءة الصورة المحددة.'));
+    };
+    image.src = objectUrl;
+  });
 }
 
 let currentMember = null;
@@ -997,7 +1157,8 @@ async function loadStateFor(member) {
     savedArticles: Array.isArray(parsed.savedArticles) ? parsed.savedArticles : [],
     seenQuotes: Number(parsed.seenQuotes) || 0,
     seenArticles: Number(parsed.seenArticles) || 0,
-    seenClubBooks: Number(parsed.seenClubBooks) || 0
+    seenClubBooks: Number(parsed.seenClubBooks) || 0,
+    meetings: Array.isArray(parsed.meetings) ? parsed.meetings : []
   };
 }
 
@@ -1022,21 +1183,83 @@ const getBook = (id) => BOOKS.find((b) => b.id === id)
   || (state && state.personalBooks ? state.personalBooks.find((b) => b.id === id) : null);
 const getMyBook = (id) => state.myBooks.find((b) => b.bookId === id);
 
+const cloudBookRatingsCache = new Map();
+
 function getBookRatings(bookId) {
   try {
     const raw = localStorage.getItem(`jalees-book-ratings:${bookId}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) { return []; }
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* use in-memory cloud cache below */ }
+  return cloudBookRatingsCache.get(String(bookId)) || [];
 }
 
 function saveBookRating(bookId, rating, review) {
-  if (!currentMember || currentMember.id === 'guest') return;
+  if (!currentMember || currentMember.id === 'guest') return Promise.resolve({ success: false, error: 'guest' });
   const ratings = getBookRatings(bookId);
   const existing = ratings.findIndex((r) => r.memberId === currentMember.id);
   const entry = { memberId: currentMember.id, memberName: state.profile.name, rating, review, createdAt: Date.now() };
   if (existing >= 0) ratings[existing] = entry;
   else ratings.push(entry);
-  localStorage.setItem(`jalees-book-ratings:${bookId}`, JSON.stringify(ratings));
+  cloudBookRatingsCache.set(String(bookId), ratings);
+  try { localStorage.setItem(`jalees-book-ratings:${bookId}`, JSON.stringify(ratings)); } catch (e) {}
+  return cloudRequest('saveBookRating', { bookId, ...entry });
+}
+
+async function refreshBookRatingsFromCloud() {
+  const member = currentMember;
+  const result = await cloudRequest('getBookRatings');
+  if (!result || result.success !== true || !Array.isArray(result.data)) return;
+
+  const cloudByBook = new Map();
+  result.data.forEach((rating) => {
+    if (!rating || !rating.bookId || !rating.memberId) return;
+    const key = String(rating.bookId);
+    if (!cloudByBook.has(key)) cloudByBook.set(key, []);
+    cloudByBook.get(key).push({
+      ...rating,
+      rating: Number(rating.rating) || 0,
+      createdAt: Number(rating.createdAt) || 0
+    });
+  });
+
+  const keys = new Set([...cloudByBook.keys()]);
+  try {
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('jalees-book-ratings:')) keys.add(key.slice('jalees-book-ratings:'.length));
+    });
+  } catch (e) {}
+
+  for (const bookId of keys) {
+    const mergedByMember = new Map();
+    (cloudByBook.get(bookId) || []).forEach((rating) => mergedByMember.set(String(rating.memberId), rating));
+    const localRatings = getBookRatings(bookId);
+    localRatings.forEach((rating) => {
+      if (!rating || !rating.memberId) return;
+      const key = String(rating.memberId);
+      const cloudRating = mergedByMember.get(key);
+      if (!cloudRating || Number(rating.createdAt || 0) > Number(cloudRating.createdAt || 0)) {
+        mergedByMember.set(key, rating);
+      }
+    });
+    const merged = [...mergedByMember.values()].sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    cloudBookRatingsCache.set(String(bookId), merged);
+    if (member && member.id !== 'guest') {
+      try { localStorage.setItem(`jalees-book-ratings:${bookId}`, JSON.stringify(merged)); } catch (e) {}
+    }
+  }
+
+  // Push locally cached reviews that are not yet present in the shared sheet.
+  if (member && member.id !== 'guest') {
+    const cloudKeys = new Set(result.data.map((rating) => `${rating.bookId}:${rating.memberId}:${rating.createdAt}`));
+    const pending = [];
+    keys.forEach((bookId) => {
+      getBookRatings(bookId).forEach((rating) => {
+        const key = `${bookId}:${rating.memberId}:${rating.createdAt}`;
+        if (!cloudKeys.has(key)) pending.push({ bookId, ...rating });
+      });
+    });
+    for (const rating of pending) await cloudRequest('saveBookRating', rating);
+  }
 }
 
 function getAverageRating(bookId, seedRating) {
@@ -1129,6 +1352,13 @@ function weekNumber() {
    4. قوالب مشتركة
    -------------------------------------------------------------------------- */
 function coverHTML(book) {
+  if (book.coverImage) {
+    return `
+      <div class="cover cover-image" aria-label="غلاف ${esc(book.title)}">
+        <img class="cover-image-source" src="${esc(book.coverImage)}" alt="غلاف كتاب ${esc(book.title)}" loading="lazy">
+        <span class="cover-frame" aria-hidden="true"></span>
+      </div>`;
+  }
   const coverStart = book.c1 || book.coverColor || '#1E3A2B';
   const coverEnd = book.c2 || book.coverColor2 || '#3D5A4C';
   return `
@@ -1183,6 +1413,23 @@ function miniStatHTML(value, label, note) {
 /* --------------------------------------------------------------------------
    5. الرئيسية
    -------------------------------------------------------------------------- */
+function isMeshaalArticle(article) {
+  if (!article) return false;
+  let authorName = article.authorName || '';
+  if (!authorName && article.authorId === 'me') {
+    authorName = (state && state.profile && state.profile.name) || (currentMember && currentMember.name) || '';
+  }
+  if (!authorName && article.authorId) {
+    const member = memberById(article.authorId);
+    authorName = member ? member.name : '';
+  }
+  return normalizeName(authorName) === normalizeName('مشعل الحفير');
+}
+
+function visibleSiteArticles() {
+  return state && Array.isArray(state.articles) ? state.articles.filter(isMeshaalArticle) : [];
+}
+
 function renderHome() {
   const firstName = state.profile.name.trim().split(/\s+/)[0] || 'عضو جليس';
 
@@ -1190,13 +1437,7 @@ function renderHome() {
   if (latestQuotes) {
     const quotes = (state.quotes || []).slice(0, 3);
     latestQuotes.innerHTML = quotes.length
-      ? quotes.map((quote, idx) => {
-          const card = quoteCardHTML(quote);
-          if (idx === 0) {
-            return card.replace('<article class="quote-card">', '<article class="quote-card quote-latest"><span class="quote-new-badge">جديد</span>');
-          }
-          return card;
-        }).join('')
+      ? quotes.map((quote, idx) => quoteCardHTML(quote, { compact: true, latest: idx === 0, rank: idx + 1, number: quoteSerialNumber(quote) })).join('')
       : '';
   }
 
@@ -1213,19 +1454,18 @@ function renderHome() {
       <p>${esc(book.author)}</p>
     </button>`).join('');
 
-  const article = state.articles[0];
+  const article = visibleSiteArticles()[0];
   $('#home-article').innerHTML = article ? `
     <div class="ha-thumb"><svg class="ic"><use href="#i-article"/></svg></div>
     <div class="ha-body">
       <span class="chip chip-soft">${esc(article.category)}</span>
       <h4>${esc(article.title)}</h4>
       <div class="ha-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
-    </div>` : emptyHTML('article', 'لا مقالات بعد', 'شارك أول مقال في مساحة الأعضاء.');
+    </div>` : emptyHTML('article', 'لا مقالات متاحة حاليًا', 'ستظهر هنا مقالات مشعل الحفير.');
   $('#home-article').dataset.action = article ? 'open-article' : '';
   if (article) $('#home-article').dataset.id = article.id;
 
-  const attendees = 13 + (state.rsvp ? 1 : 0);
-  $('#meeting-attendees').innerHTML = `<strong>${toAr(attendees)}</strong> عضواً أكدوا الحضور`;
+  renderMeetingCard();
 
   updateHeaderAvatar();
 }
@@ -1395,15 +1635,25 @@ function renderBoard() {
 /* --------------------------------------------------------------------------
    7. الاقتباسات
    -------------------------------------------------------------------------- */
-function quoteCardHTML(quote) {
+function quoteSerialNumber(quote) {
+  const quotes = state && Array.isArray(state.quotes) ? state.quotes : [];
+  const index = quotes.findIndex((item) => item.id === quote.id);
+  // الاقتباسات مرتبة من الأحدث إلى الأقدم؛ لذا نعكس الفهرس ليبدأ الأقدم بالرقم ١.
+  return index < 0 ? 1 : quotes.length - index;
+}
+
+function quoteCardHTML(quote, options = {}) {
   const liked = state.likedQuotes.includes(quote.id);
   const saved = state.savedQuotes.includes(quote.id);
   const name = authorNameOf(quote);
   const color = authorColorOf(quote);
   const likes = Number(quote.likes || 0) + (liked ? 1 : 0);
   const canDelete = isSupervisor();
+  const compact = Boolean(options.compact);
+  const cardClasses = `quote-card${compact ? ' quote-card-compact' : ' quote-card-numbered'}${options.latest ? ' quote-latest' : ''}`;
   return `
-    <article class="quote-card">
+    <article class="${cardClasses}">
+      ${compact ? `<div class="home-quote-eyebrow"><span class="quote-number-stamp"><b class="quote-number-badge">${toAr(options.number || quoteSerialNumber(quote))}</b><img class="quote-number-image" src="quote-marks.svg" alt="" aria-hidden="true"></span>${options.latest ? '<span class="quote-new-badge">جديد</span>' : ''}</div>` : `<div class="quote-serial"><span class="quote-number-stamp"><b class="quote-number-badge">${toAr(options.number || quoteSerialNumber(quote))}</b><img class="quote-number-image" src="quote-marks.svg" alt="" aria-hidden="true"></span></div>`}
       <p class="quote-text">${esc(quote.text)}</p>
       <div class="quote-source">${esc(quote.book || 'من هامش القراءة')}${quote.page ? `<span> · ص ${esc(quote.page)}</span>` : ''}</div>
       <div class="quote-foot">
@@ -1448,7 +1698,7 @@ function renderQuotes() {
   };
 
   $('#quotes-feed').innerHTML = list.length
-    ? list.map(quoteCardHTML).join('')
+    ? list.map((quote) => quoteCardHTML(quote, { number: quoteSerialNumber(quote) })).join('')
     : emptyHTML('quote', labels[filter][0], labels[filter][1]);
 }
 
@@ -1801,9 +2051,10 @@ function renderMyBooks() {
    9. مقالات الأعضاء
    -------------------------------------------------------------------------- */
 function renderArticles() {
-  const featured = state.articles[0];
+  const visibleArticles = visibleSiteArticles();
+  const featured = visibleArticles[0];
   if (!featured) {
-    $('#featured-article').innerHTML = emptyHTML('article', 'مساحة القلم', 'اكتب أول مقال لأعضاء جليس.');
+    $('#featured-article').innerHTML = emptyHTML('article', 'لا توجد مقالات حاليًا', 'ستظهر هنا مقالات مشعل الحفير.');
     $('#featured-article').removeAttribute('data-action');
     $('#articles-list').innerHTML = '';
     renderArticleFilters();
@@ -1827,7 +2078,7 @@ function renderArticles() {
       <span class="fa-more">اقرأ المقال <svg class="ic"><use href="#i-arrow-right"/></svg></span>
     </div>`;
 
-  const rest = state.articles.slice(1);
+  const rest = visibleArticles.slice(1);
   const filtered = rest.filter((article) => {
     if (state.articleFilter === 'saved' && !state.savedArticles.includes(article.id)) return false;
     const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
@@ -1870,7 +2121,7 @@ function renderArticleFilters() {
   const catContainer = $('#article-categories');
   if (!catContainer) return;
 
-  const articleCats = new Set(state.articles.map((a) => a.category));
+  const articleCats = new Set(visibleSiteArticles().map((a) => a.category));
 
   const search = (state.articleCategorySearch || '').trim().toLowerCase();
   const visibleCats = ARTICLE_CATEGORIES.filter((c) =>
@@ -1901,7 +2152,7 @@ function renderProfile() {
   const finished = state.myBooks.filter((item) => item.status === 'finished').length;
   const stats = weekStats();
   const myQuotes = state.quotes.filter((quote) => isMine(quote)).length;
-  const myArticles = state.articles.filter((article) => isMine(article)).length;
+  const myArticles = visibleSiteArticles().filter((article) => isMine(article)).length;
   const streak = streakDays();
 
   $('#profile-name').textContent = state.profile.name;
@@ -2170,7 +2421,7 @@ function openQuoteComposer() {
 
 function openArticleSheet(id) {
   const article = state.articles.find((item) => item.id === id);
-  if (!article) return;
+  if (!article || !isMeshaalArticle(article)) return;
   const saved = state.savedArticles.includes(article.id);
   const body = article.body.split(/\n{2,}/).map((paragraph) => `<p>${esc(paragraph).replace(/\n/g, '<br>')}</p>`).join('');
 
@@ -2455,15 +2706,15 @@ function openRateBookSheet(bookId) {
         stars.forEach((s) => s.classList.remove('hover'));
       });
     });
-    root.querySelector('#rate-book-form').addEventListener('submit', (event) => {
+    root.querySelector('#rate-book-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!selectedRating) { toast('يرجى اختيار تقييم', 'info'); return; }
       const review = root.querySelector('#rate-review').value.trim();
-      saveBookRating(bookId, selectedRating, review);
+      const result = await saveBookRating(bookId, selectedRating, review);
       closeSheet();
       renderLibrary();
       renderHome();
-      toast('تم حفظ تقييمك', 'star');
+      toast(result && result.success !== false ? 'تم حفظ تقييمك ومزامنته للأعضاء' : 'حُفظ التقييم على الجهاز، وتعذرت مزامنته الآن', result && result.success !== false ? 'star' : 'info');
     });
   });
 }
@@ -2529,24 +2780,133 @@ function openMoreSheet() {
   });
 }
 
-function openMeetingSheet() {
-  const attendees = 13 + (state.rsvp ? 1 : 0);
+function openMeetingSheet(id = '') {
+  const meeting = (state.meetings || []).find((item) => String(item.id) === String(id)) || getCurrentMeeting();
+  const timeLabel = meetingTimeLabel(meeting.time);
+  const image = meeting.image
+    ? `<img class="meeting-sheet-poster" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title)}">`
+    : '';
   openSheet(`
-    ${sheetHead('جلسة الأسبوع', 'لقاء أعضاء جليس الشهري')}
-    <div class="meeting-date" style="width:100%;height:auto;flex-direction:row;gap:10px;padding:12px;border-radius:14px">
-      <strong style="font-size:26px">١٦</strong>
-      <span style="font-size:10px;color:var(--gold)">ربيع أول · الثلاثاء · ٨:٠٠ م</span>
+    ${sheetHead('تفاصيل اللقاء', 'نلتقي على القراءة والحوار')}
+    ${image}
+    <div class="meeting-sheet-heading">
+      <span class="chip chip-soft">لقاء جليس</span>
+      <h2>${esc(meeting.title || 'لقاء نادي جليس')}</h2>
+      ${meeting.description ? `<p>${esc(meeting.description)}</p>` : ''}
     </div>
-    <h2 style="font-size:19px;font-weight:800;color:var(--green-700);margin:14px 0 4px">مناقشة كتاب: ابني حبيبي</h2>
-    <p style="font-size:11px;color:var(--muted);line-height:1.9">قواعد نبوية لتربية الأبناء… جلسة حوارية يديرها أحد أعضاء النادي، والحضور مفتوح لأعضاء جليس.</p>
-    <div style="display:grid;gap:7px;margin:14px 0;padding:13px;border-radius:14px;background:var(--white);border:1px solid var(--line)">
-      <span style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted)"><svg class="ic" style="width:14px;height:14px;color:var(--gold-700)"><use href="#i-pin"/></svg> جمعية التنمية الأهلية بالمريداسية</span>
-      <span style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted)"><svg class="ic" style="width:14px;height:14px;color:var(--gold-700)"><use href="#i-users"/></svg> <b id="meeting-attendees-sheet" style="color:var(--green-600)">${toAr(attendees)}</b> عضواً أكدوا الحضور</span>
+    <div class="meeting-sheet-details">
+      <div><svg class="ic"><use href="#i-calendar"/></svg><span><small>التاريخ</small><b>${esc(meetingDateLabel(meeting.date))}</b></span></div>
+      ${timeLabel ? `<div><svg class="ic"><use href="#i-clock"/></svg><span><small>الوقت</small><b>${esc(timeLabel)}</b></span></div>` : ''}
+      ${meeting.location ? `<div><svg class="ic"><use href="#i-pin"/></svg><span><small>المكان</small><b>${esc(meeting.location)}</b></span></div>` : ''}
     </div>
+    <div class="meeting-attendance-note"><svg class="ic"><use href="#i-users"/></svg><span>${state.rsvp ? 'تم تأكيد حضورك على هذا الجهاز' : 'يسعدنا تأكيد حضورك في اللقاء'}</span></div>
     <button class="btn ${state.rsvp ? 'btn-primary' : 'btn-gold'} btn-block" type="button" id="meeting-rsvp">
       <svg class="ic"><use href="#i-${state.rsvp ? 'check' : 'calendar'}"/></svg>
       ${state.rsvp ? 'حضورك مؤكد — نراك هناك' : 'أؤكد الحضور'}
     </button>`);
+}
+
+function openMeetingComposer() {
+  if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('إضافة لقاء جديد', 'أضف إعلان اللقاء ومعلوماته ليظهر لجميع أعضاء جليس')}
+    <form id="meeting-form" class="meeting-form" novalidate>
+      <div class="field">
+        <label for="meeting-title-input">عنوان اللقاء</label>
+        <input class="input" id="meeting-title-input" maxlength="100" placeholder="مثال: مناقشة كتاب ابني حبيبي" required>
+      </div>
+      <div class="field">
+        <label for="meeting-description-input">التعليق أو وصف اللقاء</label>
+        <textarea class="input" id="meeting-description-input" rows="4" maxlength="700" placeholder="اكتب نبذة قصيرة عن اللقاء…"></textarea>
+      </div>
+      <div class="meeting-form-row">
+        <div class="field"><label for="meeting-date-input">التاريخ</label><input class="input" id="meeting-date-input" type="date" required></div>
+        <div class="field"><label for="meeting-time-input">الوقت</label><input class="input" id="meeting-time-input" type="time" required></div>
+      </div>
+      <div class="field">
+        <label for="meeting-location-input">المكان</label>
+        <input class="input" id="meeting-location-input" maxlength="160" placeholder="الموقع أو رابط اللقاء">
+      </div>
+      <div class="field">
+        <label for="meeting-image-input">صورة الإعلان</label>
+        <label class="meeting-upload" for="meeting-image-input">
+          <svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>ستظهر للأعضاء في الصفحة الرئيسية</small>
+        </label>
+        <input id="meeting-image-input" class="meeting-file-input" type="file" accept="image/*">
+        <div id="meeting-image-preview-wrap" class="meeting-image-preview-wrap" hidden><img id="meeting-image-preview" alt="معاينة صورة اللقاء"><button type="button" class="meeting-image-remove" id="meeting-image-remove" aria-label="إزالة الصورة">×</button></div>
+        <small id="meeting-image-status" class="meeting-image-status"></small>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-calendar"/></svg> نشر اللقاء للأعضاء</button>
+    </form>`, (root) => {
+    let imageData = '';
+    const fileInput = root.querySelector('#meeting-image-input');
+    const previewWrap = root.querySelector('#meeting-image-preview-wrap');
+    const preview = root.querySelector('#meeting-image-preview');
+    const status = root.querySelector('#meeting-image-status');
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        toast('اختر ملف صورة صالحًا', 'info');
+        fileInput.value = '';
+        return;
+      }
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await compressMeetingImage(file);
+        preview.src = imageData;
+        previewWrap.hidden = false;
+        status.textContent = 'الصورة جاهزة';
+      } catch (error) {
+        imageData = '';
+        fileInput.value = '';
+        previewWrap.hidden = true;
+        status.textContent = error.message;
+      }
+    });
+
+    root.querySelector('#meeting-image-remove').addEventListener('click', () => {
+      imageData = '';
+      fileInput.value = '';
+      preview.removeAttribute('src');
+      previewWrap.hidden = true;
+      status.textContent = '';
+    });
+
+    root.querySelector('#meeting-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
+      const title = root.querySelector('#meeting-title-input').value.trim();
+      const date = root.querySelector('#meeting-date-input').value;
+      const time = root.querySelector('#meeting-time-input').value;
+      if (!title || !date || !time) { toast('أكمل العنوان والتاريخ والوقت', 'info'); return; }
+
+      const meeting = {
+        id: `meeting-${Date.now()}`,
+        title,
+        description: root.querySelector('#meeting-description-input').value.trim(),
+        date,
+        time,
+        location: root.querySelector('#meeting-location-input').value.trim(),
+        image: imageData,
+        createdAt: Date.now(),
+        createdBy: currentMember.name
+      };
+
+      state.meetings = [meeting, ...(state.meetings || []).filter((item) => item.id !== meeting.id)];
+      state.rsvp = false;
+      await saveState();
+      renderMeetingCard();
+      closeSheet();
+      const result = await saveMeetingToCloud(meeting);
+      if (!result || result.success === false) {
+        toast('نُشر اللقاء على هذا الجهاز، لكن تعذرت مزامنته لبقية الأعضاء. تحقق من نشر Apps Script المحدّث.', 'info');
+        return;
+      }
+      toast('تم نشر اللقاء للأعضاء', 'calendar');
+    });
+  });
 }
 
 /* --------------------------------------------------------------------------
@@ -2648,7 +3008,7 @@ function go(name) {
 
   if (name === 'quotes') state.seenQuotes = (state.quotes || []).length;
   if (name === 'library') state.seenClubBooks = (state.clubBooks || []).length;
-  if (name === 'articles') state.seenArticles = (state.articles || []).length;
+  if (name === 'articles') state.seenArticles = visibleSiteArticles().length;
   updateNavBadges();
 }
 
@@ -2690,6 +3050,7 @@ async function setSessionMember(member) {
     state.entries.forEach((entry) => syncState.entries.add(entry.id));
     state.myBooks.forEach((book) => syncState.myBooks.add(myBookSyncKey(book)));
     state.clubBooks.forEach((book) => syncState.clubBooks.add(book.id));
+    state.articles.forEach((article) => { if (article && article.id) syncState.articles.add(article.id); });
     persistSyncState(member.id);
   }
   try {
@@ -2738,7 +3099,7 @@ function updateNavBadges() {
   const badges = {
     quotes: Math.max(0, (state.quotes || []).length - (state.seenQuotes || 0)),
     library: Math.max(0, (state.clubBooks || []).length - (state.seenClubBooks || 0)),
-    articles: Math.max(0, (state.articles || []).length - (state.seenArticles || 0))
+    articles: Math.max(0, visibleSiteArticles().length - (state.seenArticles || 0))
   };
   Object.entries(badges).forEach(([key, count]) => {
     const el = document.getElementById(`badge-${key}`);
@@ -2782,6 +3143,15 @@ function enterApp(welcome = false) {
   refreshClubBooksFromCloud();
   /* جلب المقالات المشتركة من الشيت */
   refreshArticlesFromCloud();
+  /* جلب اللقاءات المشتركة من الشيت */
+  refreshMeetingsFromCloud();
+  /* جلب آراء الكتب المشتركة وتحديث متوسطات المكتبة */
+  refreshBookRatingsFromCloud().then(() => {
+    if (state && currentMember) {
+      renderLibrary();
+      renderHome();
+    }
+  });
   if (welcome) {
     const firstName = state.profile.name.trim().split(/\s+/)[0];
     setTimeout(() => toast(`أهلاً ${firstName}… مجلسك جاهز`, 'sparkles'), 550);
@@ -2961,7 +3331,10 @@ function handleGlobalClick(event) {
       break;
     }
     case 'meeting':
-      openMeetingSheet();
+      openMeetingSheet(id);
+      break;
+    case 'add-meeting':
+      openMeetingComposer();
       break;
     case 'logout':
       openConfirm({

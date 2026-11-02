@@ -200,19 +200,7 @@
               </div>
               <div class="home-latest-quotes" id="home-latest-quotes"></div>
 
-              <article class="meeting-card">
-                <div class="meeting-date"><strong>١٦</strong><span>ربيع أول</span></div>
-                <div class="meeting-body">
-                  <span class="chip chip-soft">جلسة الأسبوع</span>
-                  <h4>مناقشة كتاب: ابني حبيبي</h4>
-                  <p><svg class="ic"><use href="#i-calendar"/></svg> الثلاثاء القادم · ٨:٠٠ م</p>
-                  <p><svg class="ic"><use href="#i-pin"/></svg> جمعية التنمية الأهلية بالمريداسية</p>
-                  <div class="meeting-foot">
-                    <span class="meeting-people" id="meeting-attendees">—</span>
-                    <button class="btn btn-sm btn-primary" type="button" data-action="meeting">التفاصيل والحضور</button>
-                  </div>
-                </div>
-              </article>
+              <div id="meeting-event-card"></div>
 
               <div class="sec-head">
                 <div><h3>من مكتبة النادي</h3><p>مختارات جليس لهذا الشهر</p></div>
@@ -221,7 +209,7 @@
               <div class="book-rail" id="home-books"></div>
 
               <div class="sec-head">
-                <div><h3>قلم هذا الأسبوع</h3><p>من مقالات الأعضاء</p></div>
+                <div><h3>قلم هذا الأسبوع</h3><p>من مقالات مشعل الحفير</p></div>
                 <button class="link-btn" type="button" data-action="go-articles">المقالات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
               </div>
               <article class="home-article" id="home-article"></article>
@@ -296,7 +284,7 @@
             <!-- ========== المقالات ========== -->
             <section class="screen" data-screen="articles" id="screen-articles">
               <div class="screen-head">
-                <div><span class="eyebrow">أقلام الأعضاء</span><h1>المقالات</h1></div>
+                <div><span class="eyebrow">مقالات مشعل الحفير</span><h1>المقالات</h1></div>
                 <button class="btn btn-sm btn-primary" type="button" data-action="open-article-compose">
                   <svg class="ic"><use href="#i-edit"/></svg> اكتب
                 </button>
@@ -377,13 +365,13 @@
               <svg class="ic"><use href="#i-quote"/></svg><span>الاقتباسات</span>
                <span class="nav-badge" id="badge-quotes" hidden>0</span>
             </button>
-            <button class="tab" type="button" data-nav="library">
-              <svg class="ic"><use href="#i-library"/></svg><span>المكتبة</span>
-               <span class="nav-badge" id="badge-library" hidden>0</span>
-            </button>
             <button class="tab" type="button" data-nav="articles">
               <svg class="ic"><use href="#i-article"/></svg><span>المقالات</span>
                <span class="nav-badge" id="badge-articles" hidden>0</span>
+            </button>
+            <button class="tab" type="button" data-nav="library">
+              <svg class="ic"><use href="#i-library"/></svg><span>المكتبة</span>
+               <span class="nav-badge" id="badge-library" hidden>0</span>
             </button>
              <button class="tab" type="button" data-action="open-more">
                <svg class="ic"><use href="#i-users"/></svg><span>أكثر عن جليس</span>
