@@ -2,8 +2,10 @@ const QUOTES_SHEET = 'الاقتباسات';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
+const LIBRARY_CATEGORIES_SHEET = 'تصنيفات المكتبة';
 const JOIN_REQUESTS_SHEET = 'طلبات الانضمام';
 const MEETINGS_SHEET = 'اللقاءات';
+const RECORDED_MEETINGS_SHEET = 'اللقاءات المسجلة';
 const OLD_BOOKS_SHEET_ID = 1035156833;
 
 function output(data) {
@@ -35,6 +37,15 @@ function getMeetingsSheet(ss) {
   return sheet;
 }
 
+function getRecordedMeetingsSheet(ss) {
+  let sheet = ss.getSheetByName(RECORDED_MEETINGS_SHEET);
+  if (!sheet) sheet = ss.insertSheet(RECORDED_MEETINGS_SHEET);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy']);
+  }
+  return sheet;
+}
+
 function normalizeTabName(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -60,6 +71,66 @@ function getArticlesSheet(ss) {
 
 function getBookRatingsSheet(ss) {
   return getDataSheet(ss, BOOK_RATINGS_SHEET, ['id', 'bookId', 'memberId', 'memberName', 'rating', 'review', 'createdAt']);
+}
+
+function getLibraryCategoriesSheet(ss) {
+  return getDataSheet(ss, LIBRARY_CATEGORIES_SHEET, ['category']);
+}
+
+function libraryBookSheets(ss) {
+  return [ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID)]
+    .filter((sheet, index, list) => sheet && list.indexOf(sheet) === index);
+}
+
+function getLibraryCategoryNames(ss) {
+  const sheet = getDataSheet(ss, LIBRARY_CATEGORIES_SHEET, ['category']);
+  const categories = [];
+  const known = new Set();
+  const add = (value) => {
+    const name = String(value || '').trim();
+    const key = normalizeTabName(name);
+    if (!name || !key || known.has(key)) return false;
+    known.add(key);
+    categories.push(name);
+    return true;
+  };
+
+  if (sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues().forEach(row => add(row[0]));
+  }
+
+  const missing = [];
+  libraryBookSheets(ss).forEach(bookSheet => {
+    const lastRow = bookSheet.getLastRow();
+    if (lastRow < 2 || bookSheet.getLastColumn() < 6) return;
+    bookSheet.getRange(2, 6, lastRow - 1, 1).getDisplayValues().forEach(row => {
+      const name = String(row[0] || '').trim();
+      if (add(name)) missing.push(name);
+    });
+  });
+  if (missing.length) sheet.getRange(sheet.getLastRow() + 1, 1, missing.length, 1).setValues(missing.map(name => [name]));
+  return categories;
+}
+
+function renameLibraryCategoryInBooks(ss, oldName, newName) {
+  const oldKey = normalizeTabName(oldName);
+  let updated = 0;
+  libraryBookSheets(ss).forEach(bookSheet => {
+    const lastRow = bookSheet.getLastRow();
+    if (lastRow < 2 || bookSheet.getLastColumn() < 6) return;
+    const range = bookSheet.getRange(2, 6, lastRow - 1, 1);
+    const values = range.getDisplayValues();
+    let changed = false;
+    values.forEach(row => {
+      if (normalizeTabName(row[0]) === oldKey) {
+        row[0] = newName;
+        updated++;
+        changed = true;
+      }
+    });
+    if (changed) range.setValues(values);
+  });
+  return updated;
 }
 
 function doPost(e) {
@@ -106,6 +177,44 @@ function doPost(e) {
         data.ts || Date.now()
       ]);
       return output({ success: true, message: 'تم حفظ طلب الانضمام' });
+    }
+
+    if (action === 'addLibraryCategory') {
+      const category = String(data.category || '').trim();
+      if (!category) throw new Error('اسم التصنيف مطلوب');
+      const existing = getLibraryCategoryNames(ss);
+      if (existing.some(name => normalizeTabName(name) === normalizeTabName(category))) {
+        return output({ success: true, message: 'التصنيف موجود مسبقًا', categories: existing });
+      }
+      getLibraryCategoriesSheet(ss).appendRow([category]);
+      return output({ success: true, message: 'تمت إضافة التصنيف', categories: getLibraryCategoryNames(ss) });
+    }
+
+    if (action === 'renameLibraryCategory') {
+      const oldCategory = String(data.oldCategory || '').trim();
+      const category = String(data.category || '').trim();
+      if (!oldCategory || !category) throw new Error('اسم التصنيف الجديد مطلوب');
+      const current = getLibraryCategoryNames(ss);
+      if (!current.some(name => normalizeTabName(name) === normalizeTabName(oldCategory))) {
+        throw new Error('التصنيف الأصلي غير موجود');
+      }
+      if (current.some(name => normalizeTabName(name) === normalizeTabName(category)
+        && normalizeTabName(name) !== normalizeTabName(oldCategory))) {
+        throw new Error('يوجد تصنيف آخر بهذا الاسم');
+      }
+
+      const sheet = getLibraryCategoriesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const names = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < names.length; i++) {
+          if (normalizeTabName(names[i][0]) === normalizeTabName(oldCategory)) {
+            sheet.getRange(i + 2, 1).setValue(category);
+          }
+        }
+      }
+      const booksUpdated = renameLibraryCategoryInBooks(ss, oldCategory, category);
+      return output({ success: true, message: 'تم تعديل اسم التصنيف', booksUpdated, categories: getLibraryCategoryNames(ss) });
     }
 
     if (action === 'saveArticle') {
@@ -196,6 +305,47 @@ function doPost(e) {
       return output({ success: true, message: 'تم حفظ اللقاء' });
     }
 
+    if (action === 'saveRecordedMeeting') {
+      const sheet = getRecordedMeetingsSheet(ss);
+      const recordId = String(data.id || '');
+      if (!recordId) throw new Error('معرّف التسجيل مطلوب');
+      if (String(data.image || '').length > 48000) throw new Error('حجم صورة اللقاء أكبر من الحد المسموح');
+
+      const rowData = [
+        recordId, data.title || '', data.description || '', data.recordedAt || '',
+        data.speaker || '', Number(data.views) || 0, data.duration || '',
+        data.videoUrl || '', data.image || '', data.createdAt || Date.now(), data.createdBy || ''
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0]) === recordId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, message: 'تم تحديث التسجيل' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, message: 'تم حفظ التسجيل' });
+    }
+
+    if (action === 'deleteRecordedMeeting') {
+      const sheet = getRecordedMeetingsSheet(ss);
+      const recordId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0]) === recordId) {
+            sheet.deleteRow(i + 2);
+            return output({ success: true, message: 'تم حذف التسجيل' });
+          }
+        }
+      }
+      return output({ success: true, message: 'التسجيل غير موجود' });
+    }
+
     if (action === 'deleteMeeting') {
       const sheet = getMeetingsSheet(ss);
       const meetingId = String(data.id || '');
@@ -249,6 +399,10 @@ function doGet(e) {
   try {
     const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
     const action = e && e.parameter ? e.parameter.action || '' : '';
+
+    if (action === 'getLibraryCategories') {
+      return output({ success: true, data: getLibraryCategoryNames(ss) });
+    }
 
     if (action === 'getClubBooks') {
       const sources = [
@@ -320,6 +474,24 @@ function doGet(e) {
       })).filter(meeting => meeting.id);
       meetings.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
       return output({ success: true, data: meetings });
+    }
+
+    if (action === 'getRecordedMeetings') {
+      const sheet = getRecordedMeetingsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
+      const recordings = rows.map(row => ({
+        id: row[0], title: row[1], description: row[2], recordedAt: row[3],
+        speaker: row[4], views: Number(row[5]) || 0, duration: row[6],
+        videoUrl: row[7], image: row[8], createdAt: row[9], createdBy: row[10]
+      })).filter(record => record.id);
+      recordings.sort((a, b) => {
+        const dateA = new Date(a.recordedAt || a.createdAt || 0).getTime() || 0;
+        const dateB = new Date(b.recordedAt || b.createdAt || 0).getTime() || 0;
+        return dateB - dateA;
+      });
+      return output({ success: true, data: recordings });
     }
 
     // قراءة الاقتباسات

@@ -438,9 +438,11 @@ function createInitialState(member) {
     seenClubBooks: 0,
     rsvp: false,
     meetings: [],
+    recordedMeetings: [],
     boardPeriod: 'week',
     libraryPane: 'club',
     libraryCategory: 'all',
+    libraryCategories: [],
     libraryQuery: '',
     myFilter: 'reading',
     articleFilter: 'all',
@@ -464,6 +466,8 @@ async function cloudRequest(action, data = null, memberId = null) {
       || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle'
       || action === 'getBookRatings' || action === 'saveBookRating'
       || action === 'getMeetings' || action === 'saveMeeting' || action === 'deleteMeeting'
+      || action === 'getRecordedMeetings' || action === 'saveRecordedMeeting' || action === 'deleteRecordedMeeting'
+      || action === 'getLibraryCategories' || action === 'addLibraryCategory' || action === 'renameLibraryCategory'
       ? CLUB_BOOKS_URL
       : APPS_SCRIPT_URL;
     const query = new URLSearchParams();
@@ -866,7 +870,7 @@ async function refreshArticlesFromCloud() {
     color: '#1E3A2B',
     time: a.createdAt ? new Date(Number(a.createdAt)).toLocaleString('ar-SA') : 'مؤخراً',
     read: Number(a.read) || 3,
-    createdAt: Number(a.createdAt) || 0
+    createdAt: articleTimestamp(a)
   }));
 
   /* Re-try local articles that have not yet reached the shared sheet. */
@@ -929,6 +933,17 @@ async function refreshArticlesFromCloud() {
   renderHome();
 }
 
+async function refreshLibraryCategoriesFromCloud() {
+  if (!state) return;
+  const member = currentMember;
+  const result = await cloudRequest('getLibraryCategories');
+  if (!result || result.success !== true || !Array.isArray(result.data)) return;
+  if (member && currentMember !== member) return;
+  state.libraryCategories = [...new Set(result.data.map((name) => String(name || '').trim()).filter(Boolean))];
+  if (member && member.id !== 'guest') await saveState();
+  renderLibrary();
+}
+
 async function loadMeetingsFromCloud() {
   const result = await cloudRequest('getMeetings');
   return result && result.success && Array.isArray(result.data) ? result.data : null;
@@ -957,6 +972,198 @@ async function saveMeetingToCloud(meeting) {
   return cloudRequest('saveMeeting', meeting);
 }
 
+async function loadRecordedMeetingsFromCloud() {
+  const result = await cloudRequest('getRecordedMeetings');
+  return result && result.success === true && Array.isArray(result.data) ? result.data : null;
+}
+
+function recordedMeetingTimestamp(meeting) {
+  const value = meeting && (meeting.recordedAt || meeting.createdAt);
+  if (value instanceof Date) return value.getTime();
+  const number = Number(value);
+  if (Number.isFinite(number) && number > 0) return number;
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function renderRecordedMeetings(root, meetings) {
+  const list = root.querySelector('#recorded-meetings-list');
+  if (!list) return;
+  if (!meetings.length) {
+    list.innerHTML = emptyHTML('calendar', 'لا توجد لقاءات مسجلة بعد', 'ستظهر هنا تسجيلات لقاءات جليس السابقة.');
+    return;
+  }
+
+  list.innerHTML = meetings.map((item) => {
+    const videoUrl = /^https?:\/\//i.test(String(item.videoUrl || '').trim()) ? String(item.videoUrl).trim() : '';
+    const image = item.image
+      ? `<img src="${esc(item.image)}" alt="صورة لقاء ${esc(item.title)}" loading="lazy">`
+      : `<div class="recorded-meeting-placeholder"><svg class="ic"><use href="#i-calendar"/></svg></div>`;
+    const dateLabel = item.recordedAt ? meetingDateLabel(item.recordedAt) : '';
+    const play = videoUrl
+      ? `<a class="recorded-meeting-play" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer" aria-label="مشاهدة ${esc(item.title)}"><svg class="ic"><use href="#i-play"/></svg></a>`
+      : '';
+
+    return `
+      <article class="recorded-meeting-card">
+        <div class="recorded-meeting-media">
+          ${image}
+          ${play}
+          ${item.duration ? `<span class="recorded-meeting-duration">${esc(item.duration)}</span>` : ''}
+        </div>
+        <div class="recorded-meeting-content">
+          <div class="recorded-meeting-meta">
+            ${dateLabel ? `<span><svg class="ic"><use href="#i-calendar"/></svg>${esc(dateLabel)}</span>` : ''}
+            <span><svg class="ic"><use href="#i-eye"/></svg>${toAr(Number(item.views) || 0)} مشاهدة</span>
+          </div>
+          <h3>${esc(item.title || 'لقاء جليس')}</h3>
+          ${item.description ? `<p class="recorded-meeting-description">${esc(item.description)}</p>` : ''}
+          ${item.speaker ? `<div class="recorded-meeting-speaker"><svg class="ic"><use href="#i-user"/></svg>${esc(item.speaker)}</div>` : ''}
+          <div class="recorded-meeting-actions">
+            ${videoUrl ? `<a class="btn btn-sm btn-primary" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer">شاهد اللقاء <svg class="ic"><use href="#i-play"/></svg></a>` : '<span class="recorded-meeting-unavailable">رابط التسجيل غير متوفر</span>'}
+            ${isSupervisor() ? `<button class="icon-btn recorded-meeting-delete" type="button" data-action="delete-recorded-meeting" data-id="${esc(item.id)}" aria-label="حذف اللقاء"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+          </div>
+        </div>
+      </article>`;
+  }).join('');
+}
+
+function openMeetingArchiveSheet() {
+  const localMeetings = (state.recordedMeetings || []).slice().sort((a, b) => recordedMeetingTimestamp(b) - recordedMeetingTimestamp(a));
+  openSheet(`
+    ${sheetHead('اللقاءات المسجلة', 'أرشيف لقاءات جليس السابقة')}
+    <div class="recorded-meetings-toolbar">
+      <p>شاهد واستعد لحظات من لقاءاتنا السابقة.</p>
+      ${isSupervisor() ? `<button class="btn btn-sm btn-primary" type="button" data-action="add-recorded-meeting"><svg class="ic"><use href="#i-plus"/></svg> إضافة تسجيل</button>` : ''}
+    </div>
+    <div id="recorded-meetings-list" class="recorded-meetings-list"><div class="recorded-meetings-loading">جارٍ تحميل اللقاءات…</div></div>`, (root) => {
+    renderRecordedMeetings(root, localMeetings);
+    loadRecordedMeetingsFromCloud().then(async (cloudMeetings) => {
+      if (!cloudMeetings || !root.querySelector('#recorded-meetings-list')) return;
+      const byId = new Map(cloudMeetings.filter((item) => item && item.id).map((item) => [String(item.id), item]));
+      (state.recordedMeetings || []).forEach((item) => {
+        if (item && item.id && !byId.has(String(item.id))) byId.set(String(item.id), item);
+      });
+      state.recordedMeetings = [...byId.values()].sort((a, b) => recordedMeetingTimestamp(b) - recordedMeetingTimestamp(a));
+      if (currentMember && currentMember.id !== 'guest') await saveState();
+      renderRecordedMeetings(root, state.recordedMeetings);
+    });
+  });
+}
+
+function openRecordedMeetingComposer() {
+  if (!isSupervisor()) { toast('إضافة التسجيلات للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('إضافة لقاء مسجل', 'أضف تفاصيل اللقاء ورابط التسجيل')}
+    <form id="recorded-meeting-form" class="meeting-form" novalidate>
+      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="عنوان اللقاء المسجل"></div>
+      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء"></textarea></div>
+      <div class="meeting-form-row">
+        <div class="field"><label for="recorded-date">تاريخ اللقاء</label><input class="input" id="recorded-date" type="date" required></div>
+        <div class="field"><label for="recorded-speaker">مقدم اللقاء</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدم اللقاء"></div>
+      </div>
+      <div class="meeting-form-row">
+        <div class="field"><label for="recorded-views">عدد المشاهدات</label><input class="input" id="recorded-views" type="number" min="0" value="0"></div>
+        <div class="field"><label for="recorded-duration">مدة التسجيل</label><input class="input" id="recorded-duration" maxlength="20" placeholder="مثال: 1:35:55"></div>
+      </div>
+      <div class="field"><label for="recorded-video-url">رابط التسجيل</label><input class="input" id="recorded-video-url" type="url" required placeholder="https://…"></div>
+      <div class="field">
+        <label for="recorded-image-input">صورة مصغرة للقاء</label>
+        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>تظهر كغلاف للتسجيل</small></label>
+        <input id="recorded-image-input" class="meeting-file-input" type="file" accept="image/*">
+        <div id="recorded-image-preview-wrap" class="meeting-image-preview-wrap" hidden><img id="recorded-image-preview" alt="معاينة صورة اللقاء"><button type="button" class="meeting-image-remove" id="recorded-image-remove" aria-label="إزالة الصورة">×</button></div>
+        <small id="recorded-image-status" class="meeting-image-status"></small>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-play"/></svg> نشر في أرشيف اللقاءات</button>
+    </form>`, (root) => {
+    let imageData = '';
+    const fileInput = root.querySelector('#recorded-image-input');
+    const previewWrap = root.querySelector('#recorded-image-preview-wrap');
+    const preview = root.querySelector('#recorded-image-preview');
+    const status = root.querySelector('#recorded-image-status');
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await compressMeetingImage(file);
+        preview.src = imageData;
+        previewWrap.hidden = false;
+        status.textContent = 'الصورة جاهزة';
+      } catch (error) {
+        imageData = '';
+        fileInput.value = '';
+        previewWrap.hidden = true;
+        status.textContent = error.message;
+      }
+    });
+
+    root.querySelector('#recorded-image-remove').addEventListener('click', () => {
+      imageData = '';
+      fileInput.value = '';
+      preview.removeAttribute('src');
+      previewWrap.hidden = true;
+      status.textContent = '';
+    });
+
+    root.querySelector('#recorded-meeting-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!isSupervisor()) { toast('إضافة التسجيلات للمشرفين فقط', 'info'); return; }
+      const title = root.querySelector('#recorded-title').value.trim();
+      const recordedAt = root.querySelector('#recorded-date').value;
+      const videoUrl = root.querySelector('#recorded-video-url').value.trim();
+      if (!title || !recordedAt || !/^https?:\/\//i.test(videoUrl)) {
+        toast('أكمل العنوان والتاريخ، وأدخل رابط تسجيل صحيحًا', 'info');
+        return;
+      }
+
+      const record = {
+        id: `recorded-${Date.now()}`,
+        title,
+        description: root.querySelector('#recorded-description').value.trim(),
+        recordedAt,
+        speaker: root.querySelector('#recorded-speaker').value.trim(),
+        views: Number(root.querySelector('#recorded-views').value) || 0,
+        duration: root.querySelector('#recorded-duration').value.trim(),
+        videoUrl,
+        image: imageData,
+        createdAt: Date.now(),
+        createdBy: currentMember.name
+      };
+
+      state.recordedMeetings = [record, ...(state.recordedMeetings || [])];
+      await saveState();
+      closeSheet();
+      const result = await cloudRequest('saveRecordedMeeting', record);
+      if (!result || result.success === false) {
+        toast('حُفظ اللقاء على هذا الجهاز، وتعذرت مزامنته الآن', 'info');
+      } else {
+        toast('تمت إضافة اللقاء إلى الأرشيف', 'calendar');
+      }
+      openMeetingArchiveSheet();
+    });
+  });
+}
+
+function confirmDeleteRecordedMeeting(id) {
+  if (!isSupervisor()) { toast('غير مصرح', 'info'); return; }
+  const record = (state.recordedMeetings || []).find((item) => String(item.id) === String(id));
+  if (!record) return;
+  openConfirm({
+    title: 'حذف اللقاء المسجل',
+    text: `سيُحذف تسجيل «${record.title}» من أرشيف اللقاءات.`,
+    confirmLabel: 'حذف',
+    onConfirm: async () => {
+      state.recordedMeetings = (state.recordedMeetings || []).filter((item) => String(item.id) !== String(id));
+      await saveState();
+      await cloudRequest('deleteRecordedMeeting', { id });
+      openMeetingArchiveSheet();
+      toast('تم حذف التسجيل من الأرشيف', 'trash');
+    }
+  });
+}
+
 function getCurrentMeeting() {
   const meetings = (state && Array.isArray(state.meetings) ? state.meetings : [])
     .filter(Boolean)
@@ -966,7 +1173,9 @@ function getCurrentMeeting() {
 
 function meetingDateLabel(date) {
   if (!date) return 'موعد اللقاء يحدد قريبًا';
-  const parsed = new Date(`${date}T00:00:00`);
+  const raw = date instanceof Date ? date.toISOString() : String(date).trim();
+  const datePart = raw.match(/\d{4}-\d{2}-\d{2}/);
+  const parsed = datePart ? new Date(`${datePart[0]}T12:00:00`) : new Date(raw);
   if (Number.isNaN(parsed.getTime())) return String(date);
   return new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -975,11 +1184,29 @@ function meetingDateLabel(date) {
 
 function meetingTimeLabel(time) {
   if (!time) return '';
-  const [hourText, minuteText = '00'] = String(time).split(':');
+  const raw = time instanceof Date ? time.toISOString() : String(time).trim();
+  const match = raw.match(/(?:T|^)(\d{1,2}):(\d{2})/);
+  let hourText = match && match[1];
+  let minuteText = match && match[2];
+  if (!match) {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    hourText = parsed.getHours();
+    minuteText = String(parsed.getMinutes()).padStart(2, '0');
+  }
   const hour = Number(hourText);
-  if (!Number.isFinite(hour)) return String(time);
+  if (!Number.isFinite(hour)) return raw;
   const hour12 = hour % 12 || 12;
   return `${toAr(hour12)}:${toAr(minuteText)} ${hour >= 12 ? 'م' : 'ص'}`;
+}
+
+function meetingLocationUrl(location) {
+  const text = String(location || '').trim();
+  if (!text) return '';
+  if (normalizeName(text).includes(normalizeName('جمعية التنمية الأهلية ببريدة'))) {
+    return 'https://maps.app.goo.gl/coNLQqZzvgE2PBD37';
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}`;
 }
 
 function renderMeetingCard() {
@@ -987,7 +1214,8 @@ function renderMeetingCard() {
   if (!root || !state) return;
   const meeting = getCurrentMeeting();
   const dateLabel = meetingDateLabel(meeting.date);
-  const timeLabel = meetingTimeLabel(meeting.time);
+  const timeLabel = meetingTimeLabel(meeting.time || meeting.date);
+  const locationUrl = meetingLocationUrl(meeting.location);
   const imageMarkup = meeting.image
     ? `<img class="meeting-poster" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy">`
     : `<div class="meeting-poster-placeholder"><svg class="ic"><use href="#i-calendar"/></svg><span>لقاء جليس القادم</span></div>`;
@@ -1002,7 +1230,7 @@ function renderMeetingCard() {
         <div class="meeting-details-grid">
           <div class="meeting-detail"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-calendar"/></svg></span><span><small>التاريخ</small><b>${esc(dateLabel)}</b></span></div>
           ${timeLabel ? `<div class="meeting-detail"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-clock"/></svg></span><span><small>الوقت</small><b>${esc(timeLabel)}</b></span></div>` : ''}
-          ${meeting.location ? `<div class="meeting-detail meeting-location"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-pin"/></svg></span><span><small>المكان</small><b>${esc(meeting.location)}</b></span></div>` : ''}
+          ${meeting.location ? `<a class="meeting-detail meeting-location meeting-detail-link" href="${esc(locationUrl)}" target="_blank" rel="noopener noreferrer"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-pin"/></svg></span><span><small>المكان · افتح الخريطة</small><b>${esc(meeting.location)}</b></span></a>` : ''}
         </div>
         <div class="meeting-card-actions">
           <button class="btn btn-sm btn-primary" type="button" data-action="meeting" data-id="${esc(meeting.id)}">تفاصيل اللقاء</button>
@@ -1427,7 +1655,21 @@ function isMeshaalArticle(article) {
 }
 
 function visibleSiteArticles() {
-  return state && Array.isArray(state.articles) ? state.articles.filter(isMeshaalArticle) : [];
+  return state && Array.isArray(state.articles)
+    ? state.articles.filter(isMeshaalArticle).slice().sort((a, b) => articleTimestamp(b) - articleTimestamp(a))
+    : [];
+}
+
+function articleTimestamp(article) {
+  const value = article && article.createdAt;
+  if (value instanceof Date) return value.getTime();
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const parsed = Date.parse(String(value || ''));
+  if (Number.isFinite(parsed)) return parsed;
+  // Legacy locally-created article IDs include their creation timestamp (a-<milliseconds>).
+  const idTimestamp = String(article && article.id || '').match(/(\d{10,})$/);
+  return idTimestamp ? Number(idTimestamp[1]) : 0;
 }
 
 function renderHome() {
@@ -1690,11 +1932,19 @@ function renderQuotes() {
   let list = state.quotes;
   if (filter === 'mine') list = list.filter((quote) => isMine(quote));
   if (filter === 'saved') list = list.filter((quote) => state.savedQuotes.includes(quote.id));
+  if (filter === 'popular') {
+    list = list.slice().sort((a, b) => {
+      const likesA = Number(a.likes || 0) + (state.likedQuotes.includes(a.id) ? 1 : 0);
+      const likesB = Number(b.likes || 0) + (state.likedQuotes.includes(b.id) ? 1 : 0);
+      return likesB - likesA || (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+    });
+  }
 
   const labels = {
     all: ['فنجان قهوة وهامش', 'شارك أول اقتباس يوقفك عند كتاب.'],
     mine: ['لم تنشر اقتباساً بعد', 'اضغط «اقتبس» وشارك جملة من كتابك.'],
-    saved: ['لا اقتباسات محفوظة', 'احفظ ما يلامسك لتعود إليه لاحقاً.']
+    saved: ['لا اقتباسات محفوظة', 'احفظ ما يلامسك لتعود إليه لاحقاً.'],
+    popular: ['لا توجد اقتباسات بعد', 'ستظهر هنا الاقتباسات الأكثر إعجابًا.']
   };
 
   $('#quotes-feed').innerHTML = list.length
@@ -1728,67 +1978,183 @@ function renderLibrary() {
 }
 
 function renderCategoryChips() {
+  const container = $('#category-chips');
+  if (!container) return;
   const categories = ['all', ...Array.from(new Set(
-    [...BOOKS, ...(state.clubBooks || [])].map((book) => book.category).filter(Boolean)
+    [...(state.libraryCategories || []), ...BOOKS.map((book) => book.category), ...(state.clubBooks || []).map((book) => book.category)]
+      .map((category) => String(category || '').trim())
+      .filter(Boolean)
   ))];
-  $('#category-chips').innerHTML = categories.map((category) => {
+  container.hidden = state.libraryCategory === 'all' && !state.libraryQuery.trim();
+  container.innerHTML = categories.map((category) => {
     const active = state.libraryCategory === category;
-    return `<button class="chip-filter ${active ? 'active' : ''}" type="button" data-category="${category}" aria-selected="${active}">${category === 'all' ? 'الكل' : esc(category)}</button>`;
+    return `<button class="chip-filter ${active ? 'active' : ''}" type="button" data-category="${esc(category)}" aria-selected="${active}">${category === 'all' ? 'الكل' : esc(category)}</button>`;
   }).join('');
+}
+
+function renderLibraryCategoryManager(root) {
+  const list = root.querySelector('#library-category-manager-list');
+  if (!list) return;
+  const categories = [...new Set([
+    ...(state.libraryCategories || []),
+    ...BOOKS.map((book) => book.category),
+    ...(state.clubBooks || []).map((book) => book.category)
+  ].map((name) => String(name || '').trim()).filter(Boolean))];
+  list.innerHTML = categories.length ? categories.map((category) => `
+    <div class="library-category-manager-row">
+      <span>${esc(category)}</span>
+      <button class="icon-btn" type="button" data-action="rename-library-category" data-id="${encodeURIComponent(category)}" aria-label="إعادة تسمية ${esc(category)}"><svg class="ic"><use href="#i-edit"/></svg></button>
+    </div>`).join('') : emptyHTML('library', 'لا توجد تصنيفات', 'أضف أول تصنيف للمكتبة.');
+}
+
+function openLibraryCategoryManager() {
+  if (!isSupervisor()) { toast('إدارة التصنيفات للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('تصنيفات المكتبة', 'أضف تصنيفًا أو غيّر اسم تصنيف موجود')}
+    <button class="btn btn-gold btn-block library-category-add" type="button" data-action="add-library-category"><svg class="ic"><use href="#i-plus"/></svg> إضافة تصنيف</button>
+    <div id="library-category-manager-list" class="library-category-manager-list"></div>`, (root) => {
+    renderLibraryCategoryManager(root);
+  });
+}
+
+function openLibraryCategoryEditor(oldCategory = '') {
+  if (!isSupervisor()) { toast('إدارة التصنيفات للمشرفين فقط', 'info'); return; }
+  const renaming = Boolean(oldCategory);
+  openSheet(`
+    ${sheetHead(renaming ? 'تعديل اسم التصنيف' : 'إضافة تصنيف جديد', 'سيظهر التصنيف ضمن رفوف المكتبة')}
+    <form id="library-category-form" novalidate>
+      <div class="field"><label for="library-category-name">اسم التصنيف</label><input class="input" id="library-category-name" maxlength="50" value="${esc(oldCategory)}" required placeholder="مثال: حكايات سعودية"></div>
+      <button class="btn btn-gold btn-block" type="submit">${renaming ? 'حفظ الاسم الجديد' : 'إضافة التصنيف'}</button>
+    </form>`, (root) => {
+    root.querySelector('#library-category-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!isSupervisor()) { toast('إدارة التصنيفات للمشرفين فقط', 'info'); return; }
+      const category = root.querySelector('#library-category-name').value.trim();
+      if (!category) { toast('اكتب اسم التصنيف', 'info'); return; }
+      if (oldCategory && normalizeName(category) === normalizeName(oldCategory)) { closeSheet(); return; }
+
+      const result = await cloudRequest(renaming ? 'renameLibraryCategory' : 'addLibraryCategory', {
+        oldCategory,
+        category
+      });
+      if (!result || result.success === false) {
+        toast(result && result.error ? result.error : 'تعذرت مزامنة التصنيف', 'info');
+        return;
+      }
+
+      if (renaming) {
+        state.libraryCategories = (state.libraryCategories || []).map((name) => normalizeName(name) === normalizeName(oldCategory) ? category : name);
+        state.clubBooks = (state.clubBooks || []).map((book) => normalizeName(book.category) === normalizeName(oldCategory) ? { ...book, category } : book);
+        state.personalBooks = (state.personalBooks || []).map((book) => normalizeName(book.category) === normalizeName(oldCategory) ? { ...book, category } : book);
+        if (normalizeName(state.libraryCategory) === normalizeName(oldCategory)) state.libraryCategory = category;
+      } else if (!(state.libraryCategories || []).some((name) => normalizeName(name) === normalizeName(category))) {
+        state.libraryCategories = [...(state.libraryCategories || []), category];
+      }
+
+      await saveState();
+      closeSheet();
+      await refreshLibraryCategoriesFromCloud();
+      await refreshClubBooksFromCloud();
+      toast(renaming ? 'تم تعديل اسم التصنيف ومزامنته' : 'تمت إضافة التصنيف ومزامنته', 'check');
+    });
+  });
+}
+
+function libraryShelfTitle(category) {
+  const names = {
+    'تاريخ': 'حكايات سعودية',
+    'سيرة': 'رحلات وسير',
+    'رواية': 'روايات وحكايات',
+    'تطوير': 'سحابة صيف',
+    'أدب': 'رفوف الأدب',
+    'فكر': 'مساحات فكرية',
+    'إدارة': 'الإدارة والعمل',
+    'تجارب': 'تجارب إنسانية'
+  };
+  return names[category] || category || 'مختارات جليس';
+}
+
+function libraryBookCardHTML(book) {
+  const inLibrary = Boolean(getMyBook(book.id));
+  const isClubBook = !BOOKS.find((item) => item.id === book.id);
+  return `
+    <article class="book-shelf-card">
+      <button class="book-mini" type="button" data-action="book" data-id="${esc(book.id)}" aria-label="${esc(book.title)}">
+        ${book.coverImage
+          ? `<div class="cover cover-image"><img class="cover-image-source" src="${esc(book.coverImage)}" alt="غلاف ${esc(book.title)}" loading="lazy"></div>`
+          : coverHTML(book)}
+        <h4>${esc(book.title)}</h4>
+        <p>${esc(book.author)}</p>
+      </button>
+      <div class="book-shelf-meta">
+        <button class="book-shelf-rating" type="button" data-action="view-ratings" data-id="${esc(book.id)}" aria-label="عرض آراء الكتاب">
+          <svg class="ic"><use href="#i-star"/></svg>${toAr(getAverageRating(book.id, book.rating))}<span>(${toAr(getBookRatings(book.id).length)})</span>
+        </button>
+        ${inLibrary ? '<span class="book-in-my-library">في مكتبتي</span>' : ''}
+      </div>
+      ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
+        ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
+        ${isSupervisor() && isClubBook ? `<button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+      </div>` : ''}
+    </article>`;
 }
 
 function renderClubBooks() {
   const query = state.libraryQuery.trim().toLowerCase();
-  const list = BOOKS.filter((book) => {
+  const allBooksById = new Map();
+  [...(state.clubBooks || []), ...BOOKS].forEach((book) => {
+    if (book && book.id) allBooksById.set(String(book.id), book);
+  });
+  const allBooks = [...allBooksById.values()].filter((book) => {
     const matchesCategory = state.libraryCategory === 'all' || book.category === state.libraryCategory;
-    const matchesQuery = !query || book.title.toLowerCase().includes(query) || book.author.toLowerCase().includes(query);
+    const title = String(book.title || '').toLowerCase();
+    const author = String(book.author || '').toLowerCase();
+    const matchesQuery = !query || title.includes(query) || author.includes(query);
     return matchesCategory && matchesQuery;
+  }).sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
+  const countLabel = $('#library-count-label');
+  if (countLabel) countLabel.textContent = 'مكتبة جليس';
+  const container = $('#club-books');
+  if (!container) return;
+  if (!allBooks.length) {
+    container.innerHTML = emptyHTML('search', 'لا توجد نتائج', 'جرّب عنواناً آخر أو أزل تصفية التصنيف.');
+    return;
+  }
+
+  if (query || state.libraryCategory !== 'all') {
+    const title = query ? 'نتائج البحث' : libraryShelfTitle(state.libraryCategory);
+    container.innerHTML = `<section class="book-shelf-section"><div class="book-shelf-heading"><div><h3>${esc(title)}</h3><p>${toAr(allBooks.length)} كتب</p></div></div><div class="book-rail">${allBooks.map(libraryBookCardHTML).join('')}</div></section>`;
+    return;
+  }
+
+  const shelves = new Map();
+  (state.libraryCategories || []).forEach((category) => {
+    const name = String(category || '').trim();
+    if (name && !shelves.has(name)) shelves.set(name, []);
+  });
+  allBooks.forEach((book) => {
+    const category = book.category || 'مختارات جليس';
+    if (!shelves.has(category)) shelves.set(category, []);
+    shelves.get(category).push(book);
   });
 
-  const clubList = state.clubBooks.filter((book) => {
-    const matchesCategory = state.libraryCategory === 'all' || book.category === state.libraryCategory;
-    const matchesQuery = !query || book.title.toLowerCase().includes(query) || book.author.toLowerCase().includes(query);
-    return matchesCategory && matchesQuery;
-  }).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  const allBooks = [...clubList, ...list];
-
-  $('#library-count-label').textContent = `كتب النادي · ${toAr(allBooks.length)}`;
-  $('#club-books').innerHTML = allBooks.length ? allBooks.map((book) => {
-    const inLibrary = Boolean(getMyBook(book.id));
-    const isClubBook = !BOOKS.find((b) => b.id === book.id);
-    return `
-      <article class="lib-card" data-action="book" data-id="${book.id}">
-        <div class="lib-cover-wrap">
-          ${book.pick ? '<span class="lib-flag">مختار النادي</span>' : ''}
-          ${isClubBook ? '<span class="lib-flag">مشاركة من عضو</span>' : ''}
-          <button class="lib-more ${inLibrary ? 'added' : ''}" type="button" data-action="book-more" data-id="${book.id}" aria-label="أعرف أكثر عن الكتاب">
-            <span class="lib-more-text">أعرف أكثر عن الكتاب</span>
-          </button>
-          ${book.coverImage
-            ? `<img class="lib-cover-img" src="${book.coverImage}" alt="${esc(book.title)}">`
-            : `<div class="lib-cover" style="background:linear-gradient(150deg, ${book.coverColor || book.c1 || '#1E3A2B'}, ${book.coverColor2 || book.c2 || '#3D5A4C'})">${esc(book.title.charAt(0))}</div>`}
-        </div>
-        <div class="lib-info">
-          <h4>${esc(book.title)}</h4>
-          <p>${esc(book.author)}</p>
-          <div class="lib-meta">
-            ${isClubBook ? `<span class="lib-added-by"><svg class="ic"><use href="#i-user"/></svg>${esc(book.memberName || 'عضو جليس')}</span>` : ''}
-            <span class="lib-rating" data-action="view-ratings" data-id="${book.id}" style="cursor:pointer"><svg class="ic"><use href="#i-star"/></svg>${toAr(getAverageRating(book.id, book.rating))} (${toAr(getBookRatings(book.id).length)})</span>
-          <span class="lib-rating-opinions" data-action="view-ratings" data-id="${book.id}">عرض الآراء</span>
-            <span class="lib-avail ${book.available ? '' : 'out'}"><i></i>${book.available ? `${toAr(book.available)} نسخ` : ''}</span>
-          </div>
-           ${isSupervisor() && isClubBook ? `<button class="btn btn-danger btn-sm" type="button" data-action="delete-club-book" data-id="${book.id}" style="margin-top:6px">حذف الكتاب</button>` : ``}
-            ${!isGuest() ? `<button class="btn btn-sm btn-ghost" type="button" data-action="rate-book" data-id="${book.id}" style="margin-top:6px">⭐ تقييم</button>` : ''}
-          ${book.report ? (book.report.length > 120
-            ? `<p class="lib-report" data-short="${esc(book.report.substring(0, 120) + '…')}" data-full="${esc(book.report)}">${esc(book.report.substring(0, 120) + '…')}</p><span class="report-toggle" data-action="toggle-report">قراءة المزيد</span>`
-            : `<p class="lib-report">${esc(book.report)}</p>`) : ''}
-        </div>
-      </article>`;
-  }).join('') : emptyHTML('search', 'لا توجد نتائج', 'جرّب عنواناً آخر أو أزل تصفية التصنيف.');
+  container.innerHTML = [...shelves.entries()].map(([category, books]) => `
+    <section class="book-shelf-section">
+      <div class="book-shelf-heading">
+        <div><h3>${esc(libraryShelfTitle(category))}</h3><p>${esc(category)} · ${toAr(books.length)} كتب</p></div>
+        <button class="book-shelf-more" type="button" data-category="${esc(category)}" aria-label="استعرض تصنيف ${esc(category)}"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+      </div>
+      ${books.length ? `<div class="book-rail">${books.map(libraryBookCardHTML).join('')}</div>` : `<p class="book-shelf-empty">رف جديد بانتظار الكتب.</p>`}
+    </section>`).join('');
 }
 
 function openAddBook() {
+  const bookCategories = [...new Set([
+    ...(state.libraryCategories || []),
+    ...BOOKS.map((book) => book.category),
+    ...(state.clubBooks || []).map((book) => book.category)
+  ].map((category) => String(category || '').trim()).filter(Boolean))];
   openSheet(`
     ${sheetHead('إضافة كتاب لمكتبة النادي', 'أضف كتاباً تود مشاركته مع أعضاء جليس.')}
     <form id="add-book-form" novalidate>
@@ -1803,14 +2169,8 @@ function openAddBook() {
       <div class="field">
         <label for="add-book-category">التصنيف</label>
         <select class="input" id="add-book-category">
-          <option>تطوير</option>
-          <option>سيرة</option>
-          <option>رواية</option>
-          <option>فكر</option>
-          <option>أدب</option>
-          <option>تاريخ</option>
-          <option>إدارة</option>
-          <option>تجارب</option>
+          ${bookCategories.map((category) => `<option value="${esc(category)}">${esc(category)}</option>`).join('')}
+          ${bookCategories.length ? '' : '<option>متنوع</option>'}
         </select>
       </div>
       <div class="field">
@@ -2052,60 +2412,36 @@ function renderMyBooks() {
    -------------------------------------------------------------------------- */
 function renderArticles() {
   const visibleArticles = visibleSiteArticles();
-  const featured = visibleArticles[0];
-  if (!featured) {
-    $('#featured-article').innerHTML = emptyHTML('article', 'لا توجد مقالات حاليًا', 'ستظهر هنا مقالات مشعل الحفير.');
-    $('#featured-article').removeAttribute('data-action');
-    $('#articles-list').innerHTML = '';
-    renderArticleFilters();
-    return;
-  }
-
-  $('#featured-article').dataset.action = 'open-article';
-  $('#featured-article').dataset.id = featured.id;
-  $('#featured-article').innerHTML = `
-    <div class="fa-top">
-      <span class="chip fa-cat">${esc(featured.category)}</span>
-      <span class="fa-read">${toAr(featured.read || 3)} دقائق قراءة</span>
-    </div>
-    <h3>${esc(featured.title)}</h3>
-    <p>${esc(featured.excerpt)}</p>
-    <div class="fa-foot">
-      <div class="fa-author">
-        ${avatarHTML(authorNameOf(featured), authorColorOf(featured))}
-        <div><strong>${esc(authorNameOf(featured))}</strong><small>${esc(featured.time || '')}</small></div>
-      </div>
-      <span class="fa-more">اقرأ المقال <svg class="ic"><use href="#i-arrow-right"/></svg></span>
-    </div>`;
-
-  const rest = visibleArticles.slice(1);
-  const filtered = rest.filter((article) => {
+  const filtered = visibleArticles.filter((article) => {
     if (state.articleFilter === 'saved' && !state.savedArticles.includes(article.id)) return false;
     const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
     if (cat !== ARTICLE_CATEGORIES[0] && cat !== 'all' && article.category !== cat) return false;
     return true;
   });
 
-  $('#articles-list').innerHTML = filtered.length ? filtered.map((article, index) => {
+  $('#articles-list').innerHTML = filtered.length ? filtered.map((article) => {
     const saved = state.savedArticles.includes(article.id);
     return `
       <article class="article-row" data-action="open-article" data-id="${article.id}">
-        <span class="ar-num">${toAr(index + 1)}</span>
-        <div class="ar-body">
+        <div class="ar-topline">
           <span class="chip chip-soft">${esc(article.category)}</span>
-          <h4>${esc(article.title)}</h4>
-          <div class="ar-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${toAr(article.read || 3)} دقائق</span></div>
+          <span class="ar-reading-time"><svg class="ic"><use href="#i-clock"/></svg>${toAr(article.read || 3)} دقائق</span>
         </div>
-        <div class="ar-actions">
-          <button class="ar-save ${saved ? 'saved' : ''}" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
-            <svg class="ic"><use href="#i-bookmark"/></svg>
-          </button>
-          ${isSupervisor() ? `<button class="ar-save" type="button" data-action="delete-article" data-id="${article.id}" aria-label="حذف المقال">
-            <svg class="ic"><use href="#i-trash"/></svg>
-          </button>` : ''}
+        <h3 class="ar-title">${esc(article.title)}</h3>
+        <p class="ar-excerpt">${esc(article.excerpt || article.body || '')}</p>
+        <div class="ar-bottomline">
+          <div class="ar-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${esc(article.time || '')}</span></div>
+          <div class="ar-actions">
+            <button class="ar-save ${saved ? 'saved' : ''}" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
+              <svg class="ic"><use href="#i-bookmark"/></svg>
+            </button>
+            ${isSupervisor() ? `<button class="ar-save" type="button" data-action="delete-article" data-id="${article.id}" aria-label="حذف المقال">
+              <svg class="ic"><use href="#i-trash"/></svg>
+            </button>` : ''}
+          </div>
         </div>
       </article>`;
-  }).join('') : emptyHTML('article', 'لا مقالات متاحة', 'جرّب تصنيفاً آخر أو اكتب أول مقال.');
+  }).join('') : emptyHTML('article', 'لا مقالات متاحة', 'ستظهر هنا أحدث مقالات مشعل الحفير.');
   renderArticleFilters();
 }
 
@@ -2744,9 +3080,9 @@ function openMoreSheet() {
   openSheet(`
     ${sheetHead('المزيد', 'خدمات و programmes النادي')}
     <div class="more-list">
-      <button class="more-item" type="button" data-action="meeting">
+      <button class="more-item" type="button" data-action="meeting-archive">
         <span class="more-icon"><svg class="ic"><use href="#i-calendar"/></svg></span>
-        <div class="more-body"><strong>اللقاءات</strong><p>لقاءات النادي (المسجلة والقادمة)</p></div>
+        <div class="more-body"><strong>اللقاءات المسجلة</strong><p>أرشيف لقاءات جليس السابقة</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
       <button class="more-item" type="button" data-action="club-programs">
@@ -2782,7 +3118,8 @@ function openMoreSheet() {
 
 function openMeetingSheet(id = '') {
   const meeting = (state.meetings || []).find((item) => String(item.id) === String(id)) || getCurrentMeeting();
-  const timeLabel = meetingTimeLabel(meeting.time);
+  const timeLabel = meetingTimeLabel(meeting.time || meeting.date);
+  const locationUrl = meetingLocationUrl(meeting.location);
   const image = meeting.image
     ? `<img class="meeting-sheet-poster" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title)}">`
     : '';
@@ -2797,7 +3134,7 @@ function openMeetingSheet(id = '') {
     <div class="meeting-sheet-details">
       <div><svg class="ic"><use href="#i-calendar"/></svg><span><small>التاريخ</small><b>${esc(meetingDateLabel(meeting.date))}</b></span></div>
       ${timeLabel ? `<div><svg class="ic"><use href="#i-clock"/></svg><span><small>الوقت</small><b>${esc(timeLabel)}</b></span></div>` : ''}
-      ${meeting.location ? `<div><svg class="ic"><use href="#i-pin"/></svg><span><small>المكان</small><b>${esc(meeting.location)}</b></span></div>` : ''}
+      ${meeting.location ? `<a class="meeting-sheet-location-link" href="${esc(locationUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-pin"/></svg><span><small>المكان · افتح الخريطة</small><b>${esc(meeting.location)}</b></span></a>` : ''}
     </div>
     <div class="meeting-attendance-note"><svg class="ic"><use href="#i-users"/></svg><span>${state.rsvp ? 'تم تأكيد حضورك على هذا الجهاز' : 'يسعدنا تأكيد حضورك في اللقاء'}</span></div>
     <button class="btn ${state.rsvp ? 'btn-primary' : 'btn-gold'} btn-block" type="button" id="meeting-rsvp">
@@ -3077,7 +3414,7 @@ function showGate() {
 
 function applyGuestVisibility() {
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article']);
+  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article', 'manage-library-categories']);
   document.querySelectorAll('[data-action]').forEach((el) => {
     if (blocked.has(el.dataset.action)) el.style.display = isGuest ? 'none' : '';
   });
@@ -3085,6 +3422,8 @@ function applyGuestVisibility() {
   if (logForm) logForm.style.display = isGuest ? 'none' : '';
   const goalCard = document.querySelector('.goal-card');
   if (goalCard) goalCard.style.display = isGuest ? 'none' : '';
+  const categoryManager = document.getElementById('manage-library-categories-btn');
+  if (categoryManager) categoryManager.hidden = !isSupervisor();
 }
 
 function hideSplash() {
@@ -3141,6 +3480,8 @@ function enterApp(welcome = false) {
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
   /* جلب كتب النادي المشتركة حتى مع وجود حالة محلية قديمة للعضو */
   refreshClubBooksFromCloud();
+  /* جلب أسماء تصنيفات المكتبة المشتركة */
+  refreshLibraryCategoriesFromCloud();
   /* جلب المقالات المشتركة من الشيت */
   refreshArticlesFromCloud();
   /* جلب اللقاءات المشتركة من الشيت */
@@ -3314,6 +3655,18 @@ function handleGlobalClick(event) {
     case 'open-add-book':
       openAddBook();
       break;
+    case 'manage-library-categories':
+      openLibraryCategoryManager();
+      break;
+    case 'add-library-category':
+      openLibraryCategoryEditor();
+      break;
+    case 'rename-library-category': {
+      let categoryName = id || '';
+      try { categoryName = decodeURIComponent(categoryName); } catch (error) {}
+      openLibraryCategoryEditor(categoryName);
+      break;
+    }
     case 'open-add-my-book':
       openAddMyBook();
       break;
@@ -3333,8 +3686,17 @@ function handleGlobalClick(event) {
     case 'meeting':
       openMeetingSheet(id);
       break;
+    case 'meeting-archive':
+      openMeetingArchiveSheet();
+      break;
     case 'add-meeting':
       openMeetingComposer();
+      break;
+    case 'add-recorded-meeting':
+      openRecordedMeetingComposer();
+      break;
+    case 'delete-recorded-meeting':
+      confirmDeleteRecordedMeeting(id);
       break;
     case 'logout':
       openConfirm({
