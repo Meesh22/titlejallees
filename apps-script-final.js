@@ -62,9 +62,11 @@ function ensureQuoteDeleteColumns(sheet) {
 }
 
 function ensureBookDeleteColumns(sheet) {
-  if (sheet.getMaxColumns() < 13) sheet.insertColumnsAfter(sheet.getMaxColumns(), 13 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 14) sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
+  if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('coverImage');
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('deletedAt');
   if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('deletedBy');
+  if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('year');
 }
 
 function normalizeTabName(value) {
@@ -190,6 +192,7 @@ function doPost(e) {
     if (action === 'saveClubBook') {
       const sheet = ss.getSheetByName(BOOKS_SHEET);
       if (!sheet) throw new Error('لم أجد تبويب المكتبة');
+      ensureBookDeleteColumns(sheet);
 
       const bookId = String(data.id || '');
       const oldSheet = ss.getSheetById(OLD_BOOKS_SHEET_ID);
@@ -209,7 +212,8 @@ function doPost(e) {
         data.id || '', data.memberId || '', data.memberName || '',
         data.title || '', data.author || '', data.category || '',
         data.coverColor || '', data.report || '', data.pages || 0,
-        data.createdAt || Date.now(), data.coverImage || ''
+        data.createdAt || Date.now(), data.coverImage || '',
+        '', '', data.year || ''
       ]);
       return output({ success: true, message: 'تم حفظ الكتاب' });
     }
@@ -233,14 +237,13 @@ function doPost(e) {
         if (matchIndex < 0) continue;
 
         const row = matchIndex + 2;
-        if (source.getMaxColumns() < 11) {
-          source.insertColumnsAfter(source.getMaxColumns(), 11 - source.getMaxColumns());
-        }
+        ensureBookDeleteColumns(source);
         source.getRange(row, 4, 1, 6).setValues([[
           data.title || '', data.author || '', data.category || '',
           data.coverColor || '', data.report || '', Number(data.pages) || 0
         ]]);
         source.getRange(row, 11).setValue(data.coverImage || '');
+        source.getRange(row, 14).setValue(data.year || '');
         return output({ success: true, message: 'تم تحديث بيانات الكتاب' });
       }
 
@@ -628,7 +631,7 @@ function doGet(e) {
             id, memberId: row[1], memberName: row[2], title: row[3],
             author: row[4], category: row[5], coverColor: row[6],
             report: row[7], pages: row[8], createdAt: row[9],
-            coverImage: row[10] || ''
+            coverImage: row[10] || '', year: row[13] || ''
           };
         });
       });

@@ -625,6 +625,7 @@ async function saveClubBookToCloud(member, book) {
     coverImage: book.coverImage || '',
     report: book.report || '',
     pages: book.pages || 0,
+    year: book.year || '',
     createdAt: book.createdAt || Date.now()
   });
 }
@@ -652,6 +653,7 @@ async function updateClubBookToCloud(book) {
     coverColor: book.coverColor || '',
     report: book.report || '',
     pages: book.pages || 0,
+    year: book.year || '',
     coverImage: book.coverImage || '',
     updatedAt: Date.now()
   });
@@ -2157,7 +2159,7 @@ function libraryBookCardHTML(book) {
           ? `<div class="cover cover-image"><img class="cover-image-source" src="${esc(book.coverImage)}" alt="غلاف ${esc(book.title)}" loading="lazy"></div>`
           : coverHTML(book)}
         <h4>${esc(book.title)}</h4>
-        <p>${esc(book.author)}</p>
+        <p>${esc(book.author)}${book.year ? ` · ${toAr(book.year)}` : ''}</p>
       </button>
       <div class="book-shelf-meta">
         <button class="book-shelf-rating" type="button" data-action="view-ratings" data-id="${esc(book.id)}" aria-label="عرض آراء الكتاب">
@@ -2250,9 +2252,15 @@ function openAddBook() {
         <label for="add-book-report">تقرير عن الكتاب</label>
         <textarea class="input" id="add-book-report" rows="5" placeholder="اكتب تقرير الكتاب… اترك سطرًا فارغًا بين الفقرات لتنسيقها."></textarea>
       </div>
-      <div class="field">
-        <label for="add-book-pages">عدد الصفحات (اختياري)</label>
-        <input class="input" id="add-book-pages" type="number" min="1" max="5000" placeholder="مثال: 320">
+      <div class="field-row">
+        <div class="field">
+          <label for="add-book-pages">عدد الصفحات</label>
+          <input class="input" id="add-book-pages" type="number" min="1" max="5000" placeholder="مثال: 320">
+        </div>
+        <div class="field">
+          <label for="add-book-year">سنة النشر</label>
+          <input class="input" id="add-book-year" type="number" min="1" max="2100" placeholder="مثال: 2020">
+        </div>
       </div>
       <div class="field">
         <label for="add-book-color">لون الغلاف (إذا لم تختر صورة)</label>
@@ -2290,6 +2298,7 @@ function openAddBook() {
       const category = root.querySelector('#add-book-category').value;
       const report = root.querySelector('#add-book-report').value.trim();
       const pages = Number(root.querySelector('#add-book-pages').value) || 0;
+      const year = Number(root.querySelector('#add-book-year').value) || '';
       const color = root.querySelector('#add-book-color').value;
 
       if (!title) {
@@ -2304,6 +2313,7 @@ function openAddBook() {
         category,
         report,
         pages,
+        year,
         coverColor: color,
         coverImage: imageData,
         coverColor2: '#14291D',
@@ -2346,7 +2356,8 @@ function openEditClubBook(bookId) {
       <div class="field"><label for="edit-club-book-author">المؤلف</label><input class="input" id="edit-club-book-author" maxlength="100" value="${esc(book.author || '')}"></div>
       <div class="field"><label for="edit-club-book-category">رف / تصنيف الكتاب</label><select class="input" id="edit-club-book-category">${categories.map((category) => `<option value="${esc(category)}" ${normalizeName(category) === normalizeName(book.category) ? 'selected' : ''}>${esc(category)}</option>`).join('')}</select></div>
       <div class="field"><label for="edit-club-book-report">تفاصيل الكتاب</label><textarea class="input" id="edit-club-book-report" rows="7" maxlength="6000" placeholder="اكتب الوصف، واترك سطرًا فارغًا بين الفقرات.">${esc(book.report || '')}</textarea></div>
-      <div class="field-row"><div class="field"><label for="edit-club-book-pages">عدد الصفحات</label><input class="input" id="edit-club-book-pages" type="number" min="0" max="5000" value="${Number(book.pages) || ''}"></div><div class="field"><label for="edit-club-book-color">لون الغلاف</label><input class="input" id="edit-club-book-color" type="color" value="${initialColor}"></div></div>
+      <div class="field-row"><div class="field"><label for="edit-club-book-pages">عدد الصفحات</label><input class="input" id="edit-club-book-pages" type="number" min="0" max="5000" value="${Number(book.pages) || ''}"></div><div class="field"><label for="edit-club-book-year">سنة النشر</label><input class="input" id="edit-club-book-year" type="number" min="1" max="2100" value="${Number(book.year) || ''}" placeholder="مثال: 2020"></div></div>
+      <div class="field"><label for="edit-club-book-color">لون الغلاف</label><input class="input" id="edit-club-book-color" type="color" value="${initialColor}"></div>
       <div class="field">
         <label for="edit-club-book-image">صورة الغلاف</label>
         <label class="meeting-upload" for="edit-club-book-image"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة غلاف جديدة</span><small>اختيار صورة جديدة يستبدل الحالية</small></label>
@@ -2403,6 +2414,7 @@ function openEditClubBook(bookId) {
         category: root.querySelector('#edit-club-book-category').value,
         report: root.querySelector('#edit-club-book-report').value,
         pages: Number(root.querySelector('#edit-club-book-pages').value) || 0,
+        year: Number(root.querySelector('#edit-club-book-year').value) || '',
         coverColor: root.querySelector('#edit-club-book-color').value,
         coverImage: imageData,
         updatedAt: Date.now()
@@ -2864,16 +2876,16 @@ function openBookSheet(id) {
       <button type="button" data-book-panel="quotes" role="tab" aria-selected="false">اقتباسات <span>${toAr(relatedQuotes.length)}</span></button>
     </div>
     <section class="book-detail-panel active" id="book-detail-details">
-      <div class="book-detail-description">
-        <span>عن الكتاب</span>
-        <p>${esc(book.report || 'لا يتوفر وصف لهذا الكتاب بعد.')}</p>
-      </div>
       <div class="book-detail-facts">
         <div><span>المؤلف</span><b>${esc(book.author || '—')}</b></div>
         <div><span>التصنيف</span><b>${esc(book.category || '—')}</b></div>
-        ${Number(book.pages) > 0 ? `<div><span>عدد الصفحات</span><b>${toAr(book.pages)}</b></div>` : ''}
         ${book.year || book.publicationYear ? `<div><span>سنة النشر</span><b>${toAr(book.year || book.publicationYear)}</b></div>` : ''}
-        ${book.isbn ? `<div><span>ISBN</span><b>${esc(book.isbn)}</b></div>` : ''}
+        ${Number(book.pages) > 0 ? `<div><span>الصفحات</span><b>${toAr(book.pages)}</b></div>` : ''}
+        ${book.isbn ? `<div class="book-fact-wide"><span>ISBN</span><b>${esc(book.isbn)}</b></div>` : ''}
+      </div>
+      <div class="book-detail-description">
+        <span>عن الكتاب</span>
+        <p>${esc(book.report || 'لا يتوفر وصف لهذا الكتاب بعد.')}</p>
       </div>
     </section>
     <section class="book-detail-panel" id="book-detail-reviews" hidden>
