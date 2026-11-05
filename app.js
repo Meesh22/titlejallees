@@ -60,6 +60,9 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRS
 const CLUB_BOOKS_URL = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
 const QUOTES_SHEET_URL = CLUB_BOOKS_URL;
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
+let deletedQuoteIds = new Set();
+let deletedQuoteTexts = new Set();
+let deletedClubBookIds = new Set();
 const DEFAULT_MEETING = {
   id: 'meeting-default',
   title: 'مناقشة كتاب: ابني حبيبي',
@@ -80,6 +83,7 @@ function mergeQuoteLists(...lists) {
     list.forEach((quote) => {
       if (!quote || !quote.text) return;
       const text = normalizeName(quote.text);
+      if ((quote.id && deletedQuoteIds.has(String(quote.id))) || deletedQuoteTexts.has(text)) return;
       if (!text || seenText.has(text)) return;
       if (quote.id && seenId.has(quote.id)) return;
       seenText.add(text);
@@ -261,6 +265,12 @@ function normalizeName(value) {
     .trim();
 }
 
+function normalizeBookTitle(value) {
+  return normalizeName(value)
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
+    .replace(/[.,،؛:!?؟()\[\]{}«»“”'"_\-]/g, '');
+}
+
 function findMemberByName(value) {
   const key = normalizeName(value);
   if (!key) return null;
@@ -337,6 +347,14 @@ const LEGACY_BOOKS_SEED = [
 
 /* لا نعرض الكتب التجريبية المضمّنة؛ مكتبة النادي مصدرها الشيت المشترك. */
 const BOOKS = [];
+
+const DEFAULT_BOOK_CATEGORIES = [
+  'أدب', 'إدارة', 'اقتصاد', 'أسرة وطفولة', 'تاريخ', 'تاريخ إسلامي', 'تاريخ سعودي',
+  'تربية', 'تنمية ذاتية', 'تراجم', 'تقنية', 'تعليم', 'تفسير وعلوم القرآن', 'ثقافة عامة',
+  'جغرافيا ورحلات', 'حديث وسيرة نبوية', 'حكايات شعبية', 'رواية', 'رواية تاريخية',
+  'رياضة', 'سيرة ذاتية', 'شعر', 'صحة', 'علم اجتماع', 'علم نفس', 'علوم', 'فكر وفلسفة',
+  'فن ومسرح', 'قصة قصيرة', 'قصص أطفال', 'لغة عربية', 'مذكرات', 'مقالات', 'فنون', 'فقه', 'أخرى'
+];
 
 const ARTICLE_CATEGORIES = [
   'الكل',
@@ -462,8 +480,10 @@ async function cloudRequest(action, data = null, memberId = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const endpoint = action === 'getClubBooks' || action === 'saveClubBook'
+    const endpoint = action === 'getClubBooks' || action === 'saveClubBook' || action === 'updateClubBook'
       || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle'
+      || action === 'deleteClubBook' || action === 'deleteQuote' || action === 'restoreClubBook' || action === 'restoreQuote'
+      || action === 'getDeletedItems' || action === 'restoreLibraryCategory' || action === 'deleteLibraryCategory'
       || action === 'getBookRatings' || action === 'saveBookRating'
       || action === 'getMeetings' || action === 'saveMeeting' || action === 'deleteMeeting'
       || action === 'getRecordedMeetings' || action === 'saveRecordedMeeting' || action === 'deleteRecordedMeeting'
@@ -623,6 +643,20 @@ async function saveArticleToCloud(member, article) {
   });
 }
 
+async function updateClubBookToCloud(book) {
+  return cloudRequest('updateClubBook', {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    category: book.category,
+    coverColor: book.coverColor || '',
+    report: book.report || '',
+    pages: book.pages || 0,
+    coverImage: book.coverImage || '',
+    updatedAt: Date.now()
+  });
+}
+
 function scheduleCloudSync(delay = 1200) {
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => { syncTimer = null; runCloudSync(); }, delay);
@@ -708,7 +742,8 @@ async function runCloudSync() {
 
 async function loadClubBooksFromCloud(memberId) {
   const result = await cloudRequest('getClubBooks', null, memberId);
-  return result.success ? result.data : [];
+  if (result && result.success === true) deletedClubBookIds = new Set((result.deletedIds || []).map(String));
+  return result && result.success === true ? result.data : [];
 }
 
 async function refreshClubBooksFromCloud() {
@@ -724,6 +759,7 @@ async function refreshClubBooksFromCloud() {
     merged.set(book.id, { ...merged.get(book.id), ...book });
     if (member.id !== 'guest') syncState.clubBooks.add(book.id);
   });
+  deletedClubBookIds.forEach((id) => merged.delete(String(id)));
   state.clubBooks = [...merged.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   if (member.id !== 'guest') {
@@ -766,6 +802,7 @@ async function saveQuoteToSheet(quoteData) {
   if (!QUOTES_SHEET_URL) return;
   try {
     const payload = {
+      id: quoteData.id || `q-${Date.now()}`,
       created_at: new Date().toLocaleString('ar-SA'),
       author_name: (state && state.profile && state.profile.name) || quoteData.authorName || 'عضو جليس',
       page_number: quoteData.page || '',
@@ -787,15 +824,20 @@ async function saveQuoteToSheet(quoteData) {
 async function loadQuotesFromSheet() {
   if (!QUOTES_SHEET_URL) return null;
   try {
-    const response = await fetch(QUOTES_SHEET_URL);
+    const response = await fetch(`${QUOTES_SHEET_URL}?action=getQuotes&_=${Date.now()}`, { cache: 'no-store' });
     const result = await response.json();
-    if (result && result.status === 'success' && Array.isArray(result.data)) {
+    if (result && (result.success === true || result.status === 'success') && Array.isArray(result.data)) {
+      deletedQuoteIds = new Set((result.deletedIds || []).map(String));
+      deletedQuoteTexts = new Set((result.deletedTexts || []).map(normalizeName));
       return result.data.map((q, idx) => {
         const mem = MEMBERS.find((m) => normalizeName(m.name) === normalizeName(q.author_name));
+        const matchingBook = [...BOOKS, ...((state && state.clubBooks) || [])]
+          .find((book) => normalizeBookTitle(book.title) === normalizeBookTitle(q.book_title));
         return {
           id: q.id || `sheet-${idx}`,
           text: q.quote_text,
           book: q.book_title || 'من هامش القراءة',
+          bookId: q.book_id || (matchingBook && matchingBook.id) || '',
           page: q.page_number ? String(q.page_number) : '',
           authorId: mem ? mem.id : 'cloud',
           authorName: q.author_name || 'عضو جليس',
@@ -1977,14 +2019,25 @@ function renderLibrary() {
   });
 }
 
+function getLibraryCategoryOptions() {
+  const configured = Array.isArray(state.libraryCategories) && state.libraryCategories.length
+    ? state.libraryCategories
+    : DEFAULT_BOOK_CATEGORIES;
+  const values = [...configured, ...BOOKS.map((book) => book.category), ...(state.clubBooks || []).map((book) => book.category)];
+  const unique = new Map();
+  values.forEach((value) => {
+    const name = String(value || '').trim();
+    const key = normalizeName(name);
+    if (name && key && !unique.has(key)) unique.set(key, name);
+  });
+  return [...unique.values()];
+}
+
 function renderCategoryChips() {
   const container = $('#category-chips');
   if (!container) return;
-  const categories = ['all', ...Array.from(new Set(
-    [...(state.libraryCategories || []), ...BOOKS.map((book) => book.category), ...(state.clubBooks || []).map((book) => book.category)]
-      .map((category) => String(category || '').trim())
-      .filter(Boolean)
-  ))];
+  const usedCategories = [...new Set([...BOOKS, ...(state.clubBooks || [])].map((book) => book.category).filter(Boolean))];
+  const categories = ['all', ...usedCategories];
   container.hidden = state.libraryCategory === 'all' && !state.libraryQuery.trim();
   container.innerHTML = categories.map((category) => {
     const active = state.libraryCategory === category;
@@ -1995,40 +2048,70 @@ function renderCategoryChips() {
 function renderLibraryCategoryManager(root) {
   const list = root.querySelector('#library-category-manager-list');
   if (!list) return;
-  const categories = [...new Set([
-    ...(state.libraryCategories || []),
-    ...BOOKS.map((book) => book.category),
-    ...(state.clubBooks || []).map((book) => book.category)
-  ].map((name) => String(name || '').trim()).filter(Boolean))];
+  const categories = getLibraryCategoryOptions();
   list.innerHTML = categories.length ? categories.map((category) => `
     <div class="library-category-manager-row">
       <span>${esc(category)}</span>
-      <button class="icon-btn" type="button" data-action="rename-library-category" data-id="${encodeURIComponent(category)}" aria-label="إعادة تسمية ${esc(category)}"><svg class="ic"><use href="#i-edit"/></svg></button>
+      <div class="library-category-manager-actions">
+        <button class="icon-btn" type="button" data-action="rename-library-category" data-id="${encodeURIComponent(category)}" aria-label="إعادة تسمية الرف ${esc(category)}"><svg class="ic"><use href="#i-edit"/></svg></button>
+        ${normalizeName(category) !== normalizeName('غير مصنف') ? `<button class="icon-btn library-shelf-delete" type="button" data-action="delete-library-category" data-id="${encodeURIComponent(category)}" aria-label="حذف رف ${esc(category)}"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+      </div>
     </div>`).join('') : emptyHTML('library', 'لا توجد تصنيفات', 'أضف أول تصنيف للمكتبة.');
 }
 
 function openLibraryCategoryManager() {
-  if (!isSupervisor()) { toast('إدارة التصنيفات للمشرفين فقط', 'info'); return; }
+  if (!isSupervisor()) { toast('إدارة رفوف المكتبة للمشرفين فقط', 'info'); return; }
   openSheet(`
-    ${sheetHead('تصنيفات المكتبة', 'أضف تصنيفًا أو غيّر اسم تصنيف موجود')}
-    <button class="btn btn-gold btn-block library-category-add" type="button" data-action="add-library-category"><svg class="ic"><use href="#i-plus"/></svg> إضافة تصنيف</button>
+    ${sheetHead('إدارة رفوف المكتبة', 'أضف رفًا أو غيّر اسم رف موجود')}
+    <button class="btn btn-gold btn-block library-category-add" type="button" data-action="add-library-category"><svg class="ic"><use href="#i-plus"/></svg> إضافة رف</button>
     <div id="library-category-manager-list" class="library-category-manager-list"></div>`, (root) => {
     renderLibraryCategoryManager(root);
   });
 }
 
+function confirmDeleteLibraryCategory(category) {
+  if (!isSupervisor()) { toast('حذف الرفوف للمشرفين فقط', 'info'); return; }
+  if (normalizeName(category) === normalizeName('غير مصنف')) {
+    toast('لا يمكن حذف رف غير مصنف', 'info');
+    return;
+  }
+  openConfirm({
+    title: 'نقل الرف إلى سلة المحذوفات',
+    text: `سيختفي رف «${category}» من المكتبة، وستُنقل كتبه إلى «غير مصنف». يمكنك استعادة الرف وكتبه من سلة المحذوفات.`,
+    confirmLabel: 'نقل إلى السلة',
+    onConfirm: async () => {
+      const result = await cloudRequest('deleteLibraryCategory', {
+        id: category,
+        deletedBy: currentMember.name
+      });
+      if (!result || result.success === false) {
+        toast(result && result.error ? result.error : 'تعذر نقل الرف إلى السلة', 'info');
+        return;
+      }
+      state.libraryCategories = (state.libraryCategories || []).filter((name) => normalizeName(name) !== normalizeName(category));
+      state.clubBooks = (state.clubBooks || []).map((book) => normalizeName(book.category) === normalizeName(category) ? { ...book, category: 'غير مصنف' } : book);
+      if (normalizeName(state.libraryCategory) === normalizeName(category)) state.libraryCategory = 'all';
+      await saveState();
+      renderLibrary();
+      await refreshLibraryCategoriesFromCloud();
+      await refreshClubBooksFromCloud();
+      toast('نُقل الرف إلى سلة المحذوفات دون حذف كتبه', 'check');
+    }
+  });
+}
+
 function openLibraryCategoryEditor(oldCategory = '') {
-  if (!isSupervisor()) { toast('إدارة التصنيفات للمشرفين فقط', 'info'); return; }
+  if (!isSupervisor()) { toast('إدارة رفوف المكتبة للمشرفين فقط', 'info'); return; }
   const renaming = Boolean(oldCategory);
   openSheet(`
-    ${sheetHead(renaming ? 'تعديل اسم التصنيف' : 'إضافة تصنيف جديد', 'سيظهر التصنيف ضمن رفوف المكتبة')}
+    ${sheetHead(renaming ? 'تعديل اسم الرف' : 'إضافة رف جديد', 'سيظهر الرف ضمن رفوف المكتبة')}
     <form id="library-category-form" novalidate>
-      <div class="field"><label for="library-category-name">اسم التصنيف</label><input class="input" id="library-category-name" maxlength="50" value="${esc(oldCategory)}" required placeholder="مثال: حكايات سعودية"></div>
-      <button class="btn btn-gold btn-block" type="submit">${renaming ? 'حفظ الاسم الجديد' : 'إضافة التصنيف'}</button>
+      <div class="field"><label for="library-category-name">اسم الرف</label><input class="input" id="library-category-name" maxlength="50" value="${esc(oldCategory)}" required placeholder="مثال: حكايات سعودية"></div>
+      <button class="btn btn-gold btn-block" type="submit">${renaming ? 'حفظ الاسم الجديد' : 'إضافة الرف'}</button>
     </form>`, (root) => {
     root.querySelector('#library-category-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!isSupervisor()) { toast('إدارة التصنيفات للمشرفين فقط', 'info'); return; }
+      if (!isSupervisor()) { toast('إدارة رفوف المكتبة للمشرفين فقط', 'info'); return; }
       const category = root.querySelector('#library-category-name').value.trim();
       if (!category) { toast('اكتب اسم التصنيف', 'info'); return; }
       if (oldCategory && normalizeName(category) === normalizeName(oldCategory)) { closeSheet(); return; }
@@ -2055,28 +2138,18 @@ function openLibraryCategoryEditor(oldCategory = '') {
       closeSheet();
       await refreshLibraryCategoriesFromCloud();
       await refreshClubBooksFromCloud();
-      toast(renaming ? 'تم تعديل اسم التصنيف ومزامنته' : 'تمت إضافة التصنيف ومزامنته', 'check');
+      toast(renaming ? 'تم تعديل اسم الرف ومزامنته' : 'تمت إضافة الرف ومزامنته', 'check');
     });
   });
 }
 
 function libraryShelfTitle(category) {
-  const names = {
-    'تاريخ': 'حكايات سعودية',
-    'سيرة': 'رحلات وسير',
-    'رواية': 'روايات وحكايات',
-    'تطوير': 'سحابة صيف',
-    'أدب': 'رفوف الأدب',
-    'فكر': 'مساحات فكرية',
-    'إدارة': 'الإدارة والعمل',
-    'تجارب': 'تجارب إنسانية'
-  };
-  return names[category] || category || 'مختارات جليس';
+  return category || 'مختارات جليس';
 }
 
 function libraryBookCardHTML(book) {
   const inLibrary = Boolean(getMyBook(book.id));
-  const isClubBook = !BOOKS.find((item) => item.id === book.id);
+  const isClubBook = (state.clubBooks || []).some((item) => String(item.id) === String(book.id));
   return `
     <article class="book-shelf-card">
       <button class="book-mini" type="button" data-action="book" data-id="${esc(book.id)}" aria-label="${esc(book.title)}">
@@ -2094,7 +2167,7 @@ function libraryBookCardHTML(book) {
       </div>
       ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
         ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
-        ${isSupervisor() && isClubBook ? `<button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
       </div>` : ''}
     </article>`;
 }
@@ -2129,9 +2202,10 @@ function renderClubBooks() {
   }
 
   const shelves = new Map();
+  const defaultCategoryKeys = new Set(DEFAULT_BOOK_CATEGORIES.map((name) => normalizeName(name)));
   (state.libraryCategories || []).forEach((category) => {
     const name = String(category || '').trim();
-    if (name && !shelves.has(name)) shelves.set(name, []);
+    if (name && !defaultCategoryKeys.has(normalizeName(name)) && !shelves.has(name)) shelves.set(name, []);
   });
   allBooks.forEach((book) => {
     const category = book.category || 'مختارات جليس';
@@ -2143,18 +2217,17 @@ function renderClubBooks() {
     <section class="book-shelf-section">
       <div class="book-shelf-heading">
         <div><h3>${esc(libraryShelfTitle(category))}</h3><p>${esc(category)} · ${toAr(books.length)} كتب</p></div>
-        <button class="book-shelf-more" type="button" data-category="${esc(category)}" aria-label="استعرض تصنيف ${esc(category)}"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+        <div class="book-shelf-heading-actions">
+          ${isSupervisor() ? `<button class="book-shelf-more book-shelf-edit-category" type="button" data-action="rename-library-category" data-id="${encodeURIComponent(category)}" aria-label="تعديل اسم رف ${esc(category)}"><svg class="ic"><use href="#i-edit"/></svg></button>` : ''}
+          <button class="book-shelf-more" type="button" data-category="${esc(category)}" aria-label="استعرض رف ${esc(category)}"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+        </div>
       </div>
       ${books.length ? `<div class="book-rail">${books.map(libraryBookCardHTML).join('')}</div>` : `<p class="book-shelf-empty">رف جديد بانتظار الكتب.</p>`}
     </section>`).join('');
 }
 
 function openAddBook() {
-  const bookCategories = [...new Set([
-    ...(state.libraryCategories || []),
-    ...BOOKS.map((book) => book.category),
-    ...(state.clubBooks || []).map((book) => book.category)
-  ].map((category) => String(category || '').trim()).filter(Boolean))];
+  const bookCategories = getLibraryCategoryOptions();
   openSheet(`
     ${sheetHead('إضافة كتاب لمكتبة النادي', 'أضف كتاباً تود مشاركته مع أعضاء جليس.')}
     <form id="add-book-form" novalidate>
@@ -2175,7 +2248,7 @@ function openAddBook() {
       </div>
       <div class="field">
         <label for="add-book-report">تقرير عن الكتاب</label>
-        <textarea class="input" id="add-book-report" rows="4" placeholder="اكتب تقريراً قصيراً عن الكتاب وماذا يحتوي…"></textarea>
+        <textarea class="input" id="add-book-report" rows="5" placeholder="اكتب تقرير الكتاب… اترك سطرًا فارغًا بين الفقرات لتنسيقها."></textarea>
       </div>
       <div class="field">
         <label for="add-book-pages">عدد الصفحات (اختياري)</label>
@@ -2249,6 +2322,105 @@ function openAddBook() {
       updateNavBadges();
       toast(`تمت إضافة «${title}» لمكتبة النادي`, 'book');
       celebrate();
+    });
+  });
+}
+
+function openEditClubBook(bookId) {
+  if (!isSupervisor()) { toast('تعديل كتب النادي للمشرفين فقط', 'info'); return; }
+  const book = (state.clubBooks || []).find((item) => String(item.id) === String(bookId));
+  if (!book) { toast('لم أجد الكتاب في مكتبة النادي', 'info'); return; }
+
+  const categories = getLibraryCategoryOptions();
+  if (book.category && !categories.some((name) => normalizeName(name) === normalizeName(book.category))) {
+    categories.unshift(book.category);
+  }
+  const initialColor = /^#[0-9a-f]{6}$/i.test(book.coverColor || '')
+    ? book.coverColor
+    : /^#[0-9a-f]{6}$/i.test(book.c1 || '') ? book.c1 : '#1E3A2B';
+
+  openSheet(`
+    ${sheetHead('تعديل بيانات الكتاب', book.title)}
+    <form id="edit-club-book-form" class="meeting-form" novalidate>
+      <div class="field"><label for="edit-club-book-title">عنوان الكتاب</label><input class="input" id="edit-club-book-title" maxlength="120" value="${esc(book.title)}" required></div>
+      <div class="field"><label for="edit-club-book-author">المؤلف</label><input class="input" id="edit-club-book-author" maxlength="100" value="${esc(book.author || '')}"></div>
+      <div class="field"><label for="edit-club-book-category">رف / تصنيف الكتاب</label><select class="input" id="edit-club-book-category">${categories.map((category) => `<option value="${esc(category)}" ${normalizeName(category) === normalizeName(book.category) ? 'selected' : ''}>${esc(category)}</option>`).join('')}</select></div>
+      <div class="field"><label for="edit-club-book-report">تفاصيل الكتاب</label><textarea class="input" id="edit-club-book-report" rows="7" maxlength="6000" placeholder="اكتب الوصف، واترك سطرًا فارغًا بين الفقرات.">${esc(book.report || '')}</textarea></div>
+      <div class="field-row"><div class="field"><label for="edit-club-book-pages">عدد الصفحات</label><input class="input" id="edit-club-book-pages" type="number" min="0" max="5000" value="${Number(book.pages) || ''}"></div><div class="field"><label for="edit-club-book-color">لون الغلاف</label><input class="input" id="edit-club-book-color" type="color" value="${initialColor}"></div></div>
+      <div class="field">
+        <label for="edit-club-book-image">صورة الغلاف</label>
+        <label class="meeting-upload" for="edit-club-book-image"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة غلاف جديدة</span><small>اختيار صورة جديدة يستبدل الحالية</small></label>
+        <input id="edit-club-book-image" class="meeting-file-input" type="file" accept="image/*">
+        <div id="edit-club-book-image-preview-wrap" class="meeting-image-preview-wrap" ${book.coverImage ? '' : 'hidden'}>${book.coverImage ? `<img id="edit-club-book-image-preview" src="${esc(book.coverImage)}" alt="غلاف ${esc(book.title)}">` : '<img id="edit-club-book-image-preview" alt="معاينة الغلاف">'}<button type="button" class="meeting-image-remove" id="edit-club-book-image-remove" aria-label="إزالة الصورة">×</button></div>
+        <small id="edit-club-book-image-status" class="meeting-image-status"></small>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> حفظ التعديلات</button>
+    </form>`, (root) => {
+    let imageData = book.coverImage || '';
+    const fileInput = root.querySelector('#edit-club-book-image');
+    const previewWrap = root.querySelector('#edit-club-book-image-preview-wrap');
+    const preview = root.querySelector('#edit-club-book-image-preview');
+    const status = root.querySelector('#edit-club-book-image-status');
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        toast('اختر ملف صورة صالحًا', 'info');
+        fileInput.value = '';
+        return;
+      }
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await compressMeetingImage(file);
+        preview.src = imageData;
+        previewWrap.hidden = false;
+        status.textContent = 'الصورة الجديدة جاهزة';
+      } catch (error) {
+        fileInput.value = '';
+        status.textContent = error.message;
+      }
+    });
+
+    root.querySelector('#edit-club-book-image-remove').addEventListener('click', () => {
+      imageData = '';
+      fileInput.value = '';
+      preview.removeAttribute('src');
+      previewWrap.hidden = true;
+      status.textContent = 'ستُحذف صورة الغلاف عند الحفظ';
+    });
+
+    root.querySelector('#edit-club-book-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!isSupervisor()) { toast('تعديل كتب النادي للمشرفين فقط', 'info'); return; }
+      const title = root.querySelector('#edit-club-book-title').value.trim();
+      if (!title) { toast('أدخل عنوان الكتاب', 'info'); return; }
+
+      const updatedBook = {
+        ...book,
+        title,
+        author: root.querySelector('#edit-club-book-author').value.trim() || 'مؤلف غير محدد',
+        category: root.querySelector('#edit-club-book-category').value,
+        report: root.querySelector('#edit-club-book-report').value,
+        pages: Number(root.querySelector('#edit-club-book-pages').value) || 0,
+        coverColor: root.querySelector('#edit-club-book-color').value,
+        coverImage: imageData,
+        updatedAt: Date.now()
+      };
+
+      state.clubBooks = (state.clubBooks || []).map((item) => String(item.id) === String(bookId) ? updatedBook : item);
+      await saveState();
+      closeSheet();
+      renderLibrary();
+      renderHome();
+
+      const result = await updateClubBookToCloud(updatedBook);
+      if (!result || result.success === false) {
+        toast('حُفظت التعديلات على هذا الجهاز، وتعذرت مزامنتها مع الشيت.', 'info');
+        return;
+      }
+      refreshLibraryCategoriesFromCloud();
+      toast('تم تحديث بيانات الكتاب ومزامنتها', 'check');
     });
   });
 }
@@ -2637,46 +2809,106 @@ async function copyText(text) {
    12. نوافذ المحتوى
    -------------------------------------------------------------------------- */
 function openBookSheet(id) {
-  const book = getBook(id) || state.clubBooks.find((b) => b.id === id);
+  const book = getBook(id) || (state.clubBooks || []).find((b) => b.id === id);
   if (!book) return;
+  const isClubBook = (state.clubBooks || []).some((item) => String(item.id) === String(book.id));
   const mine = getMyBook(id);
-  const status = mine ? STATUS_LABEL[mine.status] : '';
-  const progress = mine && mine.status === 'reading'
-    ? `<div class="my-progress" style="margin-top:10px"><div class="my-progress-head"><span>${toAr(mine.currentPage)} من ${toAr(book.pages)} صفحة</span><b>٪${toAr(Math.round((mine.currentPage / book.pages) * 100))}</b></div><div class="progress" style="margin:5px 0 0"><span style="width:${(mine.currentPage / book.pages) * 100}%"></span></div></div>`
+  const ratings = getBookRatings(id).slice().sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  const average = Number(getAverageRating(id, book.rating)) || 0;
+  const relatedQuotes = (state.quotes || []).filter((quote) =>
+    (quote.bookId && String(quote.bookId) === String(book.id))
+    || normalizeBookTitle(quote.book) === normalizeBookTitle(book.title)
+  ).slice(0, 8);
+  const ratingCounts = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    count: ratings.filter((item) => Number(item.rating) === stars).length
+  }));
+  const progress = mine && mine.status === 'reading' && Number(book.pages) > 0
+    ? `<div class="book-detail-progress"><div><span>${toAr(mine.currentPage)} من ${toAr(book.pages)} صفحة</span><b>٪${toAr(Math.round((mine.currentPage / book.pages) * 100))}</b></div><span class="progress"><span style="width:${clamp(Math.round((mine.currentPage / book.pages) * 100), 0, 100)}%"></span></span></div>`
     : '';
-
-  const actions = mine
-    ? `
-      <button class="btn btn-primary btn-block" type="button" data-action="go-my-library">الانتقال إلى مكتبتي</button>
-      <button class="btn btn-ghost" type="button" data-action="start-book" data-id="${book.id}">${mine.status === 'finished' ? 'أعد القراءة' : 'أكمل القراءة'}</button>
-      <button class="btn btn-danger" type="button" data-action="remove-book" data-id="${book.id}">إزالة</button>`
-    : `
-      <button class="btn btn-primary" type="button" data-action="add-book" data-id="${book.id}" data-status="reading">أقرأ الآن</button>
-      <button class="btn btn-ghost" type="button" data-action="add-book" data-id="${book.id}" data-status="want">أريد قراءتها</button>`;
+  const mainAction = mine
+    ? `<button class="btn btn-gold btn-block" type="button" data-action="start-book" data-id="${esc(book.id)}">${mine.status === 'finished' ? 'أعد القراءة' : mine.status === 'want' ? 'ابدأ القراءة' : 'أكمل القراءة'}</button>`
+    : !isGuest() ? `<button class="btn btn-gold btn-block" type="button" data-action="add-book" data-id="${esc(book.id)}" data-status="reading">ابدأ القراءة</button>` : `<button class="btn btn-gold btn-block" type="button" data-action="open-gate">دخول الأعضاء للقراءة</button>`;
+  const secondaryAction = mine
+    ? `<div class="book-detail-secondary-actions"><button class="btn btn-ghost" type="button" data-action="go-my-library">الانتقال إلى مكتبتي</button><button class="btn btn-ghost" type="button" data-action="remove-book" data-id="${esc(book.id)}">إزالة من مكتبتي</button></div>`
+    : !isGuest() ? `<button class="btn btn-ghost btn-block" type="button" data-action="add-book" data-id="${esc(book.id)}" data-status="want">أضفه إلى قائمة القراءة</button>` : '';
+  const reviewMarkup = ratings.length ? ratings.map((rating) => `
+    <article class="book-review-card">
+      <div class="book-review-head"><strong>${esc(rating.memberName || 'عضو جليس')}</strong><span class="book-review-stars">${'★'.repeat(clamp(Number(rating.rating) || 0, 0, 5))}${'☆'.repeat(5 - clamp(Number(rating.rating) || 0, 0, 5))}</span></div>
+      ${rating.review ? `<p>${esc(rating.review)}</p>` : '<p class="book-review-empty">قيّم الكتاب دون كتابة مراجعة.</p>'}
+    </article>`).join('') : emptyHTML('star', 'لا توجد مراجعات بعد', 'كن أول من يشارك رأيه عن هذا الكتاب.');
+  const quotesMarkup = relatedQuotes.length ? relatedQuotes.map((quote) => `
+    <blockquote class="book-related-quote"><p>«${esc(quote.text)}»</p><footer>${esc(quote.page ? `ص ${quote.page} · ` : '')}${esc(authorNameOf(quote))}</footer></blockquote>`).join('')
+    : emptyHTML('quote', 'لا توجد اقتباسات من هذا الكتاب', 'ستظهر هنا الاقتباسات المرتبطة به.');
 
   openSheet(`
-    ${sheetHead('من مكتبة النادي', book.pick ? 'مختار النادي لهذا الشهر' : '')}
-    <div class="book-sheet-top">
-      <div class="book-sheet-cover" style="background:linear-gradient(150deg, ${book.coverColor || book.c1 || '#1E3A2B'}, ${book.coverColor2 || book.c2 || '#3D5A4C'})">${esc(book.title.charAt(0))}</div>
-      <div class="book-sheet-info">
-        <span class="chip chip-soft">${esc(book.category)}</span>
+    ${sheetHead('تفاصيل الكتاب', book.category || 'من مكتبة جليس')}
+    <section class="book-detail-hero">
+      <div class="book-sheet-cover">${coverHTML(book)}</div>
+      <div class="book-detail-hero-info">
+        <span class="chip chip-soft">${esc(book.category || 'مكتبة جليس')}</span>
         <h2>${esc(book.title)}</h2>
-        <p class="author">${esc(book.author)}</p>
-        <div class="book-sheet-meta">
-          ${book.memberName ? `<span class="lib-added-by"><svg class="ic"><use href="#i-user"/></svg>${esc(book.memberName)}</span>` : ''}
-          <span><svg class="ic"><use href="#i-star"/></svg> ${toAr(book.rating || 0)}</span>
-          <span><svg class="ic"><use href="#i-book"/></svg> ${toAr(book.pages || 0)} صفحة</span>
-          <span><svg class="ic"><use href="#i-calendar"/></svg> ${book.available ? `${toAr(book.available)} نسخة متاحة` : ''}</span>
-        </div>
-        ${book.report ? `<p class="lib-report">${esc(book.report)}</p>` : ''}
-        ${mine ? `<span class="my-status ${mine.status}" style="margin-top:9px">${status}</span>${progress}` : ''}
+        <p class="book-detail-author">${esc(book.author || 'مؤلف غير محدد')}</p>
+        <button class="book-detail-rating" type="button" data-book-panel="reviews" aria-label="عرض التقييمات">
+          <strong>${toAr(average.toFixed(1))}</strong>
+          <span class="book-detail-stars">${'★'.repeat(Math.round(average))}${'☆'.repeat(5 - Math.round(average))}</span>
+          <small>${toAr(ratings.length)} تقييمات ومراجعات</small>
+        </button>
       </div>
+    </section>
+    ${progress}
+    <div class="book-detail-actions">${mainAction}${secondaryAction}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}</div>
+    <div class="book-detail-tabs" role="tablist" aria-label="تفاصيل الكتاب">
+      <button class="active" type="button" data-book-panel="details" role="tab" aria-selected="true">تفاصيل الكتاب</button>
+      <button type="button" data-book-panel="reviews" role="tab" aria-selected="false">تقييمات ومراجعات <span>${toAr(ratings.length)}</span></button>
+      <button type="button" data-book-panel="quotes" role="tab" aria-selected="false">اقتباسات <span>${toAr(relatedQuotes.length)}</span></button>
     </div>
-    <div class="book-sheet-actions">${actions}</div>
-  `);
+    <section class="book-detail-panel active" id="book-detail-details">
+      <div class="book-detail-description">
+        <span>عن الكتاب</span>
+        <p>${esc(book.report || 'لا يتوفر وصف لهذا الكتاب بعد.')}</p>
+      </div>
+      <div class="book-detail-facts">
+        <div><span>المؤلف</span><b>${esc(book.author || '—')}</b></div>
+        <div><span>التصنيف</span><b>${esc(book.category || '—')}</b></div>
+        ${Number(book.pages) > 0 ? `<div><span>عدد الصفحات</span><b>${toAr(book.pages)}</b></div>` : ''}
+        ${book.year || book.publicationYear ? `<div><span>سنة النشر</span><b>${toAr(book.year || book.publicationYear)}</b></div>` : ''}
+        ${book.isbn ? `<div><span>ISBN</span><b>${esc(book.isbn)}</b></div>` : ''}
+      </div>
+    </section>
+    <section class="book-detail-panel" id="book-detail-reviews" hidden>
+      <div class="book-review-summary">
+        <div><strong>${toAr(average.toFixed(1))}</strong><span>${'★'.repeat(Math.round(average))}${'☆'.repeat(5 - Math.round(average))}</span><small>${toAr(ratings.length)} تقييمات</small></div>
+        <div class="book-rating-bars">${ratingCounts.map(({ stars, count }) => `<div><span>${toAr(stars)} ★</span><i><b style="width:${ratings.length ? Math.round(count / ratings.length * 100) : 0}%"></b></i><small>${toAr(count)}</small></div>`).join('')}</div>
+      </div>
+      ${!isGuest() ? `<button class="btn btn-ghost btn-block book-review-add" type="button" data-action="rate-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-star"/></svg> أضف تقييمك ومراجعتك</button>` : ''}
+      <div class="book-reviews-list">${reviewMarkup}</div>
+    </section>
+    <section class="book-detail-panel" id="book-detail-quotes" hidden><div class="book-related-quotes">${quotesMarkup}</div></section>
+  `, (root) => {
+    root.querySelectorAll('[data-book-panel]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const activePanel = button.dataset.bookPanel;
+        root.querySelectorAll('[data-book-panel]').forEach((tab) => {
+          const active = tab === button;
+          tab.classList.toggle('active', active);
+          tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        root.querySelectorAll('.book-detail-panel').forEach((panel) => {
+          panel.hidden = panel.id !== `book-detail-${activePanel}`;
+          panel.classList.toggle('active', !panel.hidden);
+        });
+      });
+    });
+  });
 }
 
 function openQuoteComposer() {
+  const quoteBookOptions = [...new Map(
+    [...BOOKS, ...((state && state.clubBooks) || [])]
+      .filter((book) => book && book.title)
+      .map((book) => [normalizeBookTitle(book.title), book.title])
+  ).values()];
   openSheet(`
     ${sheetHead('اقتبس ما ألهمك', 'جملة واحدة قد تفتح باباً لكتاب كامل.')}
     <form id="quote-form" novalidate>
@@ -2688,7 +2920,7 @@ function openQuoteComposer() {
         <div class="field">
           <label for="quote-book">الكتاب</label>
           <input class="input" id="quote-book" list="quote-books" maxlength="80" placeholder="اسم الكتاب">
-          <datalist id="quote-books">${BOOKS.map((book) => `<option value="${esc(book.title)}"></option>`).join('')}</datalist>
+          <datalist id="quote-books">${quoteBookOptions.map((title) => `<option value="${esc(title)}"></option>`).join('')}</datalist>
         </div>
         <div class="field">
           <label for="quote-page">الصفحة</label>
@@ -2732,6 +2964,11 @@ function openQuoteComposer() {
         id: `q-${Date.now()}`,
         text: value,
         book: book.value.trim() || 'من هامش القراءة',
+        bookId: (() => {
+          const match = [...BOOKS, ...((state && state.clubBooks) || [])]
+            .find((item) => normalizeBookTitle(item.title) === normalizeBookTitle(book.value.trim()));
+          return match ? match.id : '';
+        })(),
         page: page.value.trim(),
         authorId: 'me',
         authorName: state.profile.name,
@@ -3106,6 +3343,12 @@ function openMoreSheet() {
         <div class="more-body"><strong>طلبات الانضمام</strong><p>مراجعة طلبات الزوار</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>` : ''}
+      ${isSupervisor() ? `
+      <button class="more-item" type="button" data-action="open-trash">
+        <span class="more-icon"><svg class="ic"><use href="#i-trash"/></svg></span>
+        <div class="more-body"><strong>سلة المحذوفات</strong><p>استعادة الاقتباسات والكتب والرفوف المحذوفة</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>` : ''}
     </div>`, (root) => {
     root.querySelectorAll('[data-action="club-programs"], [data-action="club-activities"]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -3114,6 +3357,79 @@ function openMoreSheet() {
       });
     });
   });
+}
+
+function renderDeletedItems(root, items) {
+  const list = root.querySelector('#deleted-items-list');
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = emptyHTML('check', 'سلة المحذوفات فارغة', 'العناصر المحذوفة تبقى محفوظة هنا ويمكن استعادتها.');
+    return;
+  }
+  const labels = { quote: 'اقتباس', book: 'كتاب', shelf: 'رف تصنيف' };
+  list.innerHTML = items.map((item) => {
+    const title = item.title || item.id || 'عنصر محذوف';
+    const detail = item.type === 'quote' ? item.text : item.category;
+    const deletedAt = Number(item.deletedAt)
+      ? new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(new Date(Number(item.deletedAt)))
+      : '';
+    const icon = item.type === 'quote' ? 'quote' : item.type === 'book' ? 'book' : 'library';
+    return `
+      <article class="deleted-item-card">
+        <span class="deleted-item-icon"><svg class="ic"><use href="#i-${icon}"/></svg></span>
+        <div class="deleted-item-body">
+          <small>${esc(labels[item.type] || 'عنصر')}</small>
+          <strong>${esc(title)}</strong>
+          ${detail ? `<p>${esc(String(detail).slice(0, 110))}</p>` : ''}
+          <span>${deletedAt ? `حُذف ${esc(deletedAt)}` : ''}${item.deletedBy ? ` · ${esc(item.deletedBy)}` : ''}</span>
+        </div>
+        <button class="btn btn-sm btn-ghost deleted-item-restore" type="button" data-action="restore-deleted" data-type="${esc(item.type)}" data-id="${encodeURIComponent(String(item.id))}">استعادة</button>
+      </article>`;
+  }).join('');
+}
+
+function openTrashSheet() {
+  if (!isSupervisor()) { toast('سلة المحذوفات للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('سلة المحذوفات', 'الحذف هنا قابل للاستعادة ولا يحذف البيانات نهائيًا')}
+    <div id="deleted-items-list" class="deleted-items-list"><p class="deleted-items-loading">جارٍ التحميل…</p></div>`, async (root) => {
+    const result = await cloudRequest('getDeletedItems');
+    if (!root.querySelector('#deleted-items-list')) return;
+    if (!result || result.success !== true || !Array.isArray(result.data)) {
+      root.querySelector('#deleted-items-list').innerHTML = emptyHTML('info', 'تعذر تحميل السلة', 'تحقق من نشر Apps Script المحدّث.');
+      return;
+    }
+    renderDeletedItems(root, result.data);
+  });
+}
+
+async function restoreDeletedItem(type, encodedId) {
+  if (!isSupervisor()) { toast('الاستعادة للمشرفين فقط', 'info'); return; }
+  let id = encodedId || '';
+  try { id = decodeURIComponent(id); } catch (error) {}
+  const actions = { quote: 'restoreQuote', book: 'restoreClubBook', shelf: 'restoreLibraryCategory' };
+  const action = actions[type];
+  if (!action) return;
+  const result = await cloudRequest(action, { id });
+  if (!result || result.success === false) {
+    toast(result && result.error ? result.error : 'تعذرت الاستعادة', 'info');
+    return;
+  }
+
+  if (type === 'quote') {
+    deletedQuoteIds.delete(String(id));
+    await syncQuotesFromSheet();
+    renderQuotes();
+  } else if (type === 'book') {
+    deletedClubBookIds.delete(String(id));
+    await refreshClubBooksFromCloud();
+  } else if (type === 'shelf') {
+    await refreshLibraryCategoriesFromCloud();
+    await refreshClubBooksFromCloud();
+  }
+  renderHome();
+  openTrashSheet();
+  toast('تمت الاستعادة بنجاح', 'check');
 }
 
 function openMeetingSheet(id = '') {
@@ -3667,6 +3983,18 @@ function handleGlobalClick(event) {
       openLibraryCategoryEditor(categoryName);
       break;
     }
+    case 'delete-library-category': {
+      let categoryName = id || '';
+      try { categoryName = decodeURIComponent(categoryName); } catch (error) {}
+      confirmDeleteLibraryCategory(categoryName);
+      break;
+    }
+    case 'open-trash':
+      openTrashSheet();
+      break;
+    case 'restore-deleted':
+      restoreDeletedItem(actionEl.dataset.type, id);
+      break;
     case 'open-add-my-book':
       openAddMyBook();
       break;
@@ -3760,16 +4088,30 @@ function handleGlobalClick(event) {
       if (!q) break;
       openConfirm({
         title: 'حذف الاقتباس',
-        text: `سيُحذف الاقتباس: «${q.text.slice(0, 60)}…»`,
-        confirmLabel: 'حذف',
-        onConfirm: () => {
+        text: `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
+        confirmLabel: 'نقل للسلة',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteQuote', {
+            id: q.id,
+            text: q.text,
+            book_title: q.book || '',
+            page_number: q.page || '',
+            author_name: q.authorName || state.profile.name,
+            deletedBy: currentMember ? currentMember.name : 'مشرف'
+          });
+          if (!result || result.success === false) {
+            toast('تعذر نقل الاقتباس إلى سلة المحذوفات؛ لم نحذفه من الموقع.', 'info');
+            return;
+          }
+          deletedQuoteIds.add(String(q.id));
+          deletedQuoteTexts.add(normalizeName(q.text));
           state.quotes = state.quotes.filter((item) => item.id !== id);
           saveLocalSharedQuotes(state.quotes);
           saveState();
           renderQuotes();
           renderHome();
           updateNavBadges();
-          toast('حُذف الاقتباس', 'trash');
+          toast('نُقل الاقتباس إلى سلة المحذوفات', 'trash');
         }
       });
       break;
@@ -3802,6 +4144,9 @@ function handleGlobalClick(event) {
     case 'quick-add':
     case 'book':
       openBookSheet(id);
+      break;
+    case 'edit-club-book':
+      openEditClubBook(id);
       break;
     case 'add-book':
       addMyBook(id, actionEl.dataset.status || 'reading');
@@ -3908,16 +4253,22 @@ function handleGlobalClick(event) {
       const book = state.clubBooks.find((item) => item.id === id);
       if (!book) break;
       openConfirm({
-        title: 'حذف الكتاب',
-        text: `سيُحذف «${book.title}» من مكتبة النادي.`,
-        confirmLabel: 'حذف',
-        onConfirm: () => {
+        title: 'نقل الكتاب إلى سلة المحذوفات',
+        text: `سيختفي «${book.title}» من مكتبة النادي ويمكن استعادته لاحقًا من سلة المحذوفات.`,
+        confirmLabel: 'نقل للسلة',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteClubBook', { id, deletedBy: currentMember.name });
+          if (!result || result.success === false) {
+            toast('تعذر نقل الكتاب إلى سلة المحذوفات؛ لم نحذفه من الموقع.', 'info');
+            return;
+          }
+          deletedClubBookIds.add(String(id));
           state.clubBooks = state.clubBooks.filter((item) => item.id !== id);
           saveState();
           renderLibrary();
           renderHome();
           updateNavBadges();
-          toast('حُذف الكتاب', 'trash');
+          toast('نُقل الكتاب إلى سلة المحذوفات', 'trash');
         }
       });
       break;

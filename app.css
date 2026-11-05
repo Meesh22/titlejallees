@@ -1214,6 +1214,17 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .recorded-meeting-actions .ic { width:12px; height:12px; }
 .recorded-meeting-delete { width:26px; height:26px; color:var(--clay); }
 .recorded-meeting-unavailable { color:var(--muted-2); font-size:7px; }
+.deleted-items-list { display:grid; gap:8px; }
+.deleted-items-loading { padding:18px 8px; text-align:center; color:var(--muted-2); font-size:10px; }
+.deleted-item-card { display:flex; align-items:center; gap:9px; padding:10px; border:1px solid var(--line); border-radius:13px; background:#fff; }
+.deleted-item-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:10px; color:var(--clay); background:rgba(163,80,59,.08); }
+.deleted-item-icon .ic { width:15px; height:15px; }
+.deleted-item-body { flex:1; min-width:0; }
+.deleted-item-body small { display:block; color:var(--gold-700); font-size:7px; font-weight:800; }
+.deleted-item-body strong { display:block; overflow:hidden; color:var(--green-800); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.deleted-item-body p { margin-top:2px; overflow:hidden; color:var(--muted); font-size:7.5px; text-overflow:ellipsis; white-space:nowrap; }
+.deleted-item-body > span { display:block; margin-top:3px; color:var(--muted-2); font-size:6.5px; }
+.deleted-item-restore { flex:none; min-height:27px; padding:5px 8px; color:var(--green-700); background:var(--green-50); font-size:8px; }
 
 /* اقتباس اليوم */
 .daily-quote {
@@ -1268,7 +1279,9 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .library-category-manager { color:var(--green-700); border:1px solid var(--line); background:rgba(255,255,255,.7); }
 .library-category-manager-list { display:grid; gap:7px; margin-top:12px; }
 .library-category-manager-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--green-800); font-size:11px; font-weight:700; }
+.library-category-manager-actions { display:flex; align-items:center; gap:5px; }
 .library-category-manager-row .icon-btn { width:32px; height:32px; }
+.library-category-manager-row .library-shelf-delete { color:var(--clay); background:rgba(163,80,59,.08); }
 .library-category-add { margin-bottom:10px; }
 .book-shelf-empty { padding:12px 10px; border-radius:12px; background:rgba(255,255,255,.55); color:var(--muted-2); font-size:9px; }
 .book-shelves { display:grid; gap:15px; margin-top:5px; }
@@ -1276,7 +1289,9 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .book-shelf-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px 0 7px; padding:0 2px; }
 .book-shelf-heading h3 { color:var(--green-800); font:700 15px/1.45 var(--serif); }
 .book-shelf-heading p { margin-top:2px; color:var(--muted-2); font-size:8px; }
+.book-shelf-heading-actions { display:flex; align-items:center; gap:5px; }
 .book-shelf-more { display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--paper-2); color:var(--green-700); }
+.book-shelf-edit-category { color:var(--gold-700); background:rgba(197,155,99,.14); }
 .book-shelf-more .ic { width:14px; height:14px; }
 .book-rail {
   display: flex;
@@ -1299,8 +1314,10 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .book-in-my-library { color:var(--green-600); font-size:6.5px; white-space:nowrap; }
 .book-shelf-actions { display:flex; align-items:center; justify-content:space-between; gap:3px; margin-top:4px; }
 .book-shelf-rate { padding:3px 6px; border-radius:7px; background:var(--paper-2); color:var(--green-700); font-size:7px; }
+.book-shelf-edit,.book-shelf-delete { display:grid; place-items:center; width:21px; height:21px; border-radius:6px; }
+.book-shelf-edit { background:var(--green-50); color:var(--green-700); }
 .book-shelf-delete { display:grid; place-items:center; width:21px; height:21px; border-radius:6px; background:rgba(163,80,59,.09); color:var(--clay); }
-.book-shelf-delete .ic { width:11px; height:11px; }
+.book-shelf-edit .ic,.book-shelf-delete .ic { width:11px; height:11px; }
 
 .cover {
   position: relative;
@@ -2195,6 +2212,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   margin-top: 5px;
   padding-top: 4px;
   border-top: 1px solid rgba(30, 58, 43, 0.08);
+  white-space:pre-line;
 }
 
 /* مكتبتي */
@@ -2722,6 +2740,59 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 }
 .book-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 14px; }
 .book-sheet-actions .btn-block { grid-column: 1 / -1; }
+
+/* صفحة تفاصيل الكتاب */
+.book-detail-hero { display:grid; grid-template-columns:106px minmax(0,1fr); align-items:center; gap:15px; padding:4px 2px 14px; }
+.book-sheet-cover { width:100%; }
+.book-sheet-cover .cover { width:100%; box-shadow:0 12px 24px rgba(30,58,43,.2); }
+.book-detail-hero-info { min-width:0; }
+.book-detail-hero-info > .chip { margin-bottom:7px; }
+.book-detail-hero-info h2 { color:var(--green-800); font:700 21px/1.45 var(--serif); }
+.book-detail-author { margin-top:4px; color:var(--muted); font-size:11px; }
+.book-detail-rating { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:10px; color:var(--green-700); text-align:right; }
+.book-detail-rating strong { font-size:15px; font-weight:800; }
+.book-detail-stars { color:#e5aa00; font-size:13px; letter-spacing:1px; white-space:nowrap; }
+.book-detail-rating small { width:100%; color:var(--muted-2); font-size:8px; }
+.book-detail-progress { margin:2px 0 12px; padding:10px 12px; border-radius:13px; background:var(--green-50); color:var(--green-700); font-size:9px; }
+.book-detail-progress > div { display:flex; justify-content:space-between; margin-bottom:7px; }
+.book-detail-progress .progress { display:block; height:5px; overflow:hidden; border-radius:99px; background:rgba(30,58,43,.1); }
+.book-detail-progress .progress > span { display:block; height:100%; border-radius:inherit; background:var(--gold); }
+.book-detail-actions { display:grid; gap:7px; margin:4px 0 15px; }
+.book-detail-actions .btn { min-height:42px; }
+.book-detail-secondary-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.book-detail-tabs { display:flex; gap:5px; overflow-x:auto; padding:0 0 8px; border-bottom:1px solid var(--line); scrollbar-width:none; }
+.book-detail-tabs::-webkit-scrollbar { display:none; }
+.book-detail-tabs button { flex:none; display:flex; align-items:center; gap:4px; padding:8px 10px; border-radius:10px 10px 0 0; color:var(--muted-2); font-size:9px; font-weight:700; }
+.book-detail-tabs button.active { color:var(--green-700); background:var(--green-50); box-shadow:inset 0 -2px var(--gold); }
+.book-detail-tabs button span { display:grid; place-items:center; min-width:17px; height:17px; padding:0 4px; border-radius:99px; background:rgba(30,58,43,.07); font-size:7px; }
+.book-detail-panel { padding:13px 0 2px; }
+.book-detail-description { padding:13px 14px; border-radius:15px; background:#f8f9fa; }
+.book-detail-description > span { color:var(--muted-2); font-size:9px; font-weight:700; }
+.book-detail-description p { margin-top:7px; color:var(--ink); font-size:11px; line-height:1.9; white-space:pre-line; }
+.book-detail-facts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:9px; padding:13px 14px; border-radius:15px; background:#f8f9fa; }
+.book-detail-facts div { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+.book-detail-facts span { color:var(--muted-2); font-size:8px; }
+.book-detail-facts b { color:var(--green-800); font-size:9px; text-align:left; }
+.book-review-summary { display:grid; grid-template-columns:96px minmax(0,1fr); gap:14px; padding:13px; border-radius:15px; background:#f8f9fa; }
+.book-review-summary > div:first-child { display:grid; align-content:center; justify-items:center; gap:4px; border-left:1px solid var(--line); }
+.book-review-summary > div:first-child strong { color:var(--green-800); font-size:24px; line-height:1; }
+.book-review-summary > div:first-child span { color:#e5aa00; font-size:11px; letter-spacing:1px; }
+.book-review-summary > div:first-child small { color:var(--muted-2); font-size:7px; }
+.book-rating-bars { display:grid; gap:5px; align-content:center; }
+.book-rating-bars > div { display:grid; grid-template-columns:30px minmax(0,1fr) 18px; align-items:center; gap:5px; color:var(--muted-2); font-size:7px; }
+.book-rating-bars i { display:block; height:5px; overflow:hidden; border-radius:99px; background:rgba(30,58,43,.1); }
+.book-rating-bars i b { display:block; height:100%; border-radius:inherit; background:#e5aa00; }
+.book-review-add { margin:10px 0; }
+.book-reviews-list,.book-related-quotes { display:grid; gap:8px; margin-top:10px; }
+.book-review-card { padding:12px; border:1px solid var(--line); border-radius:13px; background:#fff; }
+.book-review-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.book-review-head strong { color:var(--green-800); font-size:9px; }
+.book-review-stars { color:#e5aa00; font-size:10px; letter-spacing:1px; }
+.book-review-card p { margin-top:7px; color:var(--muted); font-size:9px; line-height:1.8; white-space:pre-line; }
+.book-review-card .book-review-empty { color:var(--muted-2); font-size:8px; }
+.book-related-quote { padding:12px 14px; border-right:3px solid var(--gold); border-radius:0 12px 12px 0; background:#f8f5ed; }
+.book-related-quote p { color:var(--green-800); font:14px/1.8 var(--serif); }
+.book-related-quote footer { margin-top:5px; color:var(--muted-2); font-size:8px; }
 
 .quote-preview-label {
   display: flex;
