@@ -50,6 +50,7 @@
     <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 22c4 0 6.5-2.6 6.5-6.2 0-2.6-1.5-4.6-3.3-6.4-.6 1.2-1.4 2-2.4 2.3.3-2.7-.8-5.5-3.3-7.7.2 3.4-1.6 4.6-3.1 6.6-1 1.4-1.4 2.8-1.4 4.4C5.5 19.2 8 22 12 22Z"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.6 6.2A9.9 9.9 0 0 1 12 6c6.3 0 9.5 6 9.5 6a17.7 17.7 0 0 1-3.2 3.9M6.4 7.9A17.6 17.6 0 0 0 2.5 12s3.2 6 9.5 6c1.4 0 2.8-.3 4-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></symbol>
     <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -106,6 +107,10 @@
         <section class="gate" id="gate" aria-labelledby="gate-title">
           <div class="gate-glow" aria-hidden="true"></div>
           <div class="gate-ornament" aria-hidden="true"></div>
+          <button class="gate-home" type="button" id="gate-home">
+            <svg class="ic"><use href="#i-home"/></svg>
+            <span>الرئيسية</span>
+          </button>
           <header class="gate-head">
             <div class="brand-lockup brand-lockup-gate">
               <img class="brand-logo brand-logo-md" src="logo.png?v=1" alt="جليس · نادي قرائي ثقافي">
@@ -119,21 +124,26 @@
             <p class="gate-sub">اقرأ لتعيش أكثر من حياة</p>
 
             <div class="gate-card" id="gate-card">
-              <form id="login-form" novalidate>
+              <form id="login-form" hidden novalidate>
                 <div class="gate-card-head">
                   <span class="gate-card-icon"><svg class="ic"><use href="#i-book"/></svg></span>
                   <div>
                     <h2>دخول الأعضاء</h2>
-                    <p>بالبريد الإلكتروني والرمز السري</p>
+                    <p>بالاسم الثلاثي أو البريد الإلكتروني والرمز السري</p>
                   </div>
                 </div>
                 <div class="field">
-                  <label for="login-email">البريد الإلكتروني</label>
-                  <input class="input" id="login-email" name="email" type="email" dir="ltr" inputmode="email" autocomplete="email" placeholder="name@example.com" required>
+                  <label for="login-email">الاسم الثلاثي أو البريد الإلكتروني</label>
+                  <input class="input" id="login-email" name="identifier" type="text" dir="auto" autocomplete="username" placeholder="اكتب اسمك الثلاثي أو بريدك" required>
                 </div>
                 <div class="field">
                   <label for="login-password">الرمز السري</label>
-                  <input class="input" id="login-password" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="••••••" required>
+                  <div class="password-wrap">
+                    <input class="input" id="login-password" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="••••••" required>
+                    <button class="password-toggle" type="button" data-toggle-password="login-password" aria-label="إظهار الرمز السري" aria-pressed="false">
+                      <svg class="ic"><use href="#i-eye"/></svg>
+                    </button>
+                  </div>
                 </div>
                 <p class="form-error" id="login-error" role="alert" hidden></p>
                 <button class="btn btn-gold btn-block" type="submit">
@@ -146,7 +156,7 @@
                 </div>
               </form>
 
-              <form id="register-form" hidden novalidate>
+              <form id="register-form" novalidate>
                 <div class="gate-card-head">
                   <span class="gate-card-icon"><svg class="ic"><use href="#i-user"/></svg></span>
                   <div>
@@ -164,11 +174,21 @@
                 </div>
                 <div class="field">
                   <label for="register-password">الرمز السري</label>
-                  <input class="input" id="register-password" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="٦ أحرف على الأقل" required>
+                  <div class="password-wrap">
+                    <input class="input" id="register-password" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="٨ أحرف على الأقل" minlength="8" required>
+                    <button class="password-toggle" type="button" data-toggle-password="register-password" aria-label="إظهار الرمز السري" aria-pressed="false">
+                      <svg class="ic"><use href="#i-eye"/></svg>
+                    </button>
+                  </div>
                 </div>
                 <div class="field">
                   <label for="register-confirm">تأكيد الرمز</label>
-                  <input class="input" id="register-confirm" name="confirm" type="password" dir="ltr" autocomplete="new-password" placeholder="أعد كتابة الرمز" required>
+                  <div class="password-wrap">
+                    <input class="input" id="register-confirm" name="confirm" type="password" dir="ltr" autocomplete="new-password" placeholder="أعد كتابة الرمز" minlength="8" required>
+                    <button class="password-toggle" type="button" data-toggle-password="register-confirm" aria-label="إظهار الرمز السري" aria-pressed="false">
+                      <svg class="ic"><use href="#i-eye"/></svg>
+                    </button>
+                  </div>
                 </div>
                 <p class="form-error" id="register-error" role="alert" hidden></p>
                 <button class="btn btn-gold btn-block" type="submit">
@@ -176,7 +196,31 @@
                   إنشاء الحساب
                 </button>
                 <div class="gate-links">
-                  <button class="gate-link" type="button" id="register-back">لدي حساب بالفعل</button>
+                  <button class="gate-link" type="button" id="register-back">لدي حساب؟ سجّل الدخول</button>
+                </div>
+              </form>
+
+              <form id="verify-form" hidden novalidate>
+                <div class="gate-card-head">
+                  <span class="gate-card-icon"><svg class="ic"><use href="#i-send"/></svg></span>
+                  <div>
+                    <h2>تأكيد البريد</h2>
+                    <p>أدخل الرمز الذي أرسلناه إلى بريدك</p>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="verify-code">رمز التحقق</label>
+                  <input class="input" id="verify-code" name="code" type="text" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" maxlength="6" required>
+                </div>
+                <p class="field-hint">أرسلنا الرمز إلى <strong id="verify-email" dir="ltr"></strong> — صالح ١٥ دقيقة.</p>
+                <p class="form-error" id="verify-error" role="alert" hidden></p>
+                <button class="btn btn-gold btn-block" type="submit">
+                  <svg class="ic"><use href="#i-check"/></svg>
+                  تأكيد وإنشاء الحساب
+                </button>
+                <div class="gate-links">
+                  <button class="gate-link" type="button" id="verify-back">تغيير البيانات</button>
+                  <button class="gate-link gate-link-strong" type="button" id="verify-resend">إعادة إرسال الرمز</button>
                 </div>
               </form>
 
@@ -213,7 +257,12 @@
                 </div>
                 <div class="field">
                   <label for="reset-password">الرمز السري الجديد</label>
-                  <input class="input" id="reset-password" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="٦ أحرف على الأقل" required>
+                  <div class="password-wrap">
+                    <input class="input" id="reset-password" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="٨ أحرف على الأقل" minlength="8" required>
+                    <button class="password-toggle" type="button" data-toggle-password="reset-password" aria-label="إظهار الرمز السري" aria-pressed="false">
+                      <svg class="ic"><use href="#i-eye"/></svg>
+                    </button>
+                  </div>
                 </div>
                 <p class="form-error" id="reset-error" role="alert" hidden></p>
                 <button class="btn btn-gold btn-block" type="submit">تعيين الرمز والدخول</button>
@@ -221,6 +270,13 @@
                   <button class="gate-link" type="button" id="reset-back">رجوع</button>
                 </div>
               </form>
+              <div class="gate-whatsapp whatsapp-contact">
+                <svg class="ic" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                <div class="whatsapp-body">
+                  <strong>للاستفسار عبر واتساب:</strong>
+                  <a href="https://wa.me/966503980997" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="التواصل عبر واتساب على الرقم 050 398 0997">050 398 0997</a>
+                </div>
+              </div>
             </div>
 
             <div class="gate-proof">
@@ -252,8 +308,7 @@
               <img class="brand-logo brand-logo-sm" src="logo.png?v=1" alt="جليس">
             </button>
             <div class="header-actions">
-              <button class="btn btn-gold" type="button" id="guest-login-btn" data-action="open-gate" hidden>دخول الأعضاء</button>
-              <button class="btn btn-outline-header btn-sm" type="button" id="join-club-btn" data-action="open-join">انضم للنادي</button>
+              <button class="btn btn-gold" type="button" id="guest-login-btn" data-action="open-gate" hidden>التسجيل في النادي/دخول</button>
               <button class="icon-btn" type="button" data-action="notifications" aria-label="التنبيهات">
                 <svg class="ic"><use href="#i-bell"/></svg>
                 <span class="notif-dot"></span>

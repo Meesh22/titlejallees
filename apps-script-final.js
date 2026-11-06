@@ -10,8 +10,8 @@ const MEMBERS_SHEET = 'الأعضاء';
 const OLD_BOOKS_SHEET_ID = 1035156833;
 const SUPERVISOR_NAMES = ['مشعل الحفير', 'مشرف جليس', 'محمد الدبيخي'];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PASSWORD_MIN_LENGTH = 6;
-const PASSWORD_ROUNDS = 200;
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_ROUNDS = 10000;
 const DEFAULT_LIBRARY_CATEGORIES = [
   'أدب', 'إدارة', 'اقتصاد', 'أسرة وطفولة', 'تاريخ', 'تاريخ إسلامي', 'تاريخ سعودي',
   'تربية', 'تنمية ذاتية', 'تراجم', 'تقنية', 'تعليم', 'تفسير وعلوم القرآن', 'ثقافة عامة',
@@ -141,16 +141,169 @@ function normalizePersonName(value) {
     .trim();
 }
 
+function utf8Bytes(text) {
+  const str = String(text);
+  const bytes = [];
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code < 0x80) {
+      bytes.push(code);
+    } else if (code < 0x800) {
+      bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
+      const next = str.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        const point = 0x10000 + ((code - 0xd800) << 10) + (next - 0xdc00);
+        bytes.push(
+          0xf0 | (point >> 18),
+          0x80 | ((point >> 12) & 63),
+          0x80 | ((point >> 6) & 63),
+          0x80 | (point & 63)
+        );
+        i++;
+      } else {
+        bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+      }
+    } else {
+      bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+    }
+  }
+  return bytes;
+}
+
+const SHA256_K = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+];
+
+function sha256Bytes(input) {
+  const bytes = Array.prototype.slice.call(input);
+  const bitLength = bytes.length * 8;
+  const paddedLength = (((bytes.length + 9) + 63) >> 6) << 6;
+  const padded = new Array(paddedLength).fill(0);
+  for (let i = 0; i < bytes.length; i++) padded[i] = bytes[i] & 255;
+  padded[bytes.length] = 0x80;
+
+  const high = Math.floor(bitLength / 0x100000000);
+  const low = bitLength >>> 0;
+  padded[paddedLength - 8] = (high >>> 24) & 255;
+  padded[paddedLength - 7] = (high >>> 16) & 255;
+  padded[paddedLength - 6] = (high >>> 8) & 255;
+  padded[paddedLength - 5] = high & 255;
+  padded[paddedLength - 4] = (low >>> 24) & 255;
+  padded[paddedLength - 3] = (low >>> 16) & 255;
+  padded[paddedLength - 2] = (low >>> 8) & 255;
+  padded[paddedLength - 1] = low & 255;
+
+  const hash = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  ];
+  const words = new Array(64);
+
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let i = 0; i < 16; i++) {
+      const j = offset + i * 4;
+      words[i] = ((padded[j] << 24) | (padded[j + 1] << 16) | (padded[j + 2] << 8) | padded[j + 3]) | 0;
+    }
+    for (let i = 16; i < 64; i++) {
+      const x = words[i - 15];
+      const y = words[i - 2];
+      const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+      const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+      words[i] = (words[i - 16] + s0 + words[i - 7] + s1) | 0;
+    }
+
+    let aa = hash[0];
+    let bb = hash[1];
+    let cc = hash[2];
+    let dd = hash[3];
+    let ee = hash[4];
+    let ff = hash[5];
+    let gg = hash[6];
+    let hh = hash[7];
+
+    for (let i = 0; i < 64; i++) {
+      const S1 = ((ee >>> 6) | (ee << 26)) ^ ((ee >>> 11) | (ee << 21)) ^ ((ee >>> 25) | (ee << 7));
+      const ch = (ee & ff) ^ (~ee & gg);
+      const temp1 = (hh + S1 + ch + SHA256_K[i] + words[i]) | 0;
+      const S0 = ((aa >>> 2) | (aa << 30)) ^ ((aa >>> 13) | (aa << 19)) ^ ((aa >>> 22) | (aa << 10));
+      const maj = (aa & bb) ^ (aa & cc) ^ (bb & cc);
+      const temp2 = (S0 + maj) | 0;
+
+      hh = gg;
+      gg = ff;
+      ff = ee;
+      ee = (dd + temp1) | 0;
+      dd = cc;
+      cc = bb;
+      bb = aa;
+      aa = (temp1 + temp2) | 0;
+    }
+
+    hash[0] = (hash[0] + aa) | 0;
+    hash[1] = (hash[1] + bb) | 0;
+    hash[2] = (hash[2] + cc) | 0;
+    hash[3] = (hash[3] + dd) | 0;
+    hash[4] = (hash[4] + ee) | 0;
+    hash[5] = (hash[5] + ff) | 0;
+    hash[6] = (hash[6] + gg) | 0;
+    hash[7] = (hash[7] + hh) | 0;
+  }
+
+  const out = [];
+  hash.forEach((word) => {
+    out.push((word >>> 24) & 255, (word >>> 16) & 255, (word >>> 8) & 255, word & 255);
+  });
+  return out;
+}
+
+function sha256Hex(text) {
+  return bytesToHex(sha256Bytes(utf8Bytes(text)));
+}
+
+function bytesToHex(bytes) {
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    hex += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16);
+  }
+  return hex;
+}
+
 function hashPassword(password, salt) {
+  let digest = sha256Bytes(utf8Bytes(`${salt}:${password}`));
+  for (let i = 0; i < PASSWORD_ROUNDS; i++) digest = sha256Bytes(digest);
+  return `v2:${bytesToHex(digest)}`;
+}
+
+function legacyHashPassword(password, salt) {
   let bytes = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
     `${salt}:${password}`,
     Utilities.Charset.UTF_8
   );
-  for (let i = 0; i < PASSWORD_ROUNDS; i++) {
+  for (let i = 0; i < 200; i++) {
     bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes);
   }
   return bytes.map((byte) => (byte < 0 ? byte + 256 : byte).toString(16).padStart(2, '0')).join('');
+}
+
+function verifyPassword(password, salt, stored) {
+  const expected = String(stored || '');
+  if (!expected) return false;
+  if (expected.indexOf('v2:') === 0) return hashPassword(password, salt) === expected;
+  return legacyHashPassword(password, salt) === expected;
+}
+
+function isLegacyPasswordHash(stored) {
+  const text = String(stored || '');
+  return Boolean(text) && text.indexOf('v2:') !== 0;
 }
 
 function getMembersSheet(ss) {
@@ -176,6 +329,19 @@ function findMemberRow(sheet, email) {
   return -1;
 }
 
+function findMemberRowsByName(sheet, name) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const target = normalizePersonName(name);
+  if (!target) return [];
+  const rows = sheet.getRange(2, 2, lastRow - 1, 1).getDisplayValues();
+  const matches = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (normalizePersonName(rows[i][0]) === target) matches.push(i + 2);
+  }
+  return matches;
+}
+
 function memberRecord(values) {
   return {
     id: String(values[0] || ''),
@@ -184,6 +350,42 @@ function memberRecord(values) {
     role: String(values[5] || 'member'),
     status: String(values[6] || 'active')
   };
+}
+
+/* ---- طلبات التسجيل المنتظرة لتأكيد البريد ---- */
+function pendingRegistrationKey(email) {
+  return `pending-registration:${normalizeEmail(email)}`;
+}
+
+function readPendingRegistration(email) {
+  const raw = PropertiesService.getScriptProperties().getProperty(pendingRegistrationKey(email));
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (error) { return null; }
+}
+
+function savePendingRegistration(record) {
+  PropertiesService.getScriptProperties().setProperty(
+    pendingRegistrationKey(record.email),
+    JSON.stringify(record)
+  );
+}
+
+function clearPendingRegistration(email) {
+  PropertiesService.getScriptProperties().deleteProperty(pendingRegistrationKey(email));
+}
+
+function sendCodeEmail(email, name, code, subject, intro) {
+  MailApp.sendEmail({
+    to: email,
+    subject,
+    htmlBody: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
+      <h2 style="margin:0 0 12px">مساحة أعضاء جليس</h2>
+      <p>مرحبًا ${name}،</p>
+      <p>${intro}</p>
+      <p style="font-size:32px;letter-spacing:10px;font-weight:bold;color:#8C532D">${code}</p>
+      <p>الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلبه فتجاهل هذه الرسالة.</p>
+    </div>`
+  });
 }
 
 function getBookRatingsSheet(ss) {
@@ -379,7 +581,7 @@ function doPost(e) {
       return output({ success: true, message: 'تم حفظ طلب الانضمام' });
     }
 
-    if (action === 'registerMember') {
+    if (action === 'requestRegistrationCode') {
       const sheet = getMembersSheet(ss);
       const name = String(data.name || '').replace(/\s+/g, ' ').trim();
       const email = normalizeEmail(data.email);
@@ -396,36 +598,120 @@ function doPost(e) {
         throw new Error('هذا البريد مسجل مسبقًا، جرّب الدخول أو استعادة الرمز');
       }
 
-      const salt = Utilities.getUuid();
+      const previous = readPendingRegistration(email);
+      if (previous && previous.sentAt && Date.now() - Number(previous.sentAt) < 60000) {
+        throw new Error('انتظر دقيقة قبل طلب رمز جديد');
+      }
+
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const codeSalt = Utilities.getUuid();
+      const passwordSalt = Utilities.getUuid();
+      savePendingRegistration({
+        name,
+        email,
+        passwordHash: hashPassword(password, passwordSalt),
+        passwordSalt,
+        codeHash: hashPassword(code, codeSalt),
+        codeSalt,
+        expiry: Date.now() + 15 * 60 * 1000,
+        sentAt: Date.now(),
+        attempts: 0
+      });
+
+      try {
+        sendCodeEmail(
+          email, name, code,
+          'جليس | رمز تأكيد بريدك',
+          'رمز تأكيد بريدك لإنشاء حسابك في جليس هو:'
+        );
+      } catch (mailError) {
+        clearPendingRegistration(email);
+        throw new Error('تعذر إرسال البريد، حاول مرة أخرى بعد قليل');
+      }
+
+      return output({ success: true, message: 'أرسلنا رمز التحقق إلى بريدك' });
+    }
+
+    if (action === 'verifyRegistrationCode') {
+      const sheet = getMembersSheet(ss);
+      const email = normalizeEmail(data.email);
+      const code = String(data.code || '').trim();
+
+      if (!/^\d{6}$/.test(code)) throw new Error('رمز التحقق ستة أرقام');
+
+      const record = readPendingRegistration(email);
+      if (!record) throw new Error('لا يوجد طلب تسجيل لهذا البريد، أعد التسجيل');
+
+      if (!record.expiry || Date.now() > Number(record.expiry)) {
+        clearPendingRegistration(email);
+        throw new Error('انتهت صلاحية الرمز، أعد التسجيل لطلب رمز جديد');
+      }
+      if (findMemberRow(sheet, email) > 0) {
+        clearPendingRegistration(email);
+        throw new Error('هذا البريد مسجل مسبقًا، يمكنك الدخول الآن');
+      }
+      if (!verifyPassword(code, record.codeSalt, record.codeHash)) {
+        record.attempts = (Number(record.attempts) || 0) + 1;
+        if (record.attempts >= 6) {
+          clearPendingRegistration(email);
+          throw new Error('تجاوزت عدد المحاولات، أعد التسجيل لطلب رمز جديد');
+        }
+        savePendingRegistration(record);
+        throw new Error('رمز التحقق غير صحيح');
+      }
+
       const id = `u-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
-      const role = SUPERVISOR_NAMES.some((item) => normalizePersonName(item) === normalizePersonName(name))
+      const role = SUPERVISOR_NAMES.some((item) => normalizePersonName(item) === normalizePersonName(record.name))
         ? 'supervisor'
         : 'member';
       sheet.appendRow([
-        id, name, email, hashPassword(password, salt), salt, role,
-        'active', Date.now(), '', '', ''
+        id, record.name, email, record.passwordHash, record.passwordSalt, role,
+        'active', Date.now(), Date.now(), '', ''
       ]);
+      clearPendingRegistration(email);
       return output({
         success: true,
-        message: 'تم إنشاء الحساب',
-        member: { id, name, email, role, status: 'active' }
+        message: 'تم تأكيد بريدك وإنشاء الحساب',
+        member: { id, name: record.name, email, role, status: 'active' }
       });
+    }
+
+    if (action === 'registerMember') {
+      throw new Error('حدّثنا نظام التسجيل، أعد تحميل الصفحة ثم أنشئ الحساب من جديد');
     }
 
     if (action === 'loginMember') {
       const sheet = getMembersSheet(ss);
-      const email = normalizeEmail(data.email);
+      const identifier = String(data.identifier || data.email || '').trim();
       const password = String(data.password || '');
-      const row = findMemberRow(sheet, email);
-      if (row < 0) throw new Error('البريد الإلكتروني أو الرمز غير صحيح');
+      let row = -1;
+      if (identifier.indexOf('@') >= 0) {
+        row = findMemberRow(sheet, identifier);
+      } else {
+        if (identifier.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length < 3) {
+          throw new Error('أدخل الاسم الثلاثي أو البريد الإلكتروني');
+        }
+        const nameRows = findMemberRowsByName(sheet, identifier);
+        if (nameRows.length > 1) {
+          throw new Error('يوجد أكثر من عضو بهذا الاسم، استخدم البريد الإلكتروني للدخول');
+        }
+        if (nameRows.length === 1) row = nameRows[0];
+      }
+      if (row < 0) throw new Error('الاسم أو البريد الإلكتروني أو الرمز غير صحيح');
 
       const values = sheet.getRange(row, 1, 1, 11).getValues()[0];
       const status = String(values[6] || 'active');
       if (status !== 'active') throw new Error('حسابك بانتظار موافقة المشرف');
 
       const expected = String(values[3] || '');
-      const actual = hashPassword(password, String(values[4] || ''));
-      if (!expected || expected !== actual) throw new Error('البريد الإلكتروني أو الرمز غير صحيح');
+      const salt = String(values[4] || '');
+      if (!verifyPassword(password, salt, expected)) {
+        throw new Error('الاسم أو البريد الإلكتروني أو الرمز غير صحيح');
+      }
+      if (isLegacyPasswordHash(expected)) {
+        const newSalt = Utilities.getUuid();
+        sheet.getRange(row, 4, 1, 2).setValues([[hashPassword(password, newSalt), newSalt]]);
+      }
 
       sheet.getRange(row, 9).setValue(Date.now());
       return output({ success: true, member: memberRecord(values) });
@@ -438,22 +724,19 @@ function doPost(e) {
 
       if (row > 0) {
         const code = String(Math.floor(100000 + Math.random() * 900000));
-        const salt = Utilities.getUuid();
+        const codeSalt = Utilities.getUuid();
         const expiry = Date.now() + 15 * 60 * 1000;
         const name = String(sheet.getRange(row, 2).getValue() || 'عضو جليس');
-        sheet.getRange(row, 10, 1, 2).setValues([[`${hashPassword(code, salt)}:${salt}`, expiry]]);
+        sheet.getRange(row, 10, 1, 2).setValues([[
+          JSON.stringify({ hash: hashPassword(code, codeSalt), salt: codeSalt }),
+          expiry
+        ]]);
         try {
-          MailApp.sendEmail({
-            to: email,
-            subject: 'جليس | رمز استعادة الرمز السري',
-            htmlBody: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
-              <h2 style="margin:0 0 12px">مساحة أعضاء جليس</h2>
-              <p>مرحبًا ${name}،</p>
-              <p>رمز استعادة الرمز السري الخاص بك هو:</p>
-              <p style="font-size:32px;letter-spacing:10px;font-weight:bold;color:#8C532D">${code}</p>
-              <p>الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلبه فتجاهل هذه الرسالة.</p>
-            </div>`
-          });
+          sendCodeEmail(
+            email, name, code,
+            'جليس | رمز استعادة الرمز السري',
+            'رمز استعادة الرمز السري الخاص بك هو:'
+          );
         } catch (mailError) {
           console.error('MailApp error:', mailError);
         }
@@ -477,10 +760,17 @@ function doPost(e) {
       if (!stored || !expiry || Date.now() > expiry) {
         throw new Error('انتهت صلاحية الرمز، اطلب رمزًا جديدًا');
       }
-      const parts = stored.split(':');
-      if (parts.length !== 2 || hashPassword(code, parts[1]) !== parts[0]) {
-        throw new Error('رمز التحقق غير صحيح');
+
+      let valid = false;
+      let parsed = null;
+      try { parsed = JSON.parse(stored); } catch (error) { parsed = null; }
+      if (parsed && parsed.hash && parsed.salt) {
+        valid = verifyPassword(code, parsed.salt, parsed.hash);
+      } else {
+        const parts = stored.split(':');
+        if (parts.length === 2) valid = verifyPassword(code, parts[1], parts[0]);
       }
+      if (!valid) throw new Error('رمز التحقق غير صحيح');
 
       const salt = Utilities.getUuid();
       sheet.getRange(row, 4, 1, 2).setValues([[hashPassword(password, salt), salt]]);

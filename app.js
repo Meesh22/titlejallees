@@ -301,6 +301,7 @@ function isSupervisor() {
 
 /* ---- حساب العضو: البريد الإلكتروني + الرمز السري ---- */
 let pendingResetEmail = '';
+let pendingRegister = null;
 
 function readAccount() {
   try {
@@ -363,14 +364,49 @@ async function completeLogin(account) {
   enterApp(true);
 }
 
+function resetPasswordToggles() {
+  $$('.password-toggle').forEach((button) => {
+    const input = document.getElementById(button.dataset.togglePassword);
+    if (!input) return;
+    input.type = 'password';
+    button.classList.remove('is-on');
+    button.setAttribute('aria-pressed', 'false');
+    button.setAttribute('aria-label', 'إظهار الرمز السري');
+    const use = button.querySelector('use');
+    if (use) use.setAttribute('href', '#i-eye');
+  });
+}
+
+function bindPasswordToggles() {
+  $$('.password-toggle').forEach((button) => {
+    button.addEventListener('click', () => {
+      const input = document.getElementById(button.dataset.togglePassword);
+      if (!input) return;
+      const reveal = input.type === 'password';
+      input.type = reveal ? 'text' : 'password';
+      button.classList.toggle('is-on', reveal);
+      button.setAttribute('aria-pressed', String(reveal));
+      button.setAttribute('aria-label', reveal ? 'إخفاء الرمز السري' : 'إظهار الرمز السري');
+      const use = button.querySelector('use');
+      if (use) use.setAttribute('href', reveal ? '#i-eye-off' : '#i-eye');
+      try {
+        input.focus({ preventScroll: true });
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      } catch (error) { /* تجاهل المتصفحات التي لا تدعم التحديد */ }
+    });
+  });
+}
+
 function showGateView(view) {
-  const names = ['login', 'register', 'forgot', 'reset'];
+  const names = ['login', 'register', 'verify', 'forgot', 'reset'];
   names.forEach((name) => {
     const form = document.getElementById(`${name}-form`);
     if (form) form.hidden = name !== view;
     const error = document.getElementById(`${name}-error`);
     if (error) error.hidden = true;
   });
+  resetPasswordToggles();
   const firstInput = document.querySelector(`#${view}-form input`);
   if (firstInput) setTimeout(() => { try { firstInput.focus(); } catch (error) { /* تجاهل */ } }, 60);
 }
@@ -562,6 +598,7 @@ async function cloudRequest(action, data = null, memberId = null) {
   try {
     const endpoint = action === 'getClubBooks' || action === 'saveClubBook' || action === 'updateClubBook'
       || action === 'registerMember' || action === 'loginMember'
+      || action === 'requestRegistrationCode' || action === 'verifyRegistrationCode'
       || action === 'requestPasswordReset' || action === 'resetPassword'
       || action === 'getQuotes' || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle' || action === 'restoreArticle'
       || action === 'deleteClubBook' || action === 'deleteQuote' || action === 'restoreClubBook' || action === 'restoreQuote'
@@ -3845,21 +3882,22 @@ async function setSessionMember(member) {
   await saveState();
 }
 
-function showGate() {
+function showGate(view = 'register') {
   closeSheet();
   try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
   persistAccount(null);
   pendingResetEmail = '';
+  pendingRegister = null;
   currentMember = null;
   state = null;
   $('#gate').hidden = false;
   $('#shell').hidden = true;
   ['login-email', 'login-password', 'register-name', 'register-email', 'register-password',
-    'register-confirm', 'forgot-email', 'reset-code', 'reset-password'].forEach((id) => {
+    'register-confirm', 'verify-code', 'forgot-email', 'reset-code', 'reset-password'].forEach((id) => {
     const input = document.getElementById(id);
     if (input) input.value = '';
   });
-  showGateView('login');
+  showGateView(view);
   currentScreen = 'home';
   hideSplash();
 }
@@ -3876,6 +3914,30 @@ function applyGuestVisibility() {
   if (goalCard) goalCard.style.display = isGuest ? 'none' : '';
   const categoryManager = document.getElementById('manage-library-categories-btn');
   if (categoryManager) categoryManager.hidden = !isSupervisor();
+}
+
+function showPublicHome() {
+  pendingRegister = null;
+  pendingResetEmail = '';
+  try {
+    localStorage.removeItem(ACCOUNT_KEY);
+    localStorage.removeItem(SESSION_KEY);
+  } catch (error) { /* تجاهل */ }
+
+  currentMember = { id: 'guest', name: 'زائر', role: 'زائر', lastWeek: 0, color: '#1E3A2B' };
+  const base = createInitialState(null);
+  state = {
+    ...base,
+    memberId: 'guest',
+    profile: { ...base.profile, name: 'زائر', role: 'زائر' },
+    quotes: getLocalSharedQuotes(),
+    articles: ARTICLE_SEED.map((article) => ({ ...article })),
+    seenQuotes: getLocalSharedQuotes().length,
+    seenArticles: ARTICLE_SEED.length,
+    seenClubBooks: 0
+  };
+  enterApp(false);
+  try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
 }
 
 function hideSplash() {
@@ -3917,16 +3979,11 @@ function enterApp(welcome = false) {
   applyGuestVisibility();
   setTimeout(hideSplash, 2500);
   go('home');
-  /* إظهار زر «دخول الأعضاء» و«انضم للنادي» فقط في وضع الزائر */
+  /* إظهار زر «التسجيل في النادي/دخول» فقط في وضع الزائر */
   const guestBtn = $('#guest-login-btn');
   if (guestBtn) {
     guestBtn.hidden = !(currentMember && currentMember.id === 'guest');
     guestBtn.style.display = (currentMember && currentMember.id === 'guest') ? '' : 'none';
-  }
-  const joinBtn = $('#join-club-btn');
-  if (joinBtn) {
-    joinBtn.hidden = !(currentMember && currentMember.id === 'guest');
-    joinBtn.style.display = (currentMember && currentMember.id === 'guest') ? '' : 'none';
   }
   /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
@@ -4169,7 +4226,7 @@ function handleGlobalClick(event) {
         confirmLabel: 'خروج',
         onConfirm: () => {
           try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
-          showGate();
+          showGate('login');
         }
       });
       break;
@@ -4505,15 +4562,24 @@ function handleLogSubmit(event) {
 }
 
 async function init() {
+  bindPasswordToggles();
+
   $('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const email = $('#login-email').value.trim();
+    const identifier = $('#login-email').value.replace(/\s+/g, ' ').trim();
     const password = $('#login-password').value;
     const error = $('#login-error');
     const submitBtn = event.target.querySelector('button[type="submit"]');
 
-    if (!email || !password) {
-      error.textContent = 'أدخل البريد الإلكتروني والرمز السري.';
+    if (!identifier || !password) {
+      error.textContent = 'أدخل اسمك الثلاثي أو بريدك الإلكتروني والرمز السري.';
+      error.hidden = false;
+      return;
+    }
+    if (identifier.includes('@')
+      ? !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(identifier)
+      : identifier.split(' ').filter(Boolean).length < 3) {
+      error.textContent = 'أدخل اسمك الثلاثي أو بريدًا إلكترونيًا صحيحًا.';
       error.hidden = false;
       return;
     }
@@ -4521,9 +4587,9 @@ async function init() {
     error.hidden = true;
     setBtnBusy(submitBtn, true, 'جارٍ الدخول…');
     try {
-      const result = await cloudRequest('loginMember', { email, password });
+      const result = await cloudRequest('loginMember', { identifier, password });
       if (!result || result.success !== true || !result.member) {
-        error.textContent = cleanServerError(result, 'تعذر الدخول، تحقق من البريد والرمز.');
+        error.textContent = cleanServerError(result, 'تعذر الدخول، تحقق من الاسم أو البريد والرمز.');
         error.hidden = false;
         return;
       }
@@ -4545,19 +4611,56 @@ async function init() {
 
     if (name.split(' ').filter(Boolean).length < 3) return fail('اكتب الاسم الثلاثي كما في الهوية.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return fail('صيغة البريد الإلكتروني غير صحيحة.');
-    if (password.length < 6) return fail('الرمز السري يجب أن يكون ٦ أحرف أو أكثر.');
+    if (password.length < 8) return fail('الرمز السري يجب أن يكون ٨ أحرف أو أكثر.');
     if (password !== confirm) return fail('الرمزان غير متطابقين.');
 
     error.hidden = true;
-    setBtnBusy(submitBtn, true, 'جارٍ إنشاء الحساب…');
+    setBtnBusy(submitBtn, true, 'جارٍ إرسال الرمز…');
     try {
-      const result = await cloudRequest('registerMember', { name, email, password });
-      if (!result || result.success !== true || !result.member) {
-        fail(cleanServerError(result, 'تعذر إنشاء الحساب، حاول مرة أخرى.'));
+      const result = await cloudRequest('requestRegistrationCode', { name, email, password });
+      if (!result || result.success !== true) {
+        fail(cleanServerError(result, 'تعذر إرسال رمز التحقق، حاول مرة أخرى.'));
         return;
       }
+      pendingRegister = { name, email, password };
+      $('#verify-code').value = '';
+      $('#verify-email').textContent = email;
+      showGateView('verify');
+      toast('أرسلنا رمز التحقق إلى بريدك', 'send');
+    } finally {
+      setBtnBusy(submitBtn, false);
+    }
+  });
+
+  $('#verify-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const code = $('#verify-code').value.trim();
+    const error = $('#verify-error');
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+
+    if (!pendingRegister) { showGateView('register'); return; }
+    if (!/^\d{6}$/.test(code)) {
+      error.textContent = 'رمز التحقق ستة أرقام.';
+      error.hidden = false;
+      return;
+    }
+
+    error.hidden = true;
+    setBtnBusy(submitBtn, true, 'جارٍ التأكيد…');
+    try {
+      const result = await cloudRequest('verifyRegistrationCode', {
+        email: pendingRegister.email,
+        code
+      });
+      if (!result || result.success !== true || !result.member) {
+        error.textContent = cleanServerError(result, 'رمز التحقق غير صحيح.');
+        error.hidden = false;
+        return;
+      }
+      const name = pendingRegister.name;
+      pendingRegister = null;
       await completeLogin(result.member);
-      toast('تم إنشاء حسابك، أهلاً بك في جليس', 'check');
+      toast(`تم تأكيد بريدك، أهلاً بك ${name}`, 'check');
     } finally {
       setBtnBusy(submitBtn, false);
     }
@@ -4607,8 +4710,8 @@ async function init() {
       error.hidden = false;
       return;
     }
-    if (password.length < 6) {
-      error.textContent = 'الرمز السري يجب أن يكون ٦ أحرف أو أكثر.';
+    if (password.length < 8) {
+      error.textContent = 'الرمز السري يجب أن يكون ٨ أحرف أو أكثر.';
       error.hidden = false;
       return;
     }
@@ -4641,10 +4744,43 @@ async function init() {
   if (goRegister) goRegister.addEventListener('click', () => { $('#register-error').hidden = true; showGateView('register'); });
   const registerBack = document.getElementById('register-back');
   if (registerBack) registerBack.addEventListener('click', () => showGateView('login'));
+
+  const gateHome = document.getElementById('gate-home');
+  if (gateHome) gateHome.addEventListener('click', showPublicHome);
+
+  const verifyBack = document.getElementById('verify-back');
+  if (verifyBack) verifyBack.addEventListener('click', () => showGateView('register'));
+
+  const verifyResend = document.getElementById('verify-resend');
+  if (verifyResend) {
+    verifyResend.addEventListener('click', async () => {
+      const error = $('#verify-error');
+      if (!pendingRegister) { showGateView('register'); return; }
+      error.hidden = true;
+      setBtnBusy(verifyResend, true, 'جارٍ الإرسال…');
+      try {
+        const result = await cloudRequest('requestRegistrationCode', {
+          name: pendingRegister.name,
+          email: pendingRegister.email,
+          password: pendingRegister.password
+        });
+        if (!result || result.success !== true) {
+          error.textContent = cleanServerError(result, 'تعذر إعادة الإرسال، حاول بعد قليل.');
+          error.hidden = false;
+          return;
+        }
+        $('#verify-code').value = '';
+        $('#verify-code').focus();
+        toast('أعدنا إرسال الرمز إلى بريدك', 'send');
+      } finally {
+        setBtnBusy(verifyResend, false);
+      }
+    });
+  }
   const goForgot = document.getElementById('go-forgot');
   if (goForgot) goForgot.addEventListener('click', () => {
     const typed = $('#login-email').value.trim();
-    if (typed) $('#forgot-email').value = typed;
+    $('#forgot-email').value = typed.includes('@') ? typed : '';
     showGateView('forgot');
   });
   const forgotBack = document.getElementById('forgot-back');

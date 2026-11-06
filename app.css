@@ -713,6 +713,29 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 }
 .gate::-webkit-scrollbar { display: none; }
 
+.gate-home {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border: 1px solid rgba(248, 245, 238, 0.24);
+  border-radius: 999px;
+  background: rgba(248, 245, 238, 0.08);
+  color: var(--paper);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.gate-home:hover { background: rgba(248, 245, 238, 0.16); border-color: rgba(248, 245, 238, 0.45); }
+.gate-home .ic { width: 14px; height: 14px; }
+.gate-whatsapp { margin: 12px 0 0; }
+.gate-whatsapp .whatsapp-body strong { color: var(--green-700); }
+
 .gate-glow {
   position: absolute;
   top: -80px;
@@ -948,6 +971,31 @@ select.input {
   padding-left: 32px;
 }
 textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
+
+/* زر إظهار/إخفاء الرمز السري */
+.password-wrap { position: relative; display: flex; }
+.password-wrap .input { padding-right: 42px; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.password-toggle:hover { color: var(--green-700); background: var(--green-50); }
+.password-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.password-toggle.is-on { color: var(--gold-700); }
+.password-toggle .ic { width: 16px; height: 16px; }
 
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
