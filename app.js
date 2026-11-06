@@ -53,6 +53,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
    1. الثوابت والبيانات الأساسية
    -------------------------------------------------------------------------- */
 const SESSION_KEY = 'jalees-session-v2';
+const ACCOUNT_KEY = 'jalees-account-v1';
 const MEMBER_KEY_PREFIX = 'jalees-member-v2:';
 const LEGACY_KEY = 'jalees-members-v1';
 const CLUB_GOAL = 12000;
@@ -63,6 +64,8 @@ const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
 let deletedQuoteTexts = new Set();
 let deletedClubBookIds = new Set();
+let deletedArticleIds = new Set();
+let deletedRecordedMeetingIds = new Set();
 const DEFAULT_MEETING = {
   id: 'meeting-default',
   title: 'مناقشة كتاب: ابني حبيبي',
@@ -292,7 +295,84 @@ function isGuest() { return !currentMember || currentMember.id === 'guest'; }
 
 function isSupervisor() {
   if (!currentMember) return false;
+  if (currentMember.role === 'مشرف') return true;
   return SUPERVISORS.some((name) => normalizeName(name) === normalizeName(currentMember.name));
+}
+
+/* ---- حساب العضو: البريد الإلكتروني + الرمز السري ---- */
+let pendingResetEmail = '';
+
+function readAccount() {
+  try {
+    const raw = localStorage.getItem(ACCOUNT_KEY);
+    if (!raw) return null;
+    const account = JSON.parse(raw);
+    return account && account.id ? account : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function persistAccount(account) {
+  try {
+    if (account) localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
+    else localStorage.removeItem(ACCOUNT_KEY);
+  } catch (error) {
+    /* التخزين غير متاح */
+  }
+}
+
+function accountToMember(account) {
+  const name = String((account && account.name) || 'عضو جليس');
+  return {
+    id: String(account.id),
+    name,
+    role: account.role === 'supervisor' ? 'مشرف' : 'عضو',
+    email: String(account.email || ''),
+    pages: 0,
+    lastWeek: 0,
+    color: MEMBER_COLORS[Math.abs(name.length) % MEMBER_COLORS.length]
+  };
+}
+
+function cleanServerError(result, fallback) {
+  const raw = result && (result.error || result.message);
+  const text = String(raw || '').replace(/^Error:\s*/i, '').trim();
+  return text || fallback;
+}
+
+function setBtnBusy(button, busy, label) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.idleLabel = button.innerHTML;
+    button.disabled = true;
+    if (label) button.textContent = label;
+  } else {
+    button.disabled = false;
+    if (button.dataset.idleLabel) {
+      button.innerHTML = button.dataset.idleLabel;
+      delete button.dataset.idleLabel;
+    }
+  }
+}
+
+async function completeLogin(account) {
+  persistAccount(account);
+  const member = accountToMember(account);
+  await setSessionMember(member);
+  enterApp(true);
+}
+
+function showGateView(view) {
+  const names = ['login', 'register', 'forgot', 'reset'];
+  names.forEach((name) => {
+    const form = document.getElementById(`${name}-form`);
+    if (form) form.hidden = name !== view;
+    const error = document.getElementById(`${name}-error`);
+    if (error) error.hidden = true;
+  });
+  const firstInput = document.querySelector(`#${view}-form input`);
+  if (firstInput) setTimeout(() => { try { firstInput.focus(); } catch (error) { /* تجاهل */ } }, 60);
 }
 
 const seedAuthor = (id) => {
@@ -478,15 +558,17 @@ const stateKey = (id) => `${MEMBER_KEY_PREFIX}${id}`;
    ============================================================================ */
 async function cloudRequest(action, data = null, memberId = null) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const endpoint = action === 'getClubBooks' || action === 'saveClubBook' || action === 'updateClubBook'
-      || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle'
+      || action === 'registerMember' || action === 'loginMember'
+      || action === 'requestPasswordReset' || action === 'resetPassword'
+      || action === 'getQuotes' || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle' || action === 'restoreArticle'
       || action === 'deleteClubBook' || action === 'deleteQuote' || action === 'restoreClubBook' || action === 'restoreQuote'
       || action === 'getDeletedItems' || action === 'restoreLibraryCategory' || action === 'deleteLibraryCategory'
       || action === 'getBookRatings' || action === 'saveBookRating'
       || action === 'getMeetings' || action === 'saveMeeting' || action === 'deleteMeeting'
-      || action === 'getRecordedMeetings' || action === 'saveRecordedMeeting' || action === 'deleteRecordedMeeting'
+      || action === 'getRecordedMeetings' || action === 'saveRecordedMeeting' || action === 'deleteRecordedMeeting' || action === 'restoreRecordedMeeting'
       || action === 'getLibraryCategories' || action === 'addLibraryCategory' || action === 'renameLibraryCategory'
       ? CLUB_BOOKS_URL
       : APPS_SCRIPT_URL;
@@ -758,7 +840,11 @@ async function refreshClubBooksFromCloud() {
   (state.clubBooks || []).forEach((book) => { if (book && book.id) merged.set(book.id, book); });
   cloudBooks.forEach((book) => {
     if (!book || !book.id) return;
-    merged.set(book.id, { ...merged.get(book.id), ...book });
+    const localBook = merged.get(book.id) || {};
+    const nextBook = { ...localBook, ...book };
+    /* حافظ على سنة النشر المحلية إن كانت النسخة السحابية القديمة لا تحتوي العمود بعد */
+    if (!book.year && localBook.year) nextBook.year = localBook.year;
+    merged.set(book.id, nextBook);
     if (member.id !== 'guest') syncState.clubBooks.add(book.id);
   });
   deletedClubBookIds.forEach((id) => merged.delete(String(id)));
@@ -893,6 +979,9 @@ async function loadQuotesFromCloud(memberId) {
 
 async function loadArticlesFromCloud(memberId) {
   const result = await cloudRequest('getArticles', null, memberId);
+  if (result && result.success === true) {
+    deletedArticleIds = new Set((result.deletedIds || []).map(String));
+  }
   return result && result.success === true && Array.isArray(result.data) ? result.data : null;
 }
 
@@ -965,6 +1054,8 @@ async function refreshArticlesFromCloud() {
     // otherwise it was deleted from cloud -> drop it
   });
 
+  deletedArticleIds.forEach((id) => merged.delete(String(id)));
+
   /* Sort newest first */
   state.articles = [...merged.values()].sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0));
   if (state.articles.length === 0) state.articles = ARTICLE_SEED.map((a) => ({ ...a }));
@@ -1018,6 +1109,9 @@ async function saveMeetingToCloud(meeting) {
 
 async function loadRecordedMeetingsFromCloud() {
   const result = await cloudRequest('getRecordedMeetings');
+  if (result && result.success === true) {
+    deletedRecordedMeetingIds = new Set((result.deletedIds || []).map(String));
+  }
   return result && result.success === true && Array.isArray(result.data) ? result.data : null;
 }
 
@@ -1086,8 +1180,9 @@ function openMeetingArchiveSheet() {
       if (!cloudMeetings || !root.querySelector('#recorded-meetings-list')) return;
       const byId = new Map(cloudMeetings.filter((item) => item && item.id).map((item) => [String(item.id), item]));
       (state.recordedMeetings || []).forEach((item) => {
-        if (item && item.id && !byId.has(String(item.id))) byId.set(String(item.id), item);
+        if (item && item.id && !byId.has(String(item.id)) && !deletedRecordedMeetingIds.has(String(item.id))) byId.set(String(item.id), item);
       });
+      deletedRecordedMeetingIds.forEach((id) => byId.delete(String(id)));
       state.recordedMeetings = [...byId.values()].sort((a, b) => recordedMeetingTimestamp(b) - recordedMeetingTimestamp(a));
       if (currentMember && currentMember.id !== 'guest') await saveState();
       renderRecordedMeetings(root, state.recordedMeetings);
@@ -1195,15 +1290,23 @@ function confirmDeleteRecordedMeeting(id) {
   const record = (state.recordedMeetings || []).find((item) => String(item.id) === String(id));
   if (!record) return;
   openConfirm({
-    title: 'حذف اللقاء المسجل',
-    text: `سيُحذف تسجيل «${record.title}» من أرشيف اللقاءات.`,
-    confirmLabel: 'حذف',
+    title: 'نقل اللقاء المسجل إلى سلة المحذوفات',
+    text: `سيختفي تسجيل «${record.title}» من الأرشيف ويمكن استعادته لاحقًا.`,
+    confirmLabel: 'نقل للسلة',
     onConfirm: async () => {
+      const result = await cloudRequest('deleteRecordedMeeting', {
+        id,
+        deletedBy: currentMember ? currentMember.name : 'مشرف'
+      });
+      if (!result || result.success === false) {
+        toast('تعذر نقل التسجيل إلى سلة المحذوفات؛ لم نحذفه.', 'info');
+        return;
+      }
+      deletedRecordedMeetingIds.add(String(id));
       state.recordedMeetings = (state.recordedMeetings || []).filter((item) => String(item.id) !== String(id));
       await saveState();
-      await cloudRequest('deleteRecordedMeeting', { id });
       openMeetingArchiveSheet();
-      toast('تم حذف التسجيل من الأرشيف', 'trash');
+      toast('نُقل التسجيل إلى سلة المحذوفات', 'trash');
     }
   });
 }
@@ -3358,7 +3461,7 @@ function openMoreSheet() {
       ${isSupervisor() ? `
       <button class="more-item" type="button" data-action="open-trash">
         <span class="more-icon"><svg class="ic"><use href="#i-trash"/></svg></span>
-        <div class="more-body"><strong>سلة المحذوفات</strong><p>استعادة الاقتباسات والكتب والرفوف المحذوفة</p></div>
+        <div class="more-body"><strong>سلة المحذوفات</strong><p>استعادة الاقتباسات والمقالات والكتب والرفوف واللقاءات</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>` : ''}
     </div>`, (root) => {
@@ -3378,14 +3481,19 @@ function renderDeletedItems(root, items) {
     list.innerHTML = emptyHTML('check', 'سلة المحذوفات فارغة', 'العناصر المحذوفة تبقى محفوظة هنا ويمكن استعادتها.');
     return;
   }
-  const labels = { quote: 'اقتباس', book: 'كتاب', shelf: 'رف تصنيف' };
+  const labels = { quote: 'اقتباس', book: 'كتاب', shelf: 'رف تصنيف', article: 'مقال', recording: 'لقاء مسجل' };
+  const icons = { quote: 'quote', book: 'book', shelf: 'library', article: 'article', recording: 'play' };
   list.innerHTML = items.map((item) => {
     const title = item.title || item.id || 'عنصر محذوف';
-    const detail = item.type === 'quote' ? item.text : item.category;
+    const detail = item.type === 'quote'
+      ? item.text
+      : item.type === 'shelf'
+        ? `${toAr(item.booksCount || 0)} كتاب مرتبط`
+        : item.category;
     const deletedAt = Number(item.deletedAt)
       ? new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(new Date(Number(item.deletedAt)))
       : '';
-    const icon = item.type === 'quote' ? 'quote' : item.type === 'book' ? 'book' : 'library';
+    const icon = icons[item.type] || 'library';
     return `
       <article class="deleted-item-card">
         <span class="deleted-item-icon"><svg class="ic"><use href="#i-${icon}"/></svg></span>
@@ -3411,6 +3519,10 @@ function openTrashSheet() {
       root.querySelector('#deleted-items-list').innerHTML = emptyHTML('info', 'تعذر تحميل السلة', 'تحقق من نشر Apps Script المحدّث.');
       return;
     }
+    if (result.data.length && !result.data.some((item) => item && item.type)) {
+      root.querySelector('#deleted-items-list').innerHTML = emptyHTML('info', 'نسخة Apps Script قديمة', 'انشر النسخة المحدّثة من الكود لتفعيل سلة المحذوفات.');
+      return;
+    }
     renderDeletedItems(root, result.data);
   });
 }
@@ -3419,7 +3531,7 @@ async function restoreDeletedItem(type, encodedId) {
   if (!isSupervisor()) { toast('الاستعادة للمشرفين فقط', 'info'); return; }
   let id = encodedId || '';
   try { id = decodeURIComponent(id); } catch (error) {}
-  const actions = { quote: 'restoreQuote', book: 'restoreClubBook', shelf: 'restoreLibraryCategory' };
+  const actions = { quote: 'restoreQuote', book: 'restoreClubBook', shelf: 'restoreLibraryCategory', article: 'restoreArticle', recording: 'restoreRecordedMeeting' };
   const action = actions[type];
   if (!action) return;
   const result = await cloudRequest(action, { id });
@@ -3438,6 +3550,13 @@ async function restoreDeletedItem(type, encodedId) {
   } else if (type === 'shelf') {
     await refreshLibraryCategoriesFromCloud();
     await refreshClubBooksFromCloud();
+  } else if (type === 'article') {
+    deletedArticleIds.delete(String(id));
+    await refreshArticlesFromCloud();
+  } else if (type === 'recording') {
+    deletedRecordedMeetingIds.delete(String(id));
+    const meetings = await loadRecordedMeetingsFromCloud();
+    if (Array.isArray(meetings)) state.recordedMeetings = meetings;
   }
   renderHome();
   openTrashSheet();
@@ -3729,13 +3848,18 @@ async function setSessionMember(member) {
 function showGate() {
   closeSheet();
   try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
+  persistAccount(null);
+  pendingResetEmail = '';
   currentMember = null;
   state = null;
   $('#gate').hidden = false;
   $('#shell').hidden = true;
-  $('#login-error').hidden = true;
-  const input = $('#login-name');
-  if (input) input.value = '';
+  ['login-email', 'login-password', 'register-name', 'register-email', 'register-password',
+    'register-confirm', 'forgot-email', 'reset-code', 'reset-password'].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  });
+  showGateView('login');
   currentScreen = 'home';
   hideSplash();
 }
@@ -3909,14 +4033,14 @@ function handleGlobalClick(event) {
   const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article']);
   if (isGuest && guestBlocked.has(action)) {
     showGate();
-    toast('سجّل دخولك باسمك للتعديل والإضافة', 'user');
+    toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user');
     return;
   }
 
   switch (action) {
     case 'open-gate':
       showGate();
-      toast('سجّل دخولك باسمك للتعديل والإضافة', 'user');
+      toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user');
       break;
     case 'open-join':
       openJoinSheet();
@@ -4241,21 +4365,37 @@ function handleGlobalClick(event) {
       const a = state.articles.find((item) => item.id === id);
       if (!a) break;
       openConfirm({
-        title: 'حذف المقال',
-        text: `سيُحذف المقال: «${a.title}»`,
-        confirmLabel: 'حذف',
-        onConfirm: () => {
+        title: 'نقل المقال إلى سلة المحذوفات',
+        text: `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
+        confirmLabel: 'نقل للسلة',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteArticle', {
+            id,
+            title: a.title || '',
+            category: a.category || '',
+            body: a.body || '',
+            excerpt: a.excerpt || '',
+            read: a.read || 3,
+            createdAt: a.createdAt || Date.now(),
+            memberId: a.authorId || (currentMember ? currentMember.id : ''),
+            memberName: a.authorName || (currentMember ? currentMember.name : ''),
+            deletedBy: currentMember ? currentMember.name : 'مشرف'
+          });
+          if (!result || result.success === false) {
+            toast('تعذر نقل المقال إلى سلة المحذوفات؛ لم نحذفه.', 'info');
+            return;
+          }
+          deletedArticleIds.add(String(id));
           state.articles = state.articles.filter((item) => item.id !== id);
           if (currentMember && currentMember.id !== 'guest') {
-            cloudRequest('deleteArticle', { id }, currentMember.id);
-            syncState.articles.delete(id);
+            syncState.articles.add(id);
             persistSyncState(currentMember.id);
           }
           saveState();
           renderArticles();
           renderHome();
           updateNavBadges();
-          toast('حُذف المقال', 'trash');
+          toast('نُقل المقال إلى سلة المحذوفات', 'trash');
         }
       });
       break;
@@ -4301,7 +4441,7 @@ function handleGlobalClick(event) {
 function handleLogSubmit(event) {
   event.preventDefault();
   const isGuest = !currentMember || currentMember.id === 'guest';
-  if (isGuest) { showGate(); toast('سجّل دخولك باسمك للتعديل والإضافة', 'user'); return; }
+  if (isGuest) { showGate(); toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user'); return; }
   const bookTitle = $('#log-book').value.trim();
   const pages = Number($('#log-pages').value);
   const note = $('#log-note').value.trim();
@@ -4367,22 +4507,150 @@ function handleLogSubmit(event) {
 async function init() {
   $('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const name = $('#login-name').value.trim();
+    const email = $('#login-email').value.trim();
+    const password = $('#login-password').value;
     const error = $('#login-error');
-    const member = findMemberByName(name);
+    const submitBtn = event.target.querySelector('button[type="submit"]');
 
-    if (!member) {
-      error.textContent = name.length < 2
-        ? 'اكتب اسمك كما هو مسجل في قائمة أعضاء النادي.'
-        : 'هذا الاسم ليس ضمن قائمة أعضاء جليس. تأكد من كتابته كما هو مسجل لدينا.';
+    if (!email || !password) {
+      error.textContent = 'أدخل البريد الإلكتروني والرمز السري.';
       error.hidden = false;
-      $('#login-name').focus();
       return;
     }
+
     error.hidden = true;
-    await setSessionMember(member);
-    enterApp(true);
+    setBtnBusy(submitBtn, true, 'جارٍ الدخول…');
+    try {
+      const result = await cloudRequest('loginMember', { email, password });
+      if (!result || result.success !== true || !result.member) {
+        error.textContent = cleanServerError(result, 'تعذر الدخول، تحقق من البريد والرمز.');
+        error.hidden = false;
+        return;
+      }
+      await completeLogin(result.member);
+    } finally {
+      setBtnBusy(submitBtn, false);
+    }
   });
+
+  $('#register-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = $('#register-name').value.replace(/\s+/g, ' ').trim();
+    const email = $('#register-email').value.trim();
+    const password = $('#register-password').value;
+    const confirm = $('#register-confirm').value;
+    const error = $('#register-error');
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    const fail = (message) => { error.textContent = message; error.hidden = false; };
+
+    if (name.split(' ').filter(Boolean).length < 3) return fail('اكتب الاسم الثلاثي كما في الهوية.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return fail('صيغة البريد الإلكتروني غير صحيحة.');
+    if (password.length < 6) return fail('الرمز السري يجب أن يكون ٦ أحرف أو أكثر.');
+    if (password !== confirm) return fail('الرمزان غير متطابقين.');
+
+    error.hidden = true;
+    setBtnBusy(submitBtn, true, 'جارٍ إنشاء الحساب…');
+    try {
+      const result = await cloudRequest('registerMember', { name, email, password });
+      if (!result || result.success !== true || !result.member) {
+        fail(cleanServerError(result, 'تعذر إنشاء الحساب، حاول مرة أخرى.'));
+        return;
+      }
+      await completeLogin(result.member);
+      toast('تم إنشاء حسابك، أهلاً بك في جليس', 'check');
+    } finally {
+      setBtnBusy(submitBtn, false);
+    }
+  });
+
+  $('#forgot-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const email = $('#forgot-email').value.trim();
+    const error = $('#forgot-error');
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      error.textContent = 'أدخل بريدًا إلكترونيًا صحيحًا.';
+      error.hidden = false;
+      return;
+    }
+
+    error.hidden = true;
+    setBtnBusy(submitBtn, true, 'جارٍ الإرسال…');
+    try {
+      const result = await cloudRequest('requestPasswordReset', { email });
+      if (!result || result.success !== true) {
+        error.textContent = cleanServerError(result, 'تعذر إرسال رمز الاستعادة.');
+        error.hidden = false;
+        return;
+      }
+      pendingResetEmail = email;
+      $('#reset-code').value = '';
+      $('#reset-password').value = '';
+      showGateView('reset');
+      toast('إن كان البريد مسجلًا فسيصلك رمز الاستعادة', 'send');
+    } finally {
+      setBtnBusy(submitBtn, false);
+    }
+  });
+
+  $('#reset-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const code = $('#reset-code').value.trim();
+    const password = $('#reset-password').value;
+    const error = $('#reset-error');
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+
+    if (!pendingResetEmail) { showGateView('forgot'); return; }
+    if (!/^\d{6}$/.test(code)) {
+      error.textContent = 'رمز التحقق ستة أرقام.';
+      error.hidden = false;
+      return;
+    }
+    if (password.length < 6) {
+      error.textContent = 'الرمز السري يجب أن يكون ٦ أحرف أو أكثر.';
+      error.hidden = false;
+      return;
+    }
+
+    error.hidden = true;
+    setBtnBusy(submitBtn, true, 'جارٍ التعيين…');
+    try {
+      const result = await cloudRequest('resetPassword', {
+        email: pendingResetEmail,
+        code,
+        password
+      });
+      if (!result || result.success !== true) {
+        error.textContent = cleanServerError(result, 'تعذر تعيين الرمز، تحقق من رمز التحقق.');
+        error.hidden = false;
+        return;
+      }
+      const email = pendingResetEmail;
+      pendingResetEmail = '';
+      showGateView('login');
+      $('#login-email').value = email;
+      $('#login-password').value = '';
+      toast('تم تعيين الرمز الجديد، ادخل بحسابك', 'check');
+    } finally {
+      setBtnBusy(submitBtn, false);
+    }
+  });
+
+  const goRegister = document.getElementById('go-register');
+  if (goRegister) goRegister.addEventListener('click', () => { $('#register-error').hidden = true; showGateView('register'); });
+  const registerBack = document.getElementById('register-back');
+  if (registerBack) registerBack.addEventListener('click', () => showGateView('login'));
+  const goForgot = document.getElementById('go-forgot');
+  if (goForgot) goForgot.addEventListener('click', () => {
+    const typed = $('#login-email').value.trim();
+    if (typed) $('#forgot-email').value = typed;
+    showGateView('forgot');
+  });
+  const forgotBack = document.getElementById('forgot-back');
+  if (forgotBack) forgotBack.addEventListener('click', () => showGateView('login'));
+  const resetBack = document.getElementById('reset-back');
+  if (resetBack) resetBack.addEventListener('click', () => showGateView('login'));
 
   const logForm = $('#log-form');
   if (logForm) logForm.addEventListener('submit', handleLogSubmit);
@@ -4401,7 +4669,7 @@ async function init() {
   $('#goal-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const isGuest = !currentMember || currentMember.id === 'guest';
-    if (isGuest) { showGate(); toast('سجّل دخولك باسمك للتعديل', 'user'); return; }
+    if (isGuest) { showGate(); toast('سجّل دخولك بالبريد والرمز للتعديل', 'user'); return; }
     const goal = clamp(Number($('#goal-range').value) || 200, 50, 500);
     state.profile.goal = goal;
     saveState();
@@ -4497,9 +4765,8 @@ async function init() {
       || findMemberByName('مشعل الحفير')
       || MEMBERS[0];
   } else {
-    let savedId = null;
-    try { savedId = localStorage.getItem(SESSION_KEY); } catch (error) { savedId = null; }
-    member = memberById(savedId);
+    const account = readAccount();
+    if (account) member = accountToMember(account);
   }
 
   renderLogStamp();

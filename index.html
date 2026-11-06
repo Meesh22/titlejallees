@@ -116,27 +116,112 @@
           <div class="gate-body">
             <p class="gate-salaam">أهلاً بك في مجلسك القرائي</p>
             <h1 id="gate-title">جليس<br><span>مساحة الأعضاء</span></h1>
-            <p class="gate-sub">هنا نتابع وردنا، نتبادل اقتباساتنا، ونكتب عن الكتب التي تسكنّا.</p>
+            <p class="gate-sub">اقرأ لتعيش أكثر من حياة</p>
 
-            <form class="gate-card" id="login-form" novalidate>
-              <div class="gate-card-head">
-                <span class="gate-card-icon"><svg class="ic"><use href="#i-book"/></svg></span>
-                <div>
-                  <h2>دخول الأعضاء</h2>
-                  <p>العضوية بالاسم فقط — بلا رمز</p>
+            <div class="gate-card" id="gate-card">
+              <form id="login-form" novalidate>
+                <div class="gate-card-head">
+                  <span class="gate-card-icon"><svg class="ic"><use href="#i-book"/></svg></span>
+                  <div>
+                    <h2>دخول الأعضاء</h2>
+                    <p>بالبريد الإلكتروني والرمز السري</p>
+                  </div>
                 </div>
-              </div>
-              <div class="field">
-                <label for="login-name">اسم العضو</label>
-                <input class="input" id="login-name" name="name" type="text" autocomplete="off" placeholder="اكتب اسمك كما هو مسجل" required>
-                <p class="field-hint">اسمك هو عضويّتك، وتقدمك يُحفظ لك وحدك في هذا الجهاز.</p>
-              </div>
-              <p class="form-error" id="login-error" role="alert" hidden></p>
-              <button class="btn btn-gold btn-block" type="submit">
-                <svg class="ic"><use href="#i-arrow-right"/></svg>
-                الدخول إلى المساحة
-              </button>
-            </form>
+                <div class="field">
+                  <label for="login-email">البريد الإلكتروني</label>
+                  <input class="input" id="login-email" name="email" type="email" dir="ltr" inputmode="email" autocomplete="email" placeholder="name@example.com" required>
+                </div>
+                <div class="field">
+                  <label for="login-password">الرمز السري</label>
+                  <input class="input" id="login-password" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="••••••" required>
+                </div>
+                <p class="form-error" id="login-error" role="alert" hidden></p>
+                <button class="btn btn-gold btn-block" type="submit">
+                  <svg class="ic"><use href="#i-arrow-right"/></svg>
+                  الدخول إلى المساحة
+                </button>
+                <div class="gate-links">
+                  <button class="gate-link" type="button" id="go-forgot">نسيت الرمز؟</button>
+                  <button class="gate-link gate-link-strong" type="button" id="go-register">إنشاء حساب جديد</button>
+                </div>
+              </form>
+
+              <form id="register-form" hidden novalidate>
+                <div class="gate-card-head">
+                  <span class="gate-card-icon"><svg class="ic"><use href="#i-user"/></svg></span>
+                  <div>
+                    <h2>حساب جديد</h2>
+                    <p>سجّل باسمك الثلاثي وبريدك</p>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="register-name">الاسم الثلاثي</label>
+                  <input class="input" id="register-name" name="name" type="text" autocomplete="name" required>
+                </div>
+                <div class="field">
+                  <label for="register-email">البريد الإلكتروني</label>
+                  <input class="input" id="register-email" name="email" type="email" dir="ltr" inputmode="email" autocomplete="email" placeholder="name@example.com" required>
+                </div>
+                <div class="field">
+                  <label for="register-password">الرمز السري</label>
+                  <input class="input" id="register-password" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="٦ أحرف على الأقل" required>
+                </div>
+                <div class="field">
+                  <label for="register-confirm">تأكيد الرمز</label>
+                  <input class="input" id="register-confirm" name="confirm" type="password" dir="ltr" autocomplete="new-password" placeholder="أعد كتابة الرمز" required>
+                </div>
+                <p class="form-error" id="register-error" role="alert" hidden></p>
+                <button class="btn btn-gold btn-block" type="submit">
+                  <svg class="ic"><use href="#i-check"/></svg>
+                  إنشاء الحساب
+                </button>
+                <div class="gate-links">
+                  <button class="gate-link" type="button" id="register-back">لدي حساب بالفعل</button>
+                </div>
+              </form>
+
+              <form id="forgot-form" hidden novalidate>
+                <div class="gate-card-head">
+                  <span class="gate-card-icon"><svg class="ic"><use href="#i-send"/></svg></span>
+                  <div>
+                    <h2>استعادة الرمز</h2>
+                    <p>سنرسل رمزًا مؤقتًا إلى بريدك</p>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="forgot-email">البريد الإلكتروني</label>
+                  <input class="input" id="forgot-email" name="email" type="email" dir="ltr" inputmode="email" autocomplete="email" placeholder="name@example.com" required>
+                </div>
+                <p class="form-error" id="forgot-error" role="alert" hidden></p>
+                <button class="btn btn-gold btn-block" type="submit">إرسال رمز الاستعادة</button>
+                <div class="gate-links">
+                  <button class="gate-link" type="button" id="forgot-back">رجوع</button>
+                </div>
+              </form>
+
+              <form id="reset-form" hidden novalidate>
+                <div class="gate-card-head">
+                  <span class="gate-card-icon"><svg class="ic"><use href="#i-check"/></svg></span>
+                  <div>
+                    <h2>رمز جديد</h2>
+                    <p>أدخل الرمز الذي وصلك بالبريد</p>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="reset-code">رمز التحقق</label>
+                  <input class="input" id="reset-code" name="code" type="text" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" maxlength="6" required>
+                </div>
+                <div class="field">
+                  <label for="reset-password">الرمز السري الجديد</label>
+                  <input class="input" id="reset-password" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="٦ أحرف على الأقل" required>
+                </div>
+                <p class="form-error" id="reset-error" role="alert" hidden></p>
+                <button class="btn btn-gold btn-block" type="submit">تعيين الرمز والدخول</button>
+                <div class="gate-links">
+                  <button class="gate-link" type="button" id="reset-back">رجوع</button>
+                </div>
+              </form>
+            </div>
 
             <div class="gate-proof">
               <div class="avatar-stack" aria-hidden="true">
