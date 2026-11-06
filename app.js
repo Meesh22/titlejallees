@@ -290,7 +290,7 @@ function findMemberByName(value) {
   return null;
 }
 
-const SUPERVISORS = ['مشعل الحفير', 'مشرف جليس', 'محمد الدبيخي'];
+const SUPERVISORS = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'مشرف جليس', 'محمد الدبيخي'];
 function isGuest() { return !currentMember || currentMember.id === 'guest'; }
 
 function isSupervisor() {
@@ -2344,11 +2344,6 @@ function renderClubBooks() {
   }
 
   const shelves = new Map();
-  const defaultCategoryKeys = new Set(DEFAULT_BOOK_CATEGORIES.map((name) => normalizeName(name)));
-  (state.libraryCategories || []).forEach((category) => {
-    const name = String(category || '').trim();
-    if (name && !defaultCategoryKeys.has(normalizeName(name)) && !shelves.has(name)) shelves.set(name, []);
-  });
   allBooks.forEach((book) => {
     const category = book.category || 'مختارات جليس';
     if (!shelves.has(category)) shelves.set(category, []);
