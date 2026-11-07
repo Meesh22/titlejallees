@@ -7,8 +7,11 @@ const JOIN_REQUESTS_SHEET = 'طلبات الانضمام';
 const MEETINGS_SHEET = 'اللقاءات';
 const RECORDED_MEETINGS_SHEET = 'اللقاءات المسجلة';
 const MEMBERS_SHEET = 'الأعضاء';
+const CONSULTATIONS_SHEET = 'استشارات الأعضاء';
 const OLD_BOOKS_SHEET_ID = 1035156833;
 const SUPERVISOR_NAMES = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي'];
+// تُضاف أسماء المستشارين المعتمدين هنا بعد استلامها؛ لا يُسمح بالإجابة قبل اعتماد الاسم.
+const CONSULTANT_NAMES = [];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_ROUNDS = 10000;
@@ -162,7 +165,7 @@ function memberStatusCode(value) {
 
 function paintMemberRow(sheet, row, status) {
   const color = MEMBER_STATUS_COLORS[memberStatusCode(status)];
-  const width = Math.min(11, sheet.getMaxColumns());
+  const width = Math.min(13, sheet.getMaxColumns());
   const range = sheet.getRange(row, 1, 1, width);
   range.setBackground(color.background);
   range.setFontColor(color.font);
@@ -200,6 +203,13 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizePhone(value) {
+  return String(value || '')
+    .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[\s().-]/g, '');
+}
+
 function normalizePersonName(value) {
   return String(value || '')
     .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
@@ -208,6 +218,11 @@ function normalizePersonName(value) {
     .replace(/ة/g, 'ه')
     .replace(/\s+/g, '')
     .trim();
+}
+
+function isConsultantName(name) {
+  const target = normalizePersonName(name);
+  return Boolean(target) && CONSULTANT_NAMES.some(item => normalizePersonName(item) === target);
 }
 
 function utf8Bytes(text) {
@@ -378,10 +393,23 @@ function isLegacyPasswordHash(stored) {
 function getMembersSheet(ss) {
   const sheet = getDataSheet(ss, MEMBERS_SHEET, [
     'id', 'name', 'email', 'passwordHash', 'salt', 'role',
-    'status', 'createdAt', 'lastLogin', 'resetCode', 'resetExpires'
+    'status', 'createdAt', 'lastLogin', 'resetCode', 'resetExpires', 'phone', 'profilePhoto'
   ]);
-  if (sheet.getMaxColumns() < 11) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), 11 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 13) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 13 - sheet.getMaxColumns());
+  }
+  if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('phone');
+  if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('profilePhoto');
+  return sheet;
+}
+
+function getConsultationsSheet(ss) {
+  const sheet = getDataSheet(ss, CONSULTATIONS_SHEET, [
+    'id', 'memberId', 'memberName', 'question', 'askedAt',
+    'answer', 'answeredById', 'answeredBy', 'answeredAt'
+  ]);
+  if (sheet.getMaxColumns() < 9) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 9 - sheet.getMaxColumns());
   }
   return sheet;
 }
@@ -396,6 +424,32 @@ function findMemberRow(sheet, email) {
     if (normalizeEmail(rows[i][0]) === target) return i + 2;
   }
   return -1;
+}
+
+function findMemberRowById(sheet, id) {
+  const lastRow = sheet.getLastRow();
+  const target = String(id || '').trim();
+  if (lastRow < 2 || !target) return -1;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim() === target) return i + 2;
+  }
+  return -1;
+}
+
+function getMemberPhotosForIds(ss, memberIds) {
+  const photos = {};
+  const wanted = new Set((memberIds || []).map(id => String(id || '')).filter(Boolean));
+  if (!wanted.size) return photos;
+  const sheet = getMembersSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return photos;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+  rows.forEach(row => {
+    const id = String(row[0] || '');
+    if (wanted.has(id) && row[12]) photos[id] = String(row[12]);
+  });
+  return photos;
 }
 
 function findMemberRowsByName(sheet, name) {
@@ -417,7 +471,8 @@ function memberRecord(values) {
     name: String(values[1] || ''),
     email: String(values[2] || ''),
     role: String(values[5] || 'member'),
-    status: String(values[6] || 'active')
+    status: String(values[6] || 'active'),
+    photo: String(values[12] || '')
   };
 }
 
@@ -671,7 +726,7 @@ function doPost(e) {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
       const pending = [];
       rows.forEach((row, index) => {
         const id = String(row[0] || '');
@@ -683,6 +738,7 @@ function doPost(e) {
           id: id,
           name: String(row[1] || ''),
           email: String(row[2] || ''),
+          phone: normalizePhone(row[11]),
           status: status,
           createdAt: row[7]
         });
@@ -699,6 +755,22 @@ function doPost(e) {
       sheet.getRange(row, 7).setValue(status);
       paintMemberRow(sheet, row, status);
       return output({ success: true, status: status });
+    }
+
+    if (action === 'setMemberPhoto') {
+      const memberId = String(data.memberId || '').trim();
+      const photo = String(data.photo || '');
+      if (!/^data:image\/(?:jpeg|png|webp);base64,/i.test(photo)) {
+        throw new Error('اختر صورة بصيغة JPG أو PNG أو WebP');
+      }
+      if (photo.length > 48000) throw new Error('الصورة أكبر من الحد المسموح؛ اختر صورة أصغر');
+      const sheet = getMembersSheet(ss);
+      const row = findMemberRowById(sheet, memberId);
+      if (row < 2) throw new Error('لم أجد حساب العضو');
+      const member = sheet.getRange(row, 1, 1, 13).getValues()[0];
+      if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
+      sheet.getRange(row, 13).setValue(photo);
+      return output({ success: true, photo: photo, message: 'تم تحديث الصورة الشخصية' });
     }
 
     if (action === 'getApprovedMembers') {
@@ -719,14 +791,60 @@ function doPost(e) {
       return output({ success: true, data: members });
     }
 
+    if (action === 'submitConsultation') {
+      const memberId = String(data.memberId || '').trim();
+      const question = String(data.question || '').trim();
+      if (question.length < 8) throw new Error('اكتب سؤالك بتفصيل أكبر');
+      if (question.length > 2000) throw new Error('السؤال أطول من الحد المسموح');
+      const membersSheet = getMembersSheet(ss);
+      const memberRow = findMemberRowById(membersSheet, memberId);
+      if (memberRow < 2) throw new Error('سجّل الدخول كعضو لطرح استشارة');
+      const member = membersSheet.getRange(memberRow, 1, 1, 12).getValues()[0];
+      if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
+      const id = `consult-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
+      const sheet = getConsultationsSheet(ss);
+      sheet.appendRow([id, memberId, String(member[1] || ''), question, Date.now(), '', '', '', '']);
+      return output({ success: true, id: id, message: 'تم إرسال استشارتك للمستشارين' });
+    }
+
+    if (action === 'answerConsultation') {
+      const memberId = String(data.memberId || '').trim();
+      const consultationId = String(data.id || '').trim();
+      const answer = String(data.answer || '').trim();
+      if (!consultationId) throw new Error('معرّف الاستشارة مطلوب');
+      if (answer.length < 2) throw new Error('اكتب الإجابة');
+      if (answer.length > 4000) throw new Error('الإجابة أطول من الحد المسموح');
+      const membersSheet = getMembersSheet(ss);
+      const memberRow = findMemberRowById(membersSheet, memberId);
+      if (memberRow < 2) throw new Error('سجّل الدخول بحساب المستشار');
+      const member = membersSheet.getRange(memberRow, 1, 1, 12).getValues()[0];
+      const advisorName = String(member[1] || '').trim();
+      if (memberStatusCode(member[6]) !== 'active' || !isConsultantName(advisorName)) {
+        throw new Error('الإجابة متاحة للمستشارين المعتمدين فقط');
+      }
+      const sheet = getConsultationsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) throw new Error('لم أجد الاستشارة');
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+      const index = ids.findIndex(row => String(row[0] || '') === consultationId);
+      if (index < 0) throw new Error('لم أجد الاستشارة');
+      const row = index + 2;
+      sheet.getRange(row, 6, 1, 4).setValues([[answer, memberId, advisorName, Date.now()]]);
+      return output({ success: true, message: 'تم نشر الإجابة' });
+    }
+
     if (action === 'requestRegistrationCode') {
       const sheet = getMembersSheet(ss);
       const name = String(data.name || '').replace(/\s+/g, ' ').trim();
+      const phone = normalizePhone(data.phone);
       const email = normalizeEmail(data.email);
       const password = String(data.password || '');
 
       if (name.split(' ').filter(Boolean).length < 3) {
         throw new Error('اكتب الاسم الثلاثي كما هو في الهوية');
+      }
+      if (!/^\+?\d{8,15}$/.test(phone)) {
+        throw new Error('أدخل رقم جوال صحيحًا');
       }
       if (!EMAIL_PATTERN.test(email)) throw new Error('صيغة البريد الإلكتروني غير صحيحة');
       if (password.length < PASSWORD_MIN_LENGTH) {
@@ -746,6 +864,7 @@ function doPost(e) {
       const passwordSalt = Utilities.getUuid();
       savePendingRegistration({
         name,
+        phone,
         email,
         passwordHash: hashPassword(password, passwordSalt),
         passwordSalt,
@@ -804,7 +923,7 @@ function doPost(e) {
         : 'member';
       sheet.appendRow([
         id, record.name, email, record.passwordHash, record.passwordSalt, role,
-        'pending', Date.now(), Date.now(), '', ''
+        'pending', Date.now(), Date.now(), '', '', normalizePhone(record.phone), ''
       ]);
       paintMemberRow(sheet, sheet.getLastRow(), 'pending');
       clearPendingRegistration(email);
@@ -838,7 +957,7 @@ function doPost(e) {
       }
       if (row < 0) throw new Error('الاسم أو البريد الإلكتروني أو الرمز غير صحيح');
 
-      const values = sheet.getRange(row, 1, 1, 11).getValues()[0];
+      const values = sheet.getRange(row, 1, 1, 13).getValues()[0];
       const status = memberStatusCode(values[6]);
       if (status === 'rejected') throw new Error('تم رفض طلب حسابك، تواصل مع إدارة النادي');
       if (status !== 'active') throw new Error('حسابك بانتظار موافقة المشرف');
@@ -1268,11 +1387,24 @@ function doGet(e) {
     const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
     const action = e && e.parameter ? e.parameter.action || '' : '';
 
+    if (action === 'getMemberProfile') {
+      const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      const membersSheet = getMembersSheet(ss);
+      const row = findMemberRowById(membersSheet, memberId);
+      if (row < 2) throw new Error('لم أجد حساب العضو');
+      const member = membersSheet.getRange(row, 1, 1, 13).getValues()[0];
+      if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
+      return output({
+        success: true,
+        member: { id: String(member[0] || ''), name: String(member[1] || ''), photo: String(member[12] || '') }
+      });
+    }
+
     if (action === 'getPendingMembers') {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
       const pending = [];
       rows.forEach((row, index) => {
         const id = String(row[0] || '');
@@ -1284,6 +1416,7 @@ function doGet(e) {
           id: id,
           name: String(row[1] || ''),
           email: String(row[2] || ''),
+          phone: normalizePhone(row[11]),
           status: status,
           createdAt: row[7]
         });
@@ -1308,6 +1441,42 @@ function doGet(e) {
         });
       });
       return output({ success: true, data: members });
+    }
+
+    if (action === 'getConsultations') {
+      const sheet = getConsultationsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const consultations = rows.map(row => ({
+        id: String(row[0] || ''),
+        memberName: String(row[2] || ''),
+        question: String(row[3] || ''),
+        askedAt: row[4],
+        answer: String(row[5] || ''),
+        answeredBy: String(row[7] || ''),
+        answeredAt: row[8]
+      })).filter(item => item.id && item.question);
+      consultations.sort((a, b) => {
+        const aTime = new Date(a.askedAt || 0).getTime() || Number(a.askedAt) || 0;
+        const bTime = new Date(b.askedAt || 0).getTime() || Number(b.askedAt) || 0;
+        return bTime - aTime;
+      });
+      const requestedMemberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      let canAnswer = false;
+      if (requestedMemberId && CONSULTANT_NAMES.length) {
+        const membersSheet = getMembersSheet(ss);
+        const memberRow = findMemberRowById(membersSheet, requestedMemberId);
+        if (memberRow > 1) {
+          const member = membersSheet.getRange(memberRow, 1, 1, 12).getValues()[0];
+          canAnswer = memberStatusCode(member[6]) === 'active' && isConsultantName(member[1]);
+        }
+      }
+      return output({
+        success: true,
+        data: consultations,
+        canAnswer: canAnswer,
+        consultantsConfigured: CONSULTANT_NAMES.length > 0
+      });
     }
 
     if (action === 'getLibraryCategories') {
@@ -1358,7 +1527,7 @@ function doGet(e) {
     if (action === 'getArticles') {
       const sheet = getArticlesSheet(ss);
       const lastRow = sheet.getLastRow();
-      if (lastRow < 2) return output({ success: true, data: [], deletedIds: [] });
+      if (lastRow < 2) return output({ success: true, data: [], deletedIds: [], authorPhotos: {} });
       const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
       const articles = [];
       const deletedIds = [];
@@ -1371,7 +1540,8 @@ function doGet(e) {
           excerpt: row[6], read: row[7], createdAt: row[8]
         });
       });
-      return output({ success: true, data: articles, deletedIds: deletedIds });
+      const authorPhotos = getMemberPhotosForIds(ss, articles.map(article => article.memberId));
+      return output({ success: true, data: articles, deletedIds: deletedIds, authorPhotos: authorPhotos });
     }
 
     if (action === 'getBookRatings') {
@@ -1571,6 +1741,9 @@ function setupJaleesSheets() {
 
   const members = getMembersSheet(ss);
   report.push(`${MEMBERS_SHEET}: ${members.getMaxColumns()} عمود`);
+
+  const consultations = getConsultationsSheet(ss);
+  report.push(`${CONSULTATIONS_SHEET}: ${consultations.getMaxColumns()} عمود`);
 
   const joinRequests = getJoinRequestsSheet(ss);
   ensureJoinRequestStatuses(joinRequests);

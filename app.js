@@ -66,7 +66,10 @@ const MAIN_API_ACTIONS = new Set([
   'registerMember', 'loginMember', 'requestRegistrationCode', 'verifyRegistrationCode',
   'requestPasswordReset', 'resetPassword', 'getJoinRequests', 'saveJoinRequest',
   'setJoinRequestStatus', 'getPendingMembers', 'setMemberStatus', 'getApprovedMembers',
-  'getClubBooks', 'saveClubBook', 'updateClubBook', 'deleteClubBook', 'restoreClubBook'
+  'getClubBooks', 'saveClubBook', 'updateClubBook', 'deleteClubBook', 'restoreClubBook',
+  'getDeletedItems', 'deleteArticle', 'restoreArticle', 'deleteQuote', 'restoreQuote',
+  'deleteLibraryCategory', 'restoreLibraryCategory', 'deleteRecordedMeeting', 'restoreRecordedMeeting',
+  'getConsultations', 'submitConsultation', 'answerConsultation', 'setMemberPhoto', 'getMemberProfile'
 ]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
@@ -337,6 +340,7 @@ function accountToMember(account) {
     name,
     role: account.role === 'supervisor' ? 'مشرف' : 'عضو',
     email: String(account.email || ''),
+    photo: String(account.photo || ''),
     pages: 0,
     lastWeek: 0,
     color: MEMBER_COLORS[Math.abs(name.length) % MEMBER_COLORS.length]
@@ -579,7 +583,8 @@ function createInitialState(member) {
       joined: '٢٠٢٤',
       goal: 200,
       lastWeekPages: member ? member.lastWeek : 0,
-      notifications: true
+      notifications: true,
+      photo: member ? String(member.photo || '') : ''
     },
     /* كل عضو يبدأ بسجل فارغ — التقدم يُبنى من قراءاته الفعلية. */
     entries: [],
@@ -919,7 +924,9 @@ async function refreshClubBooksFromCloud() {
 
 async function loadProfileFromCloud(memberId) {
   const result = await cloudRequest('getProfile', null, memberId);
-  return result.success && result.data.length > 0 ? result.data[0] : null;
+  if (!result || result.success !== true) return null;
+  if (Array.isArray(result.data)) return result.data.length > 0 ? result.data[0] : null;
+  return result.data && typeof result.data === 'object' ? result.data : null;
 }
 
 async function loadEntriesFromCloud(memberId) {
@@ -1041,7 +1048,12 @@ async function loadArticlesFromCloud(memberId) {
   if (result && result.success === true) {
     deletedArticleIds = new Set((result.deletedIds || []).map(String));
   }
-  return result && result.success === true && Array.isArray(result.data) ? result.data : null;
+  if (!result || result.success !== true || !Array.isArray(result.data)) return null;
+  const authorPhotos = result.authorPhotos || {};
+  return result.data.map((article) => ({
+    ...article,
+    authorPhoto: article.authorPhoto || authorPhotos[String(article.memberId || '')] || ''
+  }));
 }
 
 async function refreshArticlesFromCloud() {
@@ -1059,6 +1071,7 @@ async function refreshArticlesFromCloud() {
     excerpt: a.excerpt || (a.body ? String(a.body).replace(/\\s+/g, ' ').slice(0, 118) : ''),
     authorId: a.memberId || 'cloud',
     authorName: a.memberName || 'عضو جليس',
+    authorPhoto: a.authorPhoto || '',
     color: '#1E3A2B',
     time: a.createdAt ? new Date(Number(a.createdAt)).toLocaleString('ar-SA') : 'مؤخراً',
     read: Number(a.read) || 3,
@@ -1807,8 +1820,17 @@ function coverHTML(book) {
     </div>`;
 }
 
-function avatarHTML(name, color, cls = 'avatar-mini') {
-  return `<span class="${cls}" style="background:linear-gradient(135deg, ${color}, #14291D)">${esc(initials(name))}</span>`;
+function avatarHTML(name, color, cls = 'avatar-mini', photo = '') {
+  const safePhoto = /^data:image\/(?:jpeg|png|webp);base64,/i.test(String(photo || '')) ? String(photo) : '';
+  return `<span class="${cls}" style="background:linear-gradient(135deg, ${color}, #14291D)">${safePhoto ? `<img class="avatar-photo-image" src="${esc(safePhoto)}" alt="صورة ${esc(name)}">` : esc(initials(name))}</span>`;
+}
+
+function articleAuthorPhoto(article) {
+  if (!article) return '';
+  return (isMine(article) && state && state.profile && state.profile.photo)
+    || (isMine(article) && currentMember && currentMember.photo)
+    || article.authorPhoto
+    || '';
 }
 
 function memberRowHTML(member, rank, options = {}) {
@@ -1823,7 +1845,7 @@ function memberRowHTML(member, rank, options = {}) {
       <span class="board-rank">${toAr(rank)}</span>
       ${avatarHTML(member.name, member.color, 'board-avatar')}
       <div class="board-info">
-        <strong>${esc(member.name)}${member.isMe ? ' · أنت' : ''}</strong>
+        <button class="board-member-name" type="button" data-action="open-member-profile" data-name="${esc(member.name)}">${esc(member.name)}${member.isMe ? ' · أنت' : ''}</button>
         <span>${member.isMe ? 'وردك هذا الأسبوع' : esc(member.role)}</span>
         ${bar}
       </div>
@@ -1871,7 +1893,7 @@ function renderHome() {
 
   const latestQuotes = $('#home-latest-quotes');
   if (latestQuotes) {
-    const quotes = (state.quotes || []).slice(0, 3);
+    const quotes = (state.quotes || []).slice(0, 1);
     latestQuotes.innerHTML = quotes.length
       ? quotes.map((quote, idx) => quoteCardHTML(quote, { compact: true, latest: idx === 0, rank: idx + 1, number: quoteSerialNumber(quote) })).join('')
       : '';
@@ -1896,7 +1918,7 @@ function renderHome() {
     <div class="ha-body">
       <span class="chip chip-soft">${esc(article.category)}</span>
       <h4>${esc(article.title)}</h4>
-      <div class="ha-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
+      <div class="ha-meta"><button class="ha-author" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">${esc(authorNameOf(article))}</button><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
     </div>` : emptyHTML('article', 'لا مقالات متاحة حاليًا', 'ستظهر هنا أحدث مقالات أعضاء جليس.');
   $('#home-article').dataset.action = article ? 'open-article' : '';
   if (article) $('#home-article').dataset.id = article.id;
@@ -2034,7 +2056,7 @@ function podiumHTML(members) {
         ${rank === 1 ? '<span class="podium-crown"><svg class="ic"><use href="#i-trophy"/></svg></span>' : ''}
         <span class="podium-medal">${toAr(rank)}</span>
         ${avatarHTML(member.name, member.color, 'podium-avatar')}
-        <span class="podium-name">${esc(member.name)}</span>
+        <button class="podium-name" type="button" data-action="open-member-profile" data-name="${esc(member.name)}">${esc(member.name)}</button>
         <div class="podium-pages">${toAr(member.pages)}<span> صفحة</span></div>
         ${member.isMe ? '<span class="podium-you">أنت</span>' : ''}
       </div>`;
@@ -2094,8 +2116,10 @@ function quoteCardHTML(quote, options = {}) {
       <div class="quote-source">${esc(quote.book || 'من هامش القراءة')}${quote.page ? `<span> · ص ${esc(quote.page)}</span>` : ''}</div>
       <div class="quote-foot">
         <div class="quote-author">
-          ${avatarHTML(name, color)}
-          <div><strong>${esc(name)}${isMine(quote) ? ' · أنت' : ''}</strong><small>${esc(quote.time || '')}</small></div>
+          <button class="quote-author-link" type="button" data-action="open-member-profile" data-name="${esc(name)}">
+            ${avatarHTML(name, color)}
+            <div><strong>${esc(name)}${isMine(quote) ? ' · أنت' : ''}</strong><small>${esc(quote.time || '')}</small></div>
+          </button>
         </div>
         <div class="quote-actions">
           <button type="button" data-action="like-quote" data-id="${quote.id}" class="${liked ? 'active' : ''}" aria-label="إعجاب">
@@ -2759,7 +2783,7 @@ function renderArticles() {
         <h3 class="ar-title">${esc(article.title)}</h3>
         <p class="ar-excerpt">${esc(article.excerpt || article.body || '')}</p>
         <div class="ar-bottomline">
-          <div class="ar-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${esc(article.time || '')}</span></div>
+          <div class="ar-meta"><button class="ar-author" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">${esc(authorNameOf(article))}</button><span>·</span><span>${esc(article.time || '')}</span></div>
           <div class="ar-actions">
             <button class="ar-save ${saved ? 'saved' : ''}" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
               <svg class="ic"><use href="#i-bookmark"/></svg>
@@ -2831,7 +2855,9 @@ function renderProfile() {
 
   $('#profile-name').textContent = state.profile.name;
   $('#profile-role').textContent = `${state.profile.role} · منذ ${state.profile.joined}`;
-  $('#profile-avatar').textContent = initials(state.profile.name);
+  setAvatarContent($('#profile-avatar'), state.profile.name, state.profile.photo || (currentMember && currentMember.photo));
+  const photoButton = $('#profile-photo-change');
+  if (photoButton) photoButton.hidden = isGuest();
   $('#profile-badges').innerHTML = [
     `<span><svg class="ic"><use href="#i-sparkles"/></svg> قارئ نشط</span>`,
     streak ? `<span><svg class="ic"><use href="#i-flame"/></svg> ${toAr(streak)} أيام متتالية</span>` : '',
@@ -2858,8 +2884,89 @@ function renderProfile() {
 function updateHeaderAvatar() {
   const avatar = $('#header-avatar');
   if (avatar) {
-    avatar.textContent = initials(state.profile.name);
+    setAvatarContent(avatar, state.profile.name, state.profile.photo || (currentMember && currentMember.photo));
     avatar.title = state.profile.name;
+  }
+}
+
+async function openMemberProfileSheet(name) {
+  const target = String(name || '').trim();
+  if (!target) return;
+  const member = MEMBERS.find((m) => normalizeName(m.name) === normalizeName(target));
+  let approved = null;
+  try {
+    const result = await cloudRequest('getApprovedMembers');
+    if (result && result.success === true && Array.isArray(result.data)) {
+      approved = result.data.find((m) => normalizeName(m.name) === normalizeName(target)) || null;
+    }
+  } catch (error) {}
+  const isSelf = currentMember && normalizeName(currentMember.name) === normalizeName(target);
+  const profileName = isSelf ? state.profile.name : target;
+  const role = isSelf
+    ? state.profile.role
+    : (approved && approved.role === 'supervisor' ? 'مشرف' : (member ? (member.role || 'عضو') : 'عضو'));
+  const joined = isSelf
+    ? state.profile.joined
+    : (approved && approved.joinedAt ? String(new Date(Number(approved.joinedAt)).getFullYear()) : (member ? '٢٠٢٤' : ''));
+  const photo = isSelf
+    ? (state.profile.photo || (currentMember && currentMember.photo) || '')
+    : (approved && approved.photo ? approved.photo : '');
+  const articlesCount = (state && state.articles ? state.articles : []).filter((a) => normalizeName(authorNameOf(a)) === normalizeName(target)).length;
+  const quotesCount = (state && state.quotes ? state.quotes : []).filter((q) => normalizeName(authorNameOf(q)) === normalizeName(target)).length;
+  const finished = isSelf ? state.myBooks.filter((item) => item.status === 'finished').length : 0;
+  const color = isSelf ? '#C59B63' : (member ? member.color : (approved && approved.role === 'supervisor' ? '#1E3A2B' : '#C59B63'));
+
+  openSheet(`
+    <div class="member-profile-sheet">
+      <div class="sheet-head">
+        <span class="chip chip-soft">ملف عضو</span>
+        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+          <svg class="ic"><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <div class="member-profile-hero">
+        ${avatarHTML(profileName, color, 'member-profile-avatar', photo)}
+        <h2>${esc(profileName)}</h2>
+        <p>${esc(role)}${joined ? ` · منذ ${esc(joined)}` : ''}</p>
+      </div>
+      <div class="member-profile-stats">
+        <div><strong>${toAr(articlesCount)}</strong><span>مقال</span></div>
+        <div><strong>${toAr(quotesCount)}</strong><span>اقتباس</span></div>
+        ${isSelf ? `<div><strong>${toAr(finished)}</strong><span>كتاب مكتمل</span></div>` : ''}
+      </div>
+      ${isSelf ? `<button class="btn btn-sm btn-primary" type="button" data-action="open-profile">عرض ملفي الشخصي</button>` : ''}
+    </div>`, (root) => {
+    const btn = root.querySelector('[data-action="open-profile"]');
+    if (btn) btn.addEventListener('click', () => { closeSheet(); go('profile'); });
+  });
+}
+
+async function refreshMemberProfileFromCloud() {
+  const member = currentMember;
+  if (!member || isGuest()) return;
+  const result = await cloudRequest('getMemberProfile', null, member.id);
+  if (!result || result.success !== true || !result.member || currentMember !== member) return;
+  const photo = String(result.member.photo || '');
+  member.photo = photo;
+  if (state && state.profile && state.profile.photo !== photo) {
+    state.profile.photo = photo;
+    try { saveState(); } catch (error) {}
+    renderProfile();
+    updateHeaderAvatar();
+  }
+  const account = readAccount();
+  if (account && String(account.id) === String(member.id) && account.photo !== photo) {
+    persistAccount({ ...account, photo });
+  }
+}
+
+function setAvatarContent(element, name, photo) {
+  if (!element) return;
+  const src = String(photo || '');
+  if (/^data:image\/(?:jpeg|png|webp);base64,/i.test(src)) {
+    element.innerHTML = `<img class="avatar-photo-image" src="${esc(src)}" alt="صورة ${esc(name || 'عضو جليس')}">`;
+  } else {
+    element.textContent = initials(name);
   }
 }
 
@@ -2907,12 +3014,13 @@ function sheetHead(title, subtitle = '') {
     </div>`;
 }
 
-function openSheet(html, onOpen) {
+function openSheet(html, onOpen, options = {}) {
   const root = $('#sheet-root');
+  const fullscreen = Boolean(options.fullscreen);
   root.innerHTML = `
     <div class="sheet-backdrop" data-close-sheet></div>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-grabber" aria-hidden="true"></div>
+    <div class="sheet ${fullscreen ? 'sheet-full' : ''}" role="dialog" aria-modal="true">
+      ${fullscreen ? '' : '<div class="sheet-grabber" aria-hidden="true"></div>'}
       ${html}
     </div>`;
   root.hidden = false;
@@ -3000,7 +3108,7 @@ function openBookSheet(id) {
     : !isGuest() ? `<button class="btn btn-ghost btn-block" type="button" data-action="add-book" data-id="${esc(book.id)}" data-status="want">أضفه إلى قائمة القراءة</button>` : '';
   const reviewMarkup = ratings.length ? ratings.map((rating) => `
     <article class="book-review-card">
-      <div class="book-review-head"><strong>${esc(rating.memberName || 'عضو جليس')}</strong><span class="book-review-stars">${'★'.repeat(clamp(Number(rating.rating) || 0, 0, 5))}${'☆'.repeat(5 - clamp(Number(rating.rating) || 0, 0, 5))}</span></div>
+      <div class="book-review-head"><button class="book-review-author" type="button" data-action="open-member-profile" data-name="${esc(rating.memberName || 'عضو جليس')}">${esc(rating.memberName || 'عضو جليس')}</button><span class="book-review-stars">${'★'.repeat(clamp(Number(rating.rating) || 0, 0, 5))}${'☆'.repeat(5 - clamp(Number(rating.rating) || 0, 0, 5))}</span></div>
       ${rating.review ? `<p>${esc(rating.review)}</p>` : '<p class="book-review-empty">قيّم الكتاب دون كتابة مراجعة.</p>'}
     </article>`).join('') : emptyHTML('star', 'لا توجد مراجعات بعد', 'كن أول من يشارك رأيه عن هذا الكتاب.');
   const quotesMarkup = relatedQuotes.length ? relatedQuotes.map((quote) => `
@@ -3158,6 +3266,192 @@ function openQuoteComposer() {
   });
 }
 
+function articleShareUrl(article) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('article', String(article.id));
+  return url.toString();
+}
+
+function wrapCanvasText(context, value, maxWidth, maxLines) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach((word) => {
+    const next = line ? `${line} ${word}` : word;
+    if (line && context.measureText(next).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  });
+  if (line) lines.push(line);
+  if (lines.length <= maxLines) return lines;
+  const clipped = lines.slice(0, maxLines);
+  let last = clipped[maxLines - 1];
+  while (last && context.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1).trim();
+  clipped[maxLines - 1] = `${last}…`;
+  return clipped;
+}
+
+function loadShareImage(src) {
+  return new Promise((resolve, reject) => {
+    if (!src) { resolve(null); return; }
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function drawCoverImage(context, image, x, y, size) {
+  const scale = Math.max(size / image.width, size / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  context.drawImage(image, x + (size - width) / 2, y + (size - height) / 2, width, height);
+}
+
+async function createArticleShareCard(article) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 630;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('تعذر تجهيز بطاقة المشاركة');
+  context.fillStyle = '#F8F5EE';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#14281E';
+  context.fillRect(0, 0, canvas.width, 112);
+  context.fillStyle = '#C59B63';
+  context.fillRect(0, 108, canvas.width, 4);
+  context.direction = 'rtl';
+  context.textAlign = 'right';
+  context.fillStyle = '#F8F5EE';
+  context.font = '700 30px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('مقال من مجلة جليس الإلكترونية', 1090, 69);
+
+  context.fillStyle = '#9A7440';
+  context.font = '700 23px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText(String(article.category || 'مقالات القراءة').slice(0, 48), 1080, 165);
+  context.fillStyle = '#1E3A2B';
+  context.font = '800 54px "IBM Plex Sans Arabic", sans-serif';
+  const titleLines = wrapCanvasText(context, article.title || 'مقال من جليس', 1000, 3);
+  titleLines.forEach((line, index) => context.fillText(line, 1080, 250 + index * 68));
+
+  context.strokeStyle = 'rgba(30,58,43,.15)';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(120, 470);
+  context.lineTo(1080, 470);
+  context.stroke();
+
+  const author = authorNameOf(article);
+  const photo = articleAuthorPhoto(article);
+  const avatarSize = 82;
+  const avatarX = 998;
+  const avatarY = 500;
+  context.save();
+  context.beginPath();
+  context.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+  context.clip();
+  const authorImage = await loadShareImage(photo);
+  if (authorImage) {
+    drawCoverImage(context, authorImage, avatarX, avatarY, avatarSize);
+  } else {
+    context.fillStyle = authorColorOf(article);
+    context.fillRect(avatarX, avatarY, avatarSize, avatarSize);
+    context.direction = 'rtl';
+    context.textAlign = 'center';
+    context.fillStyle = '#F8F5EE';
+    context.font = '800 30px "IBM Plex Sans Arabic", sans-serif';
+    context.fillText(initials(author), avatarX + avatarSize / 2, avatarY + 52);
+  }
+  context.restore();
+
+  context.direction = 'rtl';
+  context.textAlign = 'right';
+  context.fillStyle = '#9A7440';
+  context.font = '600 21px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('بقلم', 895, 532);
+  context.fillStyle = '#1E3A2B';
+  context.font = '800 27px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText(String(author).slice(0, 45), 895, 570);
+  context.textAlign = 'left';
+  context.fillStyle = '#667269';
+  context.font = '600 20px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('نادي جليس القرائي · لأن القراءة تجمعنا', 120, 558);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('تعذر إنشاء صورة المقال')), 'image/png');
+  });
+}
+
+function downloadArticleShareCard(blob, article) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `jalees-article-${String(article.id || 'share').replace(/[^a-zA-Z0-9-_]/g, '-')}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function shareArticle(article) {
+  const shareUrl = articleShareUrl(article);
+  const author = authorNameOf(article);
+  const shareText = `${article.title}\nبقلم ${author}\n#جليس_القرائي`;
+  try {
+    const blob = await createArticleShareCard(article);
+    const file = new File([blob], 'مقال-جليس.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ title: article.title, text: shareText, url: shareUrl, files: [file] });
+      return;
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: article.title, text: shareText, url: shareUrl });
+        downloadArticleShareCard(blob, article);
+        toast('تمت مشاركة رابط المقال، وحُمّلت بطاقته لإرفاقها', 'share');
+        return;
+      } catch (shareError) {
+        if (shareError && shareError.name === 'AbortError') return;
+      }
+    }
+    const copied = await copyText(`${shareText}\n${shareUrl}`);
+    downloadArticleShareCard(blob, article);
+    toast(copied ? 'نُسخ رابط المقال وحُمّلت بطاقة المشاركة' : 'حُمّلت بطاقة المقال للمشاركة', 'share');
+  } catch (error) {
+    const copied = await copyText(`${shareText}\n${shareUrl}`);
+    toast(copied ? 'نُسخ رابط المقال للمشاركة' : 'تعذرت المشاركة', copied ? 'share' : 'info');
+  }
+}
+
+async function openSharedArticlePage(articleId) {
+  if (!articleId) return;
+  await refreshArticlesFromCloud();
+  const article = (state && state.articles || []).find(item => String(item.id) === String(articleId));
+  if (!article) {
+    go('articles');
+    toast('لم أجد المقال المطلوب أو ربما نُقل إلى السلة', 'info');
+    return;
+  }
+  const shareTitle = `${article.title} | جليس`;
+  const shareDescription = article.excerpt || `مقال بقلم ${authorNameOf(article)} في مجلة جليس الإلكترونية.`;
+  document.title = shareTitle;
+  const titleMeta = document.querySelector('meta[property="og:title"]');
+  const descriptionMeta = document.querySelector('meta[property="og:description"]');
+  const twitterTitleMeta = document.querySelector('meta[name="twitter:title"]');
+  const twitterDescriptionMeta = document.querySelector('meta[name="twitter:description"]');
+  if (titleMeta) titleMeta.content = shareTitle;
+  if (descriptionMeta) descriptionMeta.content = shareDescription;
+  if (twitterTitleMeta) twitterTitleMeta.content = shareTitle;
+  if (twitterDescriptionMeta) twitterDescriptionMeta.content = shareDescription;
+  go('articles');
+  openArticleSheet(article.id);
+}
+
 function openArticleSheet(id) {
   const article = state.articles.find((item) => item.id === id);
   if (!article) return;
@@ -3165,7 +3459,7 @@ function openArticleSheet(id) {
   const body = article.body.split(/\n{2,}/).map((paragraph) => `<p>${esc(paragraph).replace(/\n/g, '<br>')}</p>`).join('');
 
   openSheet(`
-    <div class="article-reader">
+    <div class="article-reader article-reader-full">
       <div class="sheet-head">
         <span class="chip chip-soft">${esc(article.category)}</span>
         <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
@@ -3179,9 +3473,11 @@ function openArticleSheet(id) {
         <span><svg class="ic"><use href="#i-calendar"/></svg> ${esc(article.time || '')}</span>
       </div>
       <div class="reader-author">
-        ${avatarHTML(authorNameOf(article), authorColorOf(article))}
+        ${avatarHTML(authorNameOf(article), authorColorOf(article), 'avatar-mini reader-author-avatar', articleAuthorPhoto(article))}
         <div>
-          <strong>${esc(authorNameOf(article))}</strong>
+          <button class="reader-author-name" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">
+            <strong>${esc(authorNameOf(article))}</strong>
+          </button>
           <small>عضو في نادي جليس القرائي</small>
         </div>
       </div>
@@ -3194,7 +3490,7 @@ function openArticleSheet(id) {
           <svg class="ic"><use href="#i-share"/></svg> مشاركة
         </button>
       </div>
-    </div>`);
+  </div>`, null, { fullscreen: true });
 }
 
 function openArticleComposer() {
@@ -3293,6 +3589,7 @@ function openArticleComposer() {
         excerpt: `${excerpt}${body.length > 118 ? '…' : ''}`,
         authorId: 'me',
         authorName: state.profile.name,
+        authorPhoto: state.profile.photo || (currentMember && currentMember.photo) || '',
         color: '#C59B63',
         time: 'الآن',
         read: Math.max(1, Math.ceil(words / 180)),
@@ -3424,6 +3721,7 @@ function renderPendingMembers(accounts) {
             <span class="join-status ${meta.className}">${meta.label}</span>
           </div>
           <p dir="ltr" style="text-align:right">${esc(account.email || '')}</p>
+          ${account.phone ? `<p dir="ltr" style="text-align:right">${esc(account.phone)}</p>` : ''}
           <small>${account.createdAt ? new Date(Number(account.createdAt)).toLocaleDateString('ar-SA') : ''}</small>
           <div class="join-request-actions">
             <button class="join-decision accept" type="button" data-action="member-accept" data-row="${esc(String(account.row))}" ${meta.className === 'accepted' ? 'disabled' : ''}>قبول</button>
@@ -3624,6 +3922,40 @@ function openViewRatingsSheet(bookId) {
     <div class="notif-list">${html}</div>`);
 }
 
+function openClubProgramsSheet() {
+  const programs = [
+    {
+      number: 'البرنامج الأول',
+      title: 'برنامج كتاب الكامل في اللغة',
+      description: 'مسار لقراءة كتاب الكامل في اللغة ومناقشة موضوعاته.'
+    },
+    {
+      number: 'البرنامج الثاني',
+      title: 'برنامج كتاب تهذيب البداية والنهاية',
+      description: 'قراءة ومناقشة كتاب تهذيب البداية والنهاية.'
+    },
+    {
+      number: 'البرنامج الثالث',
+      title: 'برنامج مختصرات الكتب',
+      description: 'مساحة للتعريف بمختصرات الكتب وقراءة أبرز أفكارها.'
+    }
+  ];
+  openSheet(`
+    ${sheetHead('برامج النادي', 'مسارات قرائية وثقافية من جليس')}
+    <div class="club-programs-list">
+      ${programs.map((program, index) => `
+        <article class="club-program-card">
+          <span class="club-program-index">${toAr(index + 1)}</span>
+          <div>
+            <small>${esc(program.number)}</small>
+            <h3>${esc(program.title)}</h3>
+            <p>${esc(program.description)}</p>
+          </div>
+          <svg class="ic"><use href="#i-books"/></svg>
+        </article>`).join('')}
+    </div>`);
+}
+
 function openMoreSheet() {
   openSheet(`
     ${sheetHead('المزيد', 'خدمات و programmes النادي')}
@@ -3661,11 +3993,15 @@ function openMoreSheet() {
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>` : ''}
     </div>`, (root) => {
-    root.querySelectorAll('[data-action="club-programs"], [data-action="club-activities"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        closeSheet();
-        toast('قريباً', 'sparkles');
-      });
+    const programsButton = root.querySelector('[data-action="club-programs"]');
+    if (programsButton) programsButton.addEventListener('click', () => {
+      closeSheet();
+      openClubProgramsSheet();
+    });
+    const activitiesButton = root.querySelector('[data-action="club-activities"]');
+    if (activitiesButton) activitiesButton.addEventListener('click', () => {
+      closeSheet();
+      toast('قريباً', 'sparkles');
     });
     refreshMembersCount(root);
   });
@@ -3707,9 +4043,9 @@ function renderApprovedMembers(root, members) {
       ? `منذ ${toAr(new Date(Number(member.joinedAt)).getFullYear())}`
       : '';
     return `<div class="member-row">
-      <span class="member-avatar" style="background:${color}">${esc(initials(member.name))}</span>
+      <button class="member-avatar member-profile-trigger" type="button" data-action="open-member-profile" data-name="${esc(member.name || '')}" style="background:${color}">${esc(initials(member.name))}</button>
       <div class="member-main">
-        <strong>${esc(member.name || 'عضو جليس')}</strong>
+        <button class="member-name-trigger" type="button" data-action="open-member-profile" data-name="${esc(member.name || '')}">${esc(member.name || 'عضو جليس')}</button>
         <small>${isSupervisorMember ? 'مشرف النادي' : 'عضو'}${joined ? ' · ' + joined : ''}</small>
       </div>
       ${isSupervisorMember ? '<span class="member-role">مشرف</span>' : ''}
@@ -3745,6 +4081,114 @@ function openMembersSheet() {
     const btn = root.querySelector('#refresh-members');
     if (btn) btn.addEventListener('click', () => loadApprovedMembers(root));
     loadApprovedMembers(root);
+  });
+}
+
+function consultationDateLabel(value) {
+  const date = value instanceof Date ? value : new Date(value || 0);
+  if (!Number.isFinite(date.getTime()) || date.getTime() <= 0) return '';
+  return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function renderConsultations(root, consultations, mayAnswer, consultantsConfigured) {
+  const list = root.querySelector('#consultations-list');
+  if (!list) return;
+  if (!consultations.length) {
+    list.innerHTML = emptyHTML('info', 'لا توجد استشارات بعد', 'كن أول من يطرح سؤالًا عن كتاب أو قراءة.');
+    return;
+  }
+  list.innerHTML = consultations.map((item) => `
+    <article class="consultation-card">
+      <div class="consultation-meta"><strong>${esc(item.memberName || 'عضو جليس')}</strong><span>${esc(consultationDateLabel(item.askedAt))}</span></div>
+      <p class="consultation-question">${esc(item.question || '')}</p>
+      ${item.answer ? `
+        <div class="consultation-answer">
+          <small>إجابة ${esc(item.answeredBy || 'المستشار')}</small>
+          <p>${esc(item.answer)}</p>
+          ${item.answeredAt ? `<time>${esc(consultationDateLabel(item.answeredAt))}</time>` : ''}
+        </div>` : mayAnswer ? `
+        <form class="consultation-answer-form" data-id="${esc(item.id)}">
+          <label for="consultation-answer-${esc(item.id)}">إجابتك كمستشار</label>
+          <textarea class="input" id="consultation-answer-${esc(item.id)}" name="answer" rows="3" maxlength="4000" required placeholder="اكتب إجابتك المعرفية…"></textarea>
+          <button class="btn btn-sm btn-primary" type="submit">نشر الإجابة</button>
+        </form>` : `
+        <div class="consultation-awaiting"><svg class="ic"><use href="#i-clock"/></svg><span>${consultantsConfigured ? 'بانتظار إجابة أحد المستشارين المعتمدين' : 'سيُتاح الرد بعد اعتماد أسماء المستشارين'}</span></div>`}
+    </article>`).join('');
+
+  list.querySelectorAll('.consultation-answer-form').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector('button[type="submit"]');
+      const answer = form.querySelector('textarea').value.trim();
+      if (answer.length < 2) { toast('اكتب الإجابة أولًا', 'info'); return; }
+      setBtnBusy(submit, true, 'جارٍ النشر…');
+      const result = await cloudRequest('answerConsultation', {
+        memberId: currentMember.id,
+        id: form.dataset.id,
+        answer
+      });
+      setBtnBusy(submit, false);
+      if (!result || result.success !== true) {
+        toast(cleanServerError(result, 'تعذر نشر الإجابة'), 'info');
+        return;
+      }
+      toast('تم نشر الإجابة', 'check');
+      await loadConsultations(root);
+    });
+  });
+}
+
+async function loadConsultations(root) {
+  const list = root.querySelector('#consultations-list');
+  if (!list) return;
+  list.innerHTML = '<p class="deleted-items-loading">جارٍ تحميل الاستشارات…</p>';
+  const result = await cloudRequest('getConsultations', null, currentMember && !isGuest() ? currentMember.id : null);
+  if (!root.querySelector('#consultations-list')) return;
+  if (!result || result.success !== true || !Array.isArray(result.data)) {
+    list.innerHTML = emptyHTML('info', 'تعذر تحميل الاستشارات', 'تحقق من نشر Apps Script المحدّث.');
+    return;
+  }
+  renderConsultations(root, result.data, result.canAnswer === true, result.consultantsConfigured === true);
+}
+
+function openConsultationsSheet() {
+  openSheet(`
+    ${sheetHead('استشارة رأي', 'أسئلة الأعضاء وإجابات المستشارين في الكتب والقراءة')}
+    ${isGuest() ? `
+      <div class="consultation-signin">
+        <p>يمكن للأعضاء طرح الأسئلة. سجّل الدخول لإرسال استشارتك.</p>
+        <button class="btn btn-sm btn-primary" type="button" data-action="open-gate">دخول الأعضاء</button>
+      </div>` : `
+      <form id="consultation-question-form" class="consultation-question-form">
+        <label for="consultation-question">اطرح سؤالك</label>
+        <textarea class="input" id="consultation-question" name="question" rows="3" maxlength="2000" required placeholder="اكتب سؤالك عن كتاب أو فكرة قرائية…"></textarea>
+        <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> إرسال للمستشارين</button>
+      </form>`}
+    <div class="consultations-section-head"><h3>الاستشارات</h3><span>الإجابة للمستشارين المعتمدين فقط</span></div>
+    <div id="consultations-list" class="consultations-list"><p class="deleted-items-loading">جارٍ التحميل…</p></div>
+  `, (root) => {
+    const form = root.querySelector('#consultation-question-form');
+    if (form) form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!currentMember || isGuest()) { toast('سجّل الدخول لإرسال استشارتك', 'info'); return; }
+      const question = form.querySelector('textarea').value.trim();
+      if (question.length < 8) { toast('اكتب سؤالك بتفصيل أكبر', 'info'); return; }
+      const submit = form.querySelector('button[type="submit"]');
+      setBtnBusy(submit, true, 'جارٍ الإرسال…');
+      const result = await cloudRequest('submitConsultation', {
+        memberId: currentMember.id,
+        question
+      });
+      setBtnBusy(submit, false);
+      if (!result || result.success !== true) {
+        toast(cleanServerError(result, 'تعذر إرسال الاستشارة'), 'info');
+        return;
+      }
+      form.reset();
+      toast('وصل سؤالك للمستشارين', 'check');
+      await loadConsultations(root);
+    });
+    loadConsultations(root);
   });
 }
 
@@ -3786,18 +4230,32 @@ function openTrashSheet() {
   if (!isSupervisor()) { toast('سلة المحذوفات للمشرفين فقط', 'info'); return; }
   openSheet(`
     ${sheetHead('سلة المحذوفات', 'الحذف هنا قابل للاستعادة ولا يحذف البيانات نهائيًا')}
+    <div class="trash-toolbar">
+      <span>السلة مشتركة بين مشرفي النادي</span>
+      <button class="icon-btn" type="button" id="refresh-trash" aria-label="تحديث سلة المحذوفات">
+        <svg class="ic"><use href="#i-refresh"/></svg>
+      </button>
+    </div>
     <div id="deleted-items-list" class="deleted-items-list"><p class="deleted-items-loading">جارٍ التحميل…</p></div>`, async (root) => {
-    const result = await cloudRequest('getDeletedItems');
-    if (!root.querySelector('#deleted-items-list')) return;
-    if (!result || result.success !== true || !Array.isArray(result.data)) {
-      root.querySelector('#deleted-items-list').innerHTML = emptyHTML('info', 'تعذر تحميل السلة', 'تحقق من نشر Apps Script المحدّث.');
-      return;
-    }
-    if (result.data.length && !result.data.some((item) => item && item.type)) {
-      root.querySelector('#deleted-items-list').innerHTML = emptyHTML('info', 'نسخة Apps Script قديمة', 'انشر النسخة المحدّثة من الكود لتفعيل سلة المحذوفات.');
-      return;
-    }
-    renderDeletedItems(root, result.data);
+    const refresh = async () => {
+      const list = root.querySelector('#deleted-items-list');
+      if (!list) return;
+      list.innerHTML = '<p class="deleted-items-loading">جارٍ تحديث السلة…</p>';
+      const result = await cloudRequest('getDeletedItems');
+      if (!root.querySelector('#deleted-items-list')) return;
+      if (!result || result.success !== true || !Array.isArray(result.data)) {
+        list.innerHTML = emptyHTML('info', 'تعذر تحميل السلة', 'تحقق من نشر Apps Script المحدّث.');
+        return;
+      }
+      if (result.data.length && !result.data.some((item) => item && item.type)) {
+        list.innerHTML = emptyHTML('info', 'نسخة Apps Script قديمة', 'انشر النسخة المحدّثة من الكود لتفعيل سلة المحذوفات.');
+        return;
+      }
+      renderDeletedItems(root, result.data);
+    };
+    const refreshButton = root.querySelector('#refresh-trash');
+    if (refreshButton) refreshButton.addEventListener('click', refresh);
+    await refresh();
   });
 }
 
@@ -4230,6 +4688,8 @@ function enterApp(welcome = false) {
   refreshLibraryCategoriesFromCloud();
   /* جلب المقالات المشتركة من الشيت */
   refreshArticlesFromCloud();
+  /* تحديث الصورة الشخصية من الحساب المشترك على أي جهاز */
+  refreshMemberProfileFromCloud();
   /* جلب اللقاءات المشتركة من الشيت */
   refreshMeetingsFromCloud();
   /* جلب آراء الكتب المشتركة وتحديث متوسطات المكتبة */
@@ -4342,6 +4802,9 @@ function handleGlobalClick(event) {
     case 'open-more':
       openMoreSheet();
       break;
+    case 'open-consultations':
+      openConsultationsSheet();
+      break;
     case 'view-members':
       openMembersSheet();
       break;
@@ -4369,6 +4832,9 @@ function handleGlobalClick(event) {
     case 'open-profile':
       profileReturn = currentScreen;
       go('profile');
+      break;
+    case 'open-member-profile':
+      openMemberProfileSheet(actionEl.dataset.name || '');
       break;
     case 'profile-back':
       go(profileReturn || 'home');
@@ -4662,8 +5128,7 @@ function handleGlobalClick(event) {
     case 'share-article': {
       const article = state.articles.find((item) => item.id === id);
       if (!article) break;
-      const text = `${article.title}\n— ${authorNameOf(article)}\n\n${article.excerpt}\n\n#جليس_القرائي`;
-      copyText(text).then((ok) => toast(ok ? 'نُسخ المقال للمشاركة' : 'تعذّر النسخ من المتصفح', ok ? 'share' : 'info'));
+      shareArticle(article);
       break;
     }
     case 'delete-article': {
@@ -4863,6 +5328,10 @@ async function init() {
   $('#register-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const name = $('#register-name').value.replace(/\s+/g, ' ').trim();
+    const phone = $('#register-phone').value.trim()
+      .replace(/[٠-٩]/g, (digit) => String(AR.indexOf(digit)))
+      .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+      .replace(/[\s().-]/g, '');
     const email = $('#register-email').value.trim();
     const password = $('#register-password').value;
     const confirm = $('#register-confirm').value;
@@ -4871,6 +5340,7 @@ async function init() {
     const fail = (message) => { error.textContent = message; error.hidden = false; };
 
     if (name.split(' ').filter(Boolean).length < 3) return fail('اكتب الاسم الثلاثي كما في الهوية.');
+    if (!/^\+?\d{8,15}$/.test(phone)) return fail('أدخل رقم جوال صحيحًا.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return fail('صيغة البريد الإلكتروني غير صحيحة.');
     if (password.length < 8) return fail('الرمز السري يجب أن يكون ٨ أحرف أو أكثر.');
     if (password !== confirm) return fail('الرمزان غير متطابقين.');
@@ -4878,12 +5348,12 @@ async function init() {
     error.hidden = true;
     setBtnBusy(submitBtn, true, 'جارٍ إرسال الرمز…');
     try {
-      const result = await cloudRequest('requestRegistrationCode', { name, email, password });
+      const result = await cloudRequest('requestRegistrationCode', { name, phone, email, password });
       if (!result || result.success !== true) {
         fail(cleanServerError(result, 'تعذر إرسال رمز التحقق، حاول مرة أخرى.'));
         return;
       }
-      pendingRegister = { name, email, password };
+      pendingRegister = { name, phone, email, password };
       $('#verify-code').value = '';
       $('#verify-email').textContent = email;
       showGateView('verify');
@@ -5023,6 +5493,7 @@ async function init() {
       try {
         const result = await cloudRequest('requestRegistrationCode', {
           name: pendingRegister.name,
+          phone: pendingRegister.phone,
           email: pendingRegister.email,
           password: pendingRegister.password
         });
@@ -5082,6 +5553,53 @@ async function init() {
     saveState();
     toast(event.target.checked ? 'تذكير الورد مفعّل' : 'تذكير الورد متوقف', 'bell');
   });
+
+  const photoButton = document.getElementById('profile-photo-change');
+  const photoInput = document.getElementById('profile-photo-input');
+  if (photoButton && photoInput) {
+    photoButton.addEventListener('click', () => {
+      if (isGuest()) { showGate(); toast('سجّل دخولك لتغيير صورتك', 'user'); return; }
+      photoInput.click();
+    });
+    photoInput.addEventListener('change', async () => {
+      const file = photoInput.files && photoInput.files[0];
+      if (!file) return;
+      if (!file.type || !file.type.startsWith('image/')) {
+        toast('اختر ملف صورة صالحًا', 'info');
+        photoInput.value = '';
+        return;
+      }
+      if (isGuest() || !currentMember) {
+        showGate();
+        photoInput.value = '';
+        return;
+      }
+      setBtnBusy(photoButton, true, 'جارٍ الحفظ…');
+      try {
+        const photo = await compressMeetingImage(file);
+        const result = await cloudRequest('setMemberPhoto', { memberId: currentMember.id, photo });
+        if (!result || result.success !== true) {
+          toast(cleanServerError(result, 'تعذر حفظ الصورة الشخصية'), 'info');
+          return;
+        }
+        currentMember.photo = photo;
+        state.profile.photo = photo;
+        const account = readAccount();
+        if (account && String(account.id) === String(currentMember.id)) {
+          persistAccount({ ...account, photo });
+        }
+        await saveState();
+        renderProfile();
+        updateHeaderAvatar();
+        toast('تم تحديث صورتك الشخصية', 'check');
+      } catch (error) {
+        toast(error.message || 'تعذر قراءة الصورة المحددة', 'info');
+      } finally {
+        setBtnBusy(photoButton, false);
+        photoInput.value = '';
+      }
+    });
+  }
 
   $('#app-main').addEventListener('click', (event) => {
     const afilter = event.target.closest('[data-afilter]');
@@ -5166,7 +5684,8 @@ async function init() {
     await setSessionMember(member);
     enterApp(false);
     const requested = params.get('screen');
-    if (requested) go(requested);
+    if (params.get('article')) await openSharedArticlePage(params.get('article'));
+    else if (requested) go(requested);
   } else {
     /* وضع زائر: تصفح عام بدون تسجيل */
     currentMember = { id: 'guest', name: 'زائر', role: 'زائر', lastWeek: 0, color: '#1E3A2B' };
@@ -5183,7 +5702,8 @@ async function init() {
     };
     enterApp(false);
     const requested = params.get('screen');
-    if (requested) go(requested);
+    if (params.get('article')) await openSharedArticlePage(params.get('article'));
+    else if (requested) go(requested);
   }
   setTimeout(hideSplash, 4000);
 }
