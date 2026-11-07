@@ -57,7 +57,7 @@ const ACCOUNT_KEY = 'jalees-account-v1';
 const MEMBER_KEY_PREFIX = 'jalees-member-v2:';
 const LEGACY_KEY = 'jalees-members-v1';
 const CLUB_GOAL = 12000;
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRSgGjhVS29jBPgXxKc_dhz-5ZGbcrg6QIjWN-2HtuKym8dymUyP5IK/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
 const CLUB_BOOKS_URL = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
 const QUOTES_SHEET_URL = CLUB_BOOKS_URL;
 // Authentication and member moderation belong to the main member backend,

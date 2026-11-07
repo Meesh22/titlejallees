@@ -1268,6 +1268,48 @@ function doGet(e) {
     const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
     const action = e && e.parameter ? e.parameter.action || '' : '';
 
+    if (action === 'getPendingMembers') {
+      const sheet = getMembersSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const pending = [];
+      rows.forEach((row, index) => {
+        const id = String(row[0] || '');
+        if (!id) return;
+        const status = memberStatusCode(row[6]);
+        if (status === 'active') return;
+        pending.push({
+          row: index + 2,
+          id: id,
+          name: String(row[1] || ''),
+          email: String(row[2] || ''),
+          status: status,
+          createdAt: row[7]
+        });
+      });
+      pending.sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+      return output({ success: true, data: pending });
+    }
+
+    if (action === 'getApprovedMembers') {
+      const sheet = getMembersSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const members = [];
+      rows.forEach((row) => {
+        if (!String(row[0] || '').trim()) return;
+        if (memberStatusCode(row[6]) !== 'active') return;
+        members.push({
+          name: String(row[1] || '').trim(),
+          role: String(row[5] || 'member'),
+          joinedAt: row[7]
+        });
+      });
+      return output({ success: true, data: members });
+    }
+
     if (action === 'getLibraryCategories') {
       return output({ success: true, data: getLibraryCategoryNames(ss) });
     }
