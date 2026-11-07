@@ -3016,7 +3016,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   body {
     display: block;
     padding: 0;
-    background: var(--paper);
+    background: linear-gradient(155deg, #152C21 0%, #1E3A2B 48%, #102118 100%);
   }
   body::before { display: none; }
   .stage { display: block; }
@@ -3027,7 +3027,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
     min-height: 0;
     padding: 0;
     border-radius: 0;
-    background: var(--paper);
+    background: #1E3A2B;
     box-shadow: none;
   }
   .phone::before, .phone::after, .phone-notch, .status-bar { display: none; }
@@ -3039,7 +3039,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   .confetti-layer { position: fixed; }
 }
 
-@media (max-height: 720px) {
+@media (max-height: 720px) and (min-width: 641px) {
   .phone { height: calc(100dvh - 20px); }
   .status-bar { display: none; }
   .phone-notch { top: 12px; height: 24px; width: 100px; }

@@ -4838,7 +4838,9 @@ async function init() {
     try {
       const result = await cloudRequest('loginMember', { identifier, password });
       if (!result || result.success !== true || !result.member) {
-        error.textContent = cleanServerError(result, 'تعذر الدخول، تحقق من الاسم أو البريد والرمز.');
+        error.textContent = result && result.success === true && !result.member
+          ? 'خدمة الدخول لم تُرجع بيانات الحساب. يجب تحديث Apps Script ونشر إصدار جديد.'
+          : cleanServerError(result, 'تعذر الدخول، تحقق من الاسم أو البريد والرمز.');
         error.hidden = false;
         return;
       }
