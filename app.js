@@ -60,6 +60,14 @@ const CLUB_GOAL = 12000;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQAU7y1xbP8LRSgGjhVS29jBPgXxKc_dhz-5ZGbcrg6QIjWN-2HtuKym8dymUyP5IK/exec';
 const CLUB_BOOKS_URL = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
 const QUOTES_SHEET_URL = CLUB_BOOKS_URL;
+// Authentication and member moderation belong to the main member backend,
+// not the legacy club-books endpoint.
+const MAIN_API_ACTIONS = new Set([
+  'registerMember', 'loginMember', 'requestRegistrationCode', 'verifyRegistrationCode',
+  'requestPasswordReset', 'resetPassword', 'getJoinRequests', 'saveJoinRequest',
+  'setJoinRequestStatus', 'getPendingMembers', 'setMemberStatus', 'getApprovedMembers',
+  'getClubBooks', 'saveClubBook', 'updateClubBook', 'deleteClubBook', 'restoreClubBook'
+]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
 let deletedQuoteTexts = new Set();
@@ -290,12 +298,11 @@ function findMemberByName(value) {
   return null;
 }
 
-const SUPERVISORS = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'مشرف جليس', 'محمد الدبيخي'];
+const SUPERVISORS = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي'];
 function isGuest() { return !currentMember || currentMember.id === 'guest'; }
 
 function isSupervisor() {
   if (!currentMember) return false;
-  if (currentMember.role === 'مشرف') return true;
   return SUPERVISORS.some((name) => normalizeName(name) === normalizeName(currentMember.name));
 }
 
@@ -399,13 +406,15 @@ function bindPasswordToggles() {
 }
 
 function showGateView(view) {
-  const names = ['login', 'register', 'verify', 'forgot', 'reset'];
+  const names = ['login', 'register', 'verify', 'pending', 'forgot', 'reset'];
   names.forEach((name) => {
     const form = document.getElementById(`${name}-form`);
     if (form) form.hidden = name !== view;
     const error = document.getElementById(`${name}-error`);
     if (error) error.hidden = true;
   });
+  const contact = document.querySelector('#gate-card > .gate-whatsapp');
+  if (contact) contact.hidden = view === 'pending';
   resetPasswordToggles();
   const firstInput = document.querySelector(`#${view}-form input`);
   if (firstInput) setTimeout(() => { try { firstInput.focus(); } catch (error) { /* تجاهل */ } }, 60);
@@ -596,6 +605,7 @@ function createInitialState(member) {
     articleFilter: 'all',
     articleCategory: 'all',
     articleCategories: [],
+    articleFontSize: 16,
     clubBooks: [],
     personalBooks: []
   };
@@ -610,12 +620,10 @@ async function cloudRequest(action, data = null, memberId = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const endpoint = action === 'getClubBooks' || action === 'saveClubBook' || action === 'updateClubBook'
-      || action === 'registerMember' || action === 'loginMember'
-      || action === 'requestRegistrationCode' || action === 'verifyRegistrationCode'
-      || action === 'requestPasswordReset' || action === 'resetPassword'
-      || action === 'getQuotes' || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle' || action === 'restoreArticle'
-      || action === 'deleteClubBook' || action === 'deleteQuote' || action === 'restoreClubBook' || action === 'restoreQuote'
+    const endpoint = MAIN_API_ACTIONS.has(action)
+      ? APPS_SCRIPT_URL
+      : action === 'getQuotes' || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle' || action === 'restoreArticle'
+      || action === 'deleteQuote' || action === 'restoreQuote'
       || action === 'getDeletedItems' || action === 'restoreLibraryCategory' || action === 'deleteLibraryCategory'
       || action === 'getBookRatings' || action === 'saveBookRating'
       || action === 'getMeetings' || action === 'saveMeeting' || action === 'deleteMeeting'
@@ -3209,7 +3217,14 @@ function openArticleComposer() {
         <input class="input" id="article-new-category" maxlength="40" placeholder="مثال: رحلات">
       </div>` : ''}
       <div class="field">
-        <label for="article-body">نص المقال</label>
+        <div class="article-font-row">
+          <label for="article-body">نص المقال</label>
+          <div class="article-font-controls" role="group" aria-label="حجم خط الكتابة">
+            <button type="button" class="font-size-btn" data-font-step="-1" aria-label="تصغير الخط">أ−</button>
+            <span class="font-size-value" id="article-font-value">16</span>
+            <button type="button" class="font-size-btn" data-font-step="1" aria-label="تكبير الخط">أ+</button>
+          </div>
+        </div>
         <textarea class="input" id="article-body" rows="8" maxlength="6000" placeholder="اكتب هنا… اترك سطراً فارغاً بين الفقرات." required></textarea>
       </div>
       <button class="btn btn-gold btn-block" type="submit">
@@ -3224,6 +3239,23 @@ function openArticleComposer() {
         if (!newCategoryField.hidden) root.querySelector('#article-new-category').focus();
       });
     }
+    const bodyInput = root.querySelector('#article-body');
+    const fontValue = root.querySelector('#article-font-value');
+    const clampFont = (value) => Math.min(24, Math.max(12, value));
+    let fontSize = clampFont(Number(state.articleFontSize) || 16);
+    const applyFont = (value, persist) => {
+      fontSize = clampFont(value);
+      if (bodyInput) bodyInput.style.fontSize = `${fontSize}px`;
+      if (fontValue) fontValue.textContent = String(fontSize);
+      if (persist) {
+        state.articleFontSize = fontSize;
+        saveState();
+      }
+    };
+    applyFont(fontSize, false);
+    root.querySelectorAll('[data-font-step]').forEach((button) => {
+      button.addEventListener('click', () => applyFont(fontSize + Number(button.dataset.fontStep), true));
+    });
     root.querySelector('#article-form').addEventListener('submit', (event) => {
       event.preventDefault();
       const title = root.querySelector('#article-title').value.trim();
@@ -3338,7 +3370,7 @@ function openJoinSheet() {
         <svg class="ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
         <div class="whatsapp-body">
           <strong>للاستفسار والتواصل:</strong>
-          <a href="https://wa.me/966503980997" target="_blank" rel="noopener" class="whatsapp-link">050 398 0997</a>
+          <a href="https://wa.me/966545946169" target="_blank" rel="noopener" class="whatsapp-link">054 594 6169</a>
         </div>
       </div>
       <button class="btn btn-gold btn-block" type="submit">
@@ -3363,60 +3395,158 @@ function openJoinSheet() {
   });
 }
 
-function openAddMemberSheet() {
+function joinStatusMeta(status) {
+  if (status === 'accepted') return { label: 'مقبول', className: 'accepted' };
+  if (status === 'rejected') return { label: 'مرفوض', className: 'rejected' };
+  return { label: 'معلق', className: 'pending' };
+}
+
+function memberAccountStatusMeta(status) {
+  if (status === 'rejected') return { label: 'مرفوض', className: 'rejected' };
+  return { label: 'بانتظار الموافقة', className: 'pending' };
+}
+
+function renderPendingMembers(accounts) {
+  const list = document.getElementById('pending-members-list');
+  if (!list) return;
+  if (!accounts.length) {
+    list.innerHTML = '<div class="empty"><svg class="ic"><use href="#i-check"/></svg><h4>لا حسابات بانتظار الموافقة</h4><p>كل الحسابات المسجلة تمت مراجعتها.</p></div>';
+    return;
+  }
+  list.innerHTML = accounts.map((account) => {
+    const meta = memberAccountStatusMeta(account.status);
+    return `
+      <div class="join-request-card ${meta.className}">
+        <span class="notif-icon"><svg class="ic"><use href="#i-user"/></svg></span>
+        <div class="notif-body">
+          <div class="join-request-head">
+            <strong>${esc(account.name || 'بدون اسم')}</strong>
+            <span class="join-status ${meta.className}">${meta.label}</span>
+          </div>
+          <p dir="ltr" style="text-align:right">${esc(account.email || '')}</p>
+          <small>${account.createdAt ? new Date(Number(account.createdAt)).toLocaleDateString('ar-SA') : ''}</small>
+          <div class="join-request-actions">
+            <button class="join-decision accept" type="button" data-action="member-accept" data-row="${esc(String(account.row))}" ${meta.className === 'accepted' ? 'disabled' : ''}>قبول</button>
+            <button class="join-decision reject" type="button" data-action="member-reject" data-row="${esc(String(account.row))}" ${meta.className === 'rejected' ? 'disabled' : ''}>رفض</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderJoinRequestsList(requests) {
+  const list = document.getElementById('join-requests-list');
+  if (!list) return;
+  if (!requests.length) {
+    list.innerHTML = '<div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>لا توجد طلبات</h4><p>لم يُرسل أي طلب انضمام بعد.</p></div>';
+    return;
+  }
+  list.innerHTML = requests.slice().reverse().map((request) => {
+    const meta = joinStatusMeta(request.status);
+    return `
+      <div class="join-request-card ${meta.className}">
+        <span class="notif-icon"><svg class="ic"><use href="#i-user"/></svg></span>
+        <div class="notif-body">
+          <div class="join-request-head">
+            <strong>${esc(request.name || 'بدون اسم')}</strong>
+            <span class="join-status ${meta.className}">${meta.label}</span>
+          </div>
+          <p>${esc(request.phone || '')} ${request.note ? '· ' + esc(request.note) : ''}</p>
+          <small>${request.ts ? new Date(Number(request.ts)).toLocaleDateString('ar-SA') : ''}</small>
+          <div class="join-request-actions">
+            <button class="join-decision accept" type="button" data-action="join-accept" data-row="${esc(String(request.row))}" ${meta.className === 'accepted' ? 'disabled' : ''}>قبول</button>
+            <button class="join-decision reject" type="button" data-action="join-reject" data-row="${esc(String(request.row))}" ${meta.className === 'rejected' ? 'disabled' : ''}>رفض</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function refreshJoinRequests() {
+  const list = document.getElementById('join-requests-list');
+  const membersList = document.getElementById('pending-members-list');
+  if (!list && !membersList) return;
+  try {
+    const results = await Promise.all([
+      fetch(`${CLUB_BOOKS_URL}?action=getJoinRequests&_=${Date.now()}`),
+      cloudRequest('getPendingMembers')
+    ]);
+    const data = await results[0].json();
+    const requests = (data && data.success && Array.isArray(data.data)) ? data.data : [];
+    renderJoinRequestsList(requests);
+    const pendingAccounts = (results[1] && results[1].success && Array.isArray(results[1].data)) ? results[1].data : [];
+    renderPendingMembers(pendingAccounts);
+  } catch (error) {
+    if (list) list.innerHTML = '<div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>تعذّر التحميل</h4><p>تحقق من نشر Apps Script المحدّث.</p></div>';
+    if (membersList) membersList.innerHTML = '<div class="empty"><svg class="ic"><use href="#i-user"/></svg><h4>تعذّر التحميل</h4><p>تحقق من نشر Apps Script المحدّث.</p></div>';
+  }
+}
+
+async function setMemberAccountStatus(button, status) {
   if (!isSupervisor()) { toast('غير مصرح', 'info'); return; }
-  openSheet(`
-    ${sheetHead('إضافة عضو جديد', 'أدخل اسم العضو كما سيُستخدم للدخول.')}
-    <form id="add-member-form" novalidate>
-      <div class="field">
-        <label for="add-member-name">اسم العضو</label>
-        <input class="input" id="add-member-name" type="text" maxlength="60" placeholder="مثال: خالد الواصل" required>
-      </div>
-      <button class="btn btn-gold btn-block" type="submit">
-        <svg class="ic"><use href="#i-plus"/></svg> إضافة
-      </button>
-    </form>`, (root) => {
-    root.querySelector('#add-member-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const name = root.querySelector('#add-member-name').value.trim();
-      if (!name) { toast('يرجى إدخال الاسم', 'info'); return; }
-      // Save to custom members list
-      const customMembers = JSON.parse(localStorage.getItem('jalees-custom-members') || '[]');
-      if (customMembers.includes(name)) { toast('العضو موجود مسبقاً', 'info'); return; }
-      customMembers.push(name);
-      localStorage.setItem('jalees-custom-members', JSON.stringify(customMembers));
-      closeSheet();
-      toast(`تمت إضافة «${name}»`, 'check');
+  const row = Number(button.dataset.row);
+  if (!row) return;
+  button.disabled = true;
+  const card = button.closest('.join-request-card');
+  if (card) card.classList.add('busy');
+  try {
+    const result = await cloudRequest('setMemberStatus', {
+      row,
+      status,
+      by: (currentMember && currentMember.name) || 'مشرف'
     });
-  });
+    if (!result || result.success !== true) {
+      toast(cleanServerError(result, 'تعذر تحديث حالة الحساب'), 'info');
+      button.disabled = false;
+      return;
+    }
+    toast(status === 'active' ? 'تم قبول العضو وفتح دخوله' : 'تم رفض طلب العضوية', status === 'active' ? 'check' : 'info');
+    await refreshJoinRequests();
+  } catch (error) {
+    toast('تعذر تحديث حالة الحساب', 'info');
+    button.disabled = false;
+  }
+}
+
+async function setJoinRequestStatus(button, status) {
+  if (!isSupervisor()) { toast('غير مصرح', 'info'); return; }
+  const row = Number(button.dataset.row);
+  if (!row) return;
+  button.disabled = true;
+  const card = button.closest('.join-request-card');
+  if (card) card.classList.add('busy');
+  try {
+    const result = await cloudRequest('setJoinRequestStatus', {
+      row,
+      status,
+      by: (currentMember && currentMember.name) || 'مشرف'
+    });
+    if (!result || result.success !== true) {
+      toast(cleanServerError(result, 'تعذر تحديث حالة الطلب'), 'info');
+      button.disabled = false;
+      return;
+    }
+    toast(status === 'accepted' ? 'تم قبول الطلب' : 'تم رفض الطلب', status === 'accepted' ? 'check' : 'info');
+    await refreshJoinRequests();
+  } catch (error) {
+    toast('تعذر تحديث حالة الطلب', 'info');
+    button.disabled = false;
+  }
 }
 
 function openJoinRequestsSheet() {
   if (!isSupervisor()) { toast('غير مصرح', 'info'); return; }
-  openSheet(`${sheetHead('طلبات الانضمام', 'طلبات الزوار للانضمام للنادي')}<div class="notif-list" id="join-requests-list"><div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>جارٍ التحميل…</h4></div></div>`);
-  (async () => {
-    try {
-      const res = await fetch(`${CLUB_BOOKS_URL}?action=getJoinRequests`);
-      const data = await res.json();
-      const list = document.getElementById('join-requests-list');
-      if (!list) return;
-      const requests = (data && data.success && Array.isArray(data.data)) ? data.data : [];
-      list.innerHTML = requests.length
-        ? requests.slice().reverse().map((r) => `
-            <div class="notif-item">
-              <span class="notif-icon"><svg class="ic"><use href="#i-user"/></svg></span>
-              <div class="notif-body">
-                <strong>${esc(r.name)}</strong>
-                <p>${esc(r.phone || '')} ${r.note ? '· ' + esc(r.note) : ''}</p>
-                <small>${r.ts ? new Date(Number(r.ts)).toLocaleDateString('ar-SA') : ''}</small>
-              </div>
-            </div>`).join('')
-        : '<div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>لا توجد طلبات</h4><p>لم يُرسل أي طلب انضمام بعد.</p></div>';
-    } catch (e) {
-      const list = document.getElementById('join-requests-list');
-      if (list) list.innerHTML = '<div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>تعذّر التحميل</h4></div>';
-    }
-  })();
+  openSheet(`
+    ${sheetHead('طلبات الانضمام', 'حسابات الأعضاء الجدد وطلبات الزوار')}
+    <div class="join-section">
+      <h3 class="join-section-title">حسابات بانتظار الموافقة</h3>
+      <div class="notif-list" id="pending-members-list"><div class="empty"><svg class="ic"><use href="#i-user"/></svg><h4>جارٍ التحميل…</h4></div></div>
+    </div>
+    <div class="join-section">
+      <h3 class="join-section-title">طلبات الزوار للانضمام</h3>
+      <div class="notif-list" id="join-requests-list"><div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>جارٍ التحميل…</h4></div></div>
+    </div>`);
+  refreshJoinRequests();
 }
 
 function openRateBookSheet(bookId) {
@@ -3503,6 +3633,11 @@ function openMoreSheet() {
         <div class="more-body"><strong>اللقاءات المسجلة</strong><p>أرشيف لقاءات جليس السابقة</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
+      <button class="more-item" type="button" data-action="view-members">
+        <span class="more-icon"><svg class="ic"><use href="#i-users"/></svg></span>
+        <div class="more-body"><strong>أعضاء جليس</strong><p id="more-members-count">الأعضاء المسجلون رسميًا</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
       <button class="more-item" type="button" data-action="club-programs">
         <span class="more-icon"><svg class="ic"><use href="#i-sparkles"/></svg></span>
         <div class="more-body"><strong>برامج النادي</strong><p>البرامج والدورات الثقافية</p></div>
@@ -3514,14 +3649,9 @@ function openMoreSheet() {
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
       ${isSupervisor() ? `
-      <button class="more-item" type="button" data-action="add-member">
-        <span class="more-icon"><svg class="ic"><use href="#i-plus"/></svg></span>
-        <div class="more-body"><strong>إضافة عضو جديد</strong><p>للمشرفين فقط</p></div>
-        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
-      </button>
       <button class="more-item" type="button" data-action="view-join-requests">
         <span class="more-icon"><svg class="ic"><use href="#i-users"/></svg></span>
-        <div class="more-body"><strong>طلبات الانضمام</strong><p>مراجعة طلبات الزوار</p></div>
+        <div class="more-body"><strong>طلبات الانضمام</strong><p>مراجعة طلبات الزوار والموافقة عليها</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>` : ''}
       ${isSupervisor() ? `
@@ -3537,6 +3667,84 @@ function openMoreSheet() {
         toast('قريباً', 'sparkles');
       });
     });
+    refreshMembersCount(root);
+  });
+}
+
+async function refreshMembersCount(root) {
+  const target = (root || document).querySelector('#more-members-count');
+  if (!target) return;
+  try {
+    const result = await cloudRequest('getApprovedMembers');
+    if (result && result.success === true && Array.isArray(result.data)) {
+      target.textContent = result.data.length
+        ? `${toAr(result.data.length)} عضوًا مسجلًا`
+        : 'لا أعضاء مسجلين بعد';
+    }
+  } catch (error) { /* تجاهل */ }
+}
+
+function renderApprovedMembers(root, members) {
+  const list = root.querySelector('#members-list');
+  if (!list) return;
+  const countEl = root.querySelector('#members-count');
+  if (countEl) countEl.textContent = members.length ? `${toAr(members.length)} عضوًا مسجلًا` : '';
+  if (!members.length) {
+    list.innerHTML = emptyHTML('users', 'لا أعضاء مسجلين بعد', 'ستظهر أسماء الأعضاء هنا بعد قبول حساباتهم.');
+    return;
+  }
+  const sorted = members.slice().sort((a, b) => {
+    const sa = a.role === 'supervisor' ? 0 : 1;
+    const sb = b.role === 'supervisor' ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
+  });
+  list.innerHTML = sorted.map((member) => {
+    const known = MEMBERS.find((item) => normalizeName(item.name) === normalizeName(member.name));
+    const color = known ? known.color : '#C59B63';
+    const isSupervisorMember = member.role === 'supervisor';
+    const joined = Number(member.joinedAt)
+      ? `منذ ${toAr(new Date(Number(member.joinedAt)).getFullYear())}`
+      : '';
+    return `<div class="member-row">
+      <span class="member-avatar" style="background:${color}">${esc(initials(member.name))}</span>
+      <div class="member-main">
+        <strong>${esc(member.name || 'عضو جليس')}</strong>
+        <small>${isSupervisorMember ? 'مشرف النادي' : 'عضو'}${joined ? ' · ' + joined : ''}</small>
+      </div>
+      ${isSupervisorMember ? '<span class="member-role">مشرف</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function loadApprovedMembers(root) {
+  const list = root.querySelector('#members-list');
+  const countEl = root.querySelector('#members-count');
+  if (countEl) countEl.textContent = 'جارٍ التحميل…';
+  try {
+    const result = await cloudRequest('getApprovedMembers');
+    if (!result || result.success !== true || !Array.isArray(result.data)) throw new Error('failed');
+    renderApprovedMembers(root, result.data);
+  } catch (error) {
+    if (list) list.innerHTML = emptyHTML('info', 'تعذّر تحميل الأعضاء', 'تحقق من نشر Apps Script المحدّث.');
+    if (countEl) countEl.textContent = '';
+  }
+}
+
+function openMembersSheet() {
+  openSheet(`
+    ${sheetHead('أعضاء جليس', 'الأعضاء المسجلون رسميًا بعد قبول حساباتهم')}
+    <div class="members-head">
+      <span class="eyebrow" id="members-count">جارٍ التحميل…</span>
+      <button class="icon-btn" type="button" id="refresh-members" aria-label="تحديث قائمة الأعضاء">
+        <svg class="ic"><use href="#i-refresh"/></svg>
+      </button>
+    </div>
+    <div class="members-list" id="members-list"><div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>جارٍ التحميل…</h4></div></div>
+  `, (root) => {
+    const btn = root.querySelector('#refresh-members');
+    if (btn) btn.addEventListener('click', () => loadApprovedMembers(root));
+    loadApprovedMembers(root);
   });
 }
 
@@ -4134,11 +4342,23 @@ function handleGlobalClick(event) {
     case 'open-more':
       openMoreSheet();
       break;
-    case 'add-member':
-      openAddMemberSheet();
+    case 'view-members':
+      openMembersSheet();
       break;
     case 'view-join-requests':
       openJoinRequestsSheet();
+      break;
+    case 'join-accept':
+      setJoinRequestStatus(actionEl, 'accepted');
+      break;
+    case 'join-reject':
+      setJoinRequestStatus(actionEl, 'rejected');
+      break;
+    case 'member-accept':
+      setMemberAccountStatus(actionEl, 'active');
+      break;
+    case 'member-reject':
+      setMemberAccountStatus(actionEl, 'rejected');
       break;
     case 'go-home':
       go('home');
@@ -4622,6 +4842,16 @@ async function init() {
         error.hidden = false;
         return;
       }
+      if (String(result.member.status || '').toLowerCase() !== 'active') {
+        const statusMessage = result.member.status === 'pending'
+          ? 'حسابك بانتظار موافقة المشرف'
+          : result.member.status === 'rejected'
+            ? 'تم رفض طلب حسابك، تواصل مع إدارة النادي'
+            : 'تعذر التحقق من حالة الحساب. حدّث الصفحة وحاول مرة أخرى.';
+        error.textContent = statusMessage;
+        error.hidden = false;
+        return;
+      }
       await completeLogin(result.member);
     } finally {
       setBtnBusy(submitBtn, false);
@@ -4681,15 +4911,14 @@ async function init() {
         email: pendingRegister.email,
         code
       });
-      if (!result || result.success !== true || !result.member) {
-        error.textContent = cleanServerError(result, 'رمز التحقق غير صحيح.');
+      if (!result || result.success !== true || result.status !== 'pending') {
+        error.textContent = cleanServerError(result, 'لم يتم تأكيد طلبك كحساب بانتظار الموافقة. حدّث الصفحة وحاول مرة أخرى.');
         error.hidden = false;
         return;
       }
-      const name = pendingRegister.name;
       pendingRegister = null;
-      await completeLogin(result.member);
-      toast(`تم تأكيد بريدك، أهلاً بك ${name}`, 'check');
+      showGateView('pending');
+      toast('تم إنشاء طلب حسابك، سنتواصل معك عند قبولك', 'check');
     } finally {
       setBtnBusy(submitBtn, false);
     }
@@ -4776,6 +5005,8 @@ async function init() {
 
   const gateHome = document.getElementById('gate-home');
   if (gateHome) gateHome.addEventListener('click', showPublicHome);
+  const pendingHome = document.getElementById('pending-home');
+  if (pendingHome) pendingHome.addEventListener('click', showPublicHome);
 
   const verifyBack = document.getElementById('verify-back');
   if (verifyBack) verifyBack.addEventListener('click', () => showGateView('register'));

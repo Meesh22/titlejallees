@@ -8,7 +8,7 @@ const MEETINGS_SHEET = 'اللقاءات';
 const RECORDED_MEETINGS_SHEET = 'اللقاءات المسجلة';
 const MEMBERS_SHEET = 'الأعضاء';
 const OLD_BOOKS_SHEET_ID = 1035156833;
-const SUPERVISOR_NAMES = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'مشرف جليس', 'محمد الدبيخي'];
+const SUPERVISOR_NAMES = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي'];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_ROUNDS = 10000;
@@ -97,6 +97,75 @@ function paintDeletedRow(sheet, row, deleted, width) {
     range.setBackground(null);
     range.setFontColor(null);
   }
+}
+
+/* ---- طلبات الانضمام: حالة الطلب ولون الصف ---- */
+const JOIN_REQUEST_COLORS = {
+  pending: { background: '#efefef', font: '#555555' },
+  accepted: { background: '#d9ead3', font: '#274e13' },
+  rejected: { background: '#f4cccc', font: '#9c0006' }
+};
+
+function getJoinRequestsSheet(ss) {
+  const sheet = getDataSheet(ss, JOIN_REQUESTS_SHEET, [
+    'name', 'phone', 'note', 'ts', 'status', 'decidedAt', 'decidedBy'
+  ]);
+  if (sheet.getMaxColumns() < 7) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 7 - sheet.getMaxColumns());
+  }
+  const headers = sheet.getRange(1, 1, 1, 7).getValues()[0];
+  if (!headers[4]) sheet.getRange(1, 5, 1, 3).setValues([['status', 'decidedAt', 'decidedBy']]);
+  return sheet;
+}
+
+function normalizeJoinStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  return status === 'accepted' || status === 'rejected' ? status : 'pending';
+}
+
+function paintJoinRequestRow(sheet, row, status) {
+  const color = JOIN_REQUEST_COLORS[normalizeJoinStatus(status)];
+  const range = sheet.getRange(row, 1, 1, 7);
+  range.setBackground(color.background);
+  range.setFontColor(color.font);
+}
+
+function ensureJoinRequestStatuses(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const range = sheet.getRange(2, 1, lastRow - 1, 7);
+  const rows = range.getValues();
+  let changed = false;
+  rows.forEach((row) => {
+    if (!row[4]) { row[4] = 'pending'; changed = true; }
+  });
+  if (changed) range.setValues(rows);
+  rows.forEach((row, index) => {
+    if (!String(row[0] || '').trim() && !String(row[1] || '').trim()) return;
+    paintJoinRequestRow(sheet, index + 2, normalizeJoinStatus(row[4]));
+  });
+}
+
+/* ---- حسابات الأعضاء: حالة الحساب ولون الصف ---- */
+const MEMBER_STATUS_COLORS = {
+  active: { background: '#d9ead3', font: '#274e13' },
+  pending: { background: '#efefef', font: '#555555' },
+  rejected: { background: '#f4cccc', font: '#9c0006' }
+};
+
+function memberStatusCode(value) {
+  const status = String(value || '').trim().toLowerCase();
+  if (!status || status === 'active') return 'active';
+  if (status === 'rejected') return 'rejected';
+  return 'pending';
+}
+
+function paintMemberRow(sheet, row, status) {
+  const color = MEMBER_STATUS_COLORS[memberStatusCode(status)];
+  const width = Math.min(11, sheet.getMaxColumns());
+  const range = sheet.getRange(row, 1, 1, width);
+  range.setBackground(color.background);
+  range.setFontColor(color.font);
 }
 
 function normalizeTabName(value) {
@@ -569,16 +638,85 @@ function doPost(e) {
     }
 
     if (action === 'saveJoinRequest') {
-      const sheet = ss.getSheetByName(JOIN_REQUESTS_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب طلبات الانضمام');
-
+      const sheet = getJoinRequestsSheet(ss);
+      const row = sheet.getLastRow() + 1;
       sheet.appendRow([
         data.name || '',
         data.phone || '',
         data.note || '',
-        data.ts || Date.now()
+        data.ts || Date.now(),
+        'pending',
+        '',
+        ''
       ]);
+      paintJoinRequestRow(sheet, row, 'pending');
       return output({ success: true, message: 'تم حفظ طلب الانضمام' });
+    }
+
+    if (action === 'setJoinRequestStatus') {
+      const sheet = getJoinRequestsSheet(ss);
+      const row = Number(data.row);
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد طلب الانضمام');
+      const status = normalizeJoinStatus(data.status);
+      sheet.getRange(row, 5, 1, 3).setValues([[
+        status,
+        status === 'pending' ? '' : Date.now(),
+        status === 'pending' ? '' : (data.by || 'مشرف')
+      ]]);
+      paintJoinRequestRow(sheet, row, status);
+      return output({ success: true, status: status });
+    }
+
+    if (action === 'getPendingMembers') {
+      const sheet = getMembersSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const pending = [];
+      rows.forEach((row, index) => {
+        const id = String(row[0] || '');
+        if (!id) return;
+        const status = memberStatusCode(row[6]);
+        if (status === 'active') return;
+        pending.push({
+          row: index + 2,
+          id: id,
+          name: String(row[1] || ''),
+          email: String(row[2] || ''),
+          status: status,
+          createdAt: row[7]
+        });
+      });
+      pending.sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+      return output({ success: true, data: pending });
+    }
+
+    if (action === 'setMemberStatus') {
+      const sheet = getMembersSheet(ss);
+      const row = Number(data.row);
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      const status = memberStatusCode(data.status);
+      sheet.getRange(row, 7).setValue(status);
+      paintMemberRow(sheet, row, status);
+      return output({ success: true, status: status });
+    }
+
+    if (action === 'getApprovedMembers') {
+      const sheet = getMembersSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const members = [];
+      rows.forEach((row) => {
+        if (!String(row[0] || '').trim()) return;
+        if (memberStatusCode(row[6]) !== 'active') return;
+        members.push({
+          name: String(row[1] || '').trim(),
+          role: String(row[5] || 'member'),
+          joinedAt: row[7]
+        });
+      });
+      return output({ success: true, data: members });
     }
 
     if (action === 'requestRegistrationCode') {
@@ -666,13 +804,14 @@ function doPost(e) {
         : 'member';
       sheet.appendRow([
         id, record.name, email, record.passwordHash, record.passwordSalt, role,
-        'active', Date.now(), Date.now(), '', ''
+        'pending', Date.now(), Date.now(), '', ''
       ]);
+      paintMemberRow(sheet, sheet.getLastRow(), 'pending');
       clearPendingRegistration(email);
       return output({
         success: true,
-        message: 'تم تأكيد بريدك وإنشاء الحساب',
-        member: { id, name: record.name, email, role, status: 'active' }
+        status: 'pending',
+        message: 'تم تأكيد بريدك، وحسابك بانتظار موافقة الإدارة'
       });
     }
 
@@ -700,7 +839,8 @@ function doPost(e) {
       if (row < 0) throw new Error('الاسم أو البريد الإلكتروني أو الرمز غير صحيح');
 
       const values = sheet.getRange(row, 1, 1, 11).getValues()[0];
-      const status = String(values[6] || 'active');
+      const status = memberStatusCode(values[6]);
+      if (status === 'rejected') throw new Error('تم رفض طلب حسابك، تواصل مع إدارة النادي');
       if (status !== 'active') throw new Error('حسابك بانتظار موافقة المشرف');
 
       const expected = String(values[3] || '');
@@ -1159,12 +1299,17 @@ function doGet(e) {
     }
 
     if (action === 'getJoinRequests') {
-      const sheet = ss.getSheetByName(JOIN_REQUESTS_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب طلبات الانضمام');
-      const rows = sheet.getDataRange().getValues();
-      const requests = rows.slice(1).map(row => ({
-        name: row[0], phone: row[1], note: row[2], ts: row[3]
-      }));
+      const sheet = getJoinRequestsSheet(ss);
+      ensureJoinRequestStatuses(sheet);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+      const requests = rows.map((row, index) => ({
+        row: index + 2,
+        name: row[0], phone: row[1], note: row[2], ts: row[3],
+        status: normalizeJoinStatus(row[4]),
+        decidedAt: row[5], decidedBy: row[6]
+      })).filter((item) => String(item.name || '').trim() || String(item.phone || '').trim());
       return output({ success: true, data: requests });
     }
 
@@ -1384,6 +1529,10 @@ function setupJaleesSheets() {
 
   const members = getMembersSheet(ss);
   report.push(`${MEMBERS_SHEET}: ${members.getMaxColumns()} عمود`);
+
+  const joinRequests = getJoinRequestsSheet(ss);
+  ensureJoinRequestStatuses(joinRequests);
+  report.push(`${JOIN_REQUESTS_SHEET}: ${joinRequests.getMaxColumns()} عمود`);
 
   SpreadsheetApp.flush();
   return report.join(' | ');

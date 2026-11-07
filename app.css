@@ -720,6 +720,19 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .gate-home .ic { width: 14px; height: 14px; }
 .gate-whatsapp { margin: 12px 0 0; }
 .gate-whatsapp .whatsapp-body strong { color: var(--green-700); }
+.gate-pending-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(197, 155, 99, 0.28);
+  background: rgba(197, 155, 99, 0.10);
+}
+.gate-pending-note .ic { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--gold-700); }
+.gate-pending-note p { font-size: 10.5px; line-height: 1.85; color: var(--green-700); }
+.gate-pending-note strong { color: var(--green-800); font-weight: 800; }
 
 .gate-glow {
   position: absolute;
@@ -2001,6 +2014,18 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .more-body strong { display: block; font-size: 12.5px; font-weight: 800; color: var(--green-700); }
 .more-body p { font-size: 9.5px; color: var(--muted-2); margin-top: 1px; }
 .more-item .chev { width: 14px; height: 14px; color: var(--muted-2); flex: none; }
+
+/* قائمة أعضاء جليس */
+.members-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 8px; }
+.members-head .icon-btn { width: 32px; height: 32px; color: var(--green-700); background: var(--paper-2); }
+.members-head .icon-btn .ic { width: 15px; height: 15px; }
+.members-list { display: grid; gap: 8px; }
+.member-row { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 13px; border: 1px solid var(--line); background: var(--white); }
+.member-avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--paper); font-size: 11px; font-weight: 800; }
+.member-main { flex: 1; min-width: 0; }
+.member-main strong { display: block; font-size: 11px; font-weight: 800; color: var(--green-700); }
+.member-main small { display: block; margin-top: 1px; font-size: 8.5px; color: var(--muted-2); }
+.member-role { flex: none; padding: 3px 9px; border-radius: 999px; background: rgba(197,155,99,.16); color: var(--gold-700); font-size: 8.5px; font-weight: 800; }
 .quote-promo {
   position: relative;
   padding: 18px 16px 15px;
@@ -2502,6 +2527,12 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   line-height:1.7;
 }
 .articles-note .ic { flex:none; width:14px; height:14px; color:var(--gold-700); }
+.article-font-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; }
+.article-font-row label { margin:0; }
+.article-font-controls { display:flex; align-items:center; gap:4px; }
+.font-size-btn { width:30px; height:28px; border-radius:8px; border:1px solid var(--line); background:var(--paper-2); color:var(--green-700); font-size:11px; font-weight:800; line-height:1; }
+.font-size-btn:active { background:var(--green-50); }
+.font-size-value { min-width:24px; text-align:center; font-size:9.5px; color:var(--muted); }
 .articles-list { display:grid; gap:10px; }
 .article-row {
   display:block;
@@ -2884,6 +2915,29 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .notif-body strong { display: block; font-size: 10.5px; color: var(--green-700); }
 .notif-body p { font-size: 9.5px; color: var(--muted); line-height: 1.7; margin-top: 1px; }
 .notif-body small { font-size: 8px; color: var(--muted-2); }
+
+/* طلبات الانضمام — حالة الطلب */
+.join-request-card { display: flex; gap: 10px; padding: 11px; border-radius: 13px; border: 1px solid var(--line); background: var(--white); transition: background .2s ease; }
+.join-request-card.pending { background: #f3f3f3; border-color: #e2e2e2; }
+.join-request-card.accepted { background: #e7f3e3; border-color: #c3ddb8; }
+.join-request-card.rejected { background: #fbe9e9; border-color: #eec4c4; }
+.join-request-card.busy { opacity: .6; }
+.join-request-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.join-status { flex: none; font-size: 8.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+.join-status.pending { background: #e4e4e4; color: #5a5a5a; }
+.join-status.accepted { background: #cfe8c8; color: #245c1f; }
+.join-status.rejected { background: #f3c9c9; color: #96201f; }
+.join-request-actions { display: flex; gap: 6px; margin-top: 8px; }
+.join-decision { flex: 1; padding: 6px 10px; border-radius: 9px; border: 1px solid transparent; font-size: 9.5px; font-weight: 800; }
+.join-decision.accept { background: #e7f3e3; color: #245c1f; border-color: #c3ddb8; }
+.join-decision.reject { background: #fbe9e9; color: #96201f; border-color: #eec4c4; }
+.join-decision.accept:not(:disabled):active { background: #cfe8c8; }
+.join-decision.reject:not(:disabled):active { background: #f3c9c9; }
+.join-decision:disabled { opacity: .55; }
+.join-section { margin-bottom: 14px; }
+.join-section:last-child { margin-bottom: 0; }
+.join-section-title { margin: 0 2px 7px; font-size: 10px; font-weight: 800; color: var(--green-700); }
+.join-status { white-space: nowrap; }
 
 .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
 
