@@ -487,7 +487,21 @@ const ARTICLE_CATEGORIES = [
   'فلسفة',
   'علوم',
   'سيرة',
-  'فنون'
+  'فنون',
+  'النادي',
+  'اقتصاد',
+  'إدارة',
+  'دين',
+  'لغة',
+  'تراجم',
+  'رحلات',
+  'صحة',
+  'تقنية',
+  'مجتمع',
+  'قصص',
+  'مسرح',
+  'نقد',
+  'أخرى'
 ];
 
 const ARTICLE_SEED = [
@@ -581,7 +595,7 @@ function createInitialState(member) {
     myFilter: 'reading',
     articleFilter: 'all',
     articleCategory: 'all',
-    articleCategorySearch: '',
+    articleCategories: [],
     clubBooks: [],
     personalBooks: []
   };
@@ -1825,22 +1839,10 @@ function miniStatHTML(value, label, note) {
 /* --------------------------------------------------------------------------
    5. الرئيسية
    -------------------------------------------------------------------------- */
-function isMeshaalArticle(article) {
-  if (!article) return false;
-  let authorName = article.authorName || '';
-  if (!authorName && article.authorId === 'me') {
-    authorName = (state && state.profile && state.profile.name) || (currentMember && currentMember.name) || '';
-  }
-  if (!authorName && article.authorId) {
-    const member = memberById(article.authorId);
-    authorName = member ? member.name : '';
-  }
-  return normalizeName(authorName) === normalizeName('مشعل الحفير');
-}
-
-function visibleSiteArticles() {
+/* كل المقالات المنشورة في المجلة — تظهر لجميع الزوار والأعضاء */
+function visibleMemberArticles() {
   return state && Array.isArray(state.articles)
-    ? state.articles.filter(isMeshaalArticle).slice().sort((a, b) => articleTimestamp(b) - articleTimestamp(a))
+    ? state.articles.slice().sort((a, b) => articleTimestamp(b) - articleTimestamp(a))
     : [];
 }
 
@@ -1880,14 +1882,14 @@ function renderHome() {
       <p>${esc(book.author)}</p>
     </button>`).join('');
 
-  const article = visibleSiteArticles()[0];
+  const article = visibleMemberArticles()[0];
   $('#home-article').innerHTML = article ? `
     <div class="ha-thumb"><svg class="ic"><use href="#i-article"/></svg></div>
     <div class="ha-body">
       <span class="chip chip-soft">${esc(article.category)}</span>
       <h4>${esc(article.title)}</h4>
       <div class="ha-meta"><b>${esc(authorNameOf(article))}</b><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
-    </div>` : emptyHTML('article', 'لا مقالات متاحة حاليًا', 'ستظهر هنا مقالات مشعل الحفير.');
+    </div>` : emptyHTML('article', 'لا مقالات متاحة حاليًا', 'ستظهر هنا أحدث مقالات أعضاء جليس.');
   $('#home-article').dataset.action = article ? 'open-article' : '';
   if (article) $('#home-article').dataset.id = article.id;
 
@@ -2730,7 +2732,7 @@ function renderMyBooks() {
    9. مقالات الأعضاء
    -------------------------------------------------------------------------- */
 function renderArticles() {
-  const visibleArticles = visibleSiteArticles();
+  const visibleArticles = visibleMemberArticles();
   const filtered = visibleArticles.filter((article) => {
     if (state.articleFilter === 'saved' && !state.savedArticles.includes(article.id)) return false;
     const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
@@ -2764,6 +2766,23 @@ function renderArticles() {
   renderArticleFilters();
 }
 
+function getArticleCategoryOptions() {
+  const options = [];
+  const seen = new Set();
+  const add = (value) => {
+    const name = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!name) return;
+    const key = normalizeName(name);
+    if (seen.has(key)) return;
+    seen.add(key);
+    options.push(name);
+  };
+  ARTICLE_CATEGORIES.forEach(add);
+  ((state && state.articleCategories) || []).forEach(add);
+  ((state && state.articles) || []).forEach((article) => add(article && article.category));
+  return options;
+}
+
 function renderArticleFilters() {
   const container = $('#article-filters');
   if (!container) return;
@@ -2776,26 +2795,18 @@ function renderArticleFilters() {
   const catContainer = $('#article-categories');
   if (!catContainer) return;
 
-  const articleCats = new Set(visibleSiteArticles().map((a) => a.category));
+  const articleCats = new Set(visibleMemberArticles().map((a) => a.category));
+  const categories = getArticleCategoryOptions();
+  const allCategory = categories[0] || 'الكل';
+  const selected = !state.articleCategory || state.articleCategory === 'all'
+    ? allCategory
+    : state.articleCategory;
 
-  const search = (state.articleCategorySearch || '').trim().toLowerCase();
-  const visibleCats = ARTICLE_CATEGORIES.filter((c) =>
-    c.toLowerCase().includes(search)
-  );
-
-  catContainer.innerHTML = `
-    <div class="category-search">
-      <svg class="ic"><use href="#i-search"/></svg>
-      <input class="input" id="article-category-search" type="search"
-        placeholder="ابحث عن تصنيف…" value="${esc(state.articleCategorySearch || '')}"
-        aria-label="ابحث عن تصنيف">
-    </div>
-    <span class="eyebrow">التصنيفات العامة</span>
-  ` + visibleCats.map((category, index) => {
-    const active = state.articleCategory === category;
+  catContainer.innerHTML = `<span class="eyebrow">التصنيفات العامة</span>` + categories.map((category, index) => {
+    const active = selected === category;
     const hasArticles = articleCats.has(category);
     const isAll = index === 0;
-    return `<button class="chip-filter ${active ? 'active' : ''}${hasArticles ? '' : ' cat-empty'}" type="button" data-acat="${category}" aria-selected="${active}">
+    return `<button class="chip-filter ${active ? 'active' : ''}${hasArticles ? '' : ' cat-empty'}" type="button" data-acat="${esc(category)}" aria-selected="${active}">
       ${esc(category)}${isAll || hasArticles ? '' : ' <span class="cat-count">—</span>'}</button>`;
   }).join('');
 }
@@ -2807,7 +2818,7 @@ function renderProfile() {
   const finished = state.myBooks.filter((item) => item.status === 'finished').length;
   const stats = weekStats();
   const myQuotes = state.quotes.filter((quote) => isMine(quote)).length;
-  const myArticles = visibleSiteArticles().filter((article) => isMine(article)).length;
+  const myArticles = visibleMemberArticles().filter((article) => isMine(article)).length;
   const streak = streakDays();
 
   $('#profile-name').textContent = state.profile.name;
@@ -3141,7 +3152,7 @@ function openQuoteComposer() {
 
 function openArticleSheet(id) {
   const article = state.articles.find((item) => item.id === id);
-  if (!article || !isMeshaalArticle(article)) return;
+  if (!article) return;
   const saved = state.savedArticles.includes(article.id);
   const body = article.body.split(/\n{2,}/).map((paragraph) => `<p>${esc(paragraph).replace(/\n/g, '<br>')}</p>`).join('');
 
@@ -3189,13 +3200,14 @@ function openArticleComposer() {
       <div class="field">
         <label for="article-category">التصنيف</label>
         <select class="input" id="article-category">
-          <option>قراءة</option>
-          <option>تجارب</option>
-          <option>فكر</option>
-          <option>رواية</option>
-          <option>النادي</option>
+          ${getArticleCategoryOptions().filter((c) => c !== 'الكل').map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          ${isSupervisor() ? '<option value="__new__">＋ تصنيف جديد…</option>' : ''}
         </select>
       </div>
+      ${isSupervisor() ? `<div class="field" id="article-new-category-field" hidden>
+        <label for="article-new-category">اسم التصنيف الجديد</label>
+        <input class="input" id="article-new-category" maxlength="40" placeholder="مثال: رحلات">
+      </div>` : ''}
       <div class="field">
         <label for="article-body">نص المقال</label>
         <textarea class="input" id="article-body" rows="8" maxlength="6000" placeholder="اكتب هنا… اترك سطراً فارغاً بين الفقرات." required></textarea>
@@ -3204,10 +3216,32 @@ function openArticleComposer() {
         <svg class="ic"><use href="#i-send"/></svg> انشر المقال
       </button>
     </form>`, (root) => {
+    const categorySelect = root.querySelector('#article-category');
+    const newCategoryField = root.querySelector('#article-new-category-field');
+    if (categorySelect && newCategoryField) {
+      categorySelect.addEventListener('change', () => {
+        newCategoryField.hidden = categorySelect.value !== '__new__';
+        if (!newCategoryField.hidden) root.querySelector('#article-new-category').focus();
+      });
+    }
     root.querySelector('#article-form').addEventListener('submit', (event) => {
       event.preventDefault();
       const title = root.querySelector('#article-title').value.trim();
-      const category = root.querySelector('#article-category').value;
+      let category = root.querySelector('#article-category').value;
+      if (category === '__new__') {
+        const custom = root.querySelector('#article-new-category') ? root.querySelector('#article-new-category').value.replace(/\s+/g, ' ').trim() : '';
+        if (custom.length < 2) {
+          toast('اكتب اسم التصنيف الجديد', 'info');
+          return;
+        }
+        const existing = getArticleCategoryOptions().find((name) => normalizeName(name) === normalizeName(custom));
+        category = existing || custom;
+        if (!existing) {
+          state.articleCategories = Array.isArray(state.articleCategories) ? state.articleCategories : [];
+          state.articleCategories.push(category);
+          saveState();
+        }
+      }
       const body = root.querySelector('#article-body').value.trim();
       if (title.length < 4) {
         toast('العنوان قصير جداً', 'info');
@@ -3824,7 +3858,7 @@ function go(name) {
 
   if (name === 'quotes') state.seenQuotes = (state.quotes || []).length;
   if (name === 'library') state.seenClubBooks = (state.clubBooks || []).length;
-  if (name === 'articles') state.seenArticles = visibleSiteArticles().length;
+  if (name === 'articles') state.seenArticles = visibleMemberArticles().length;
   updateNavBadges();
 }
 
@@ -3947,7 +3981,7 @@ function updateNavBadges() {
   const badges = {
     quotes: Math.max(0, (state.quotes || []).length - (state.seenQuotes || 0)),
     library: Math.max(0, (state.clubBooks || []).length - (state.seenClubBooks || 0)),
-    articles: Math.max(0, visibleSiteArticles().length - (state.seenArticles || 0))
+    articles: Math.max(0, visibleMemberArticles().length - (state.seenArticles || 0))
   };
   Object.entries(badges).forEach(([key, count]) => {
     const el = document.getElementById(`badge-${key}`);
@@ -4841,14 +4875,6 @@ async function init() {
     const head = range.closest('.my-progress').querySelector('.my-progress-head');
     head.querySelector('span').textContent = `${toAr(range.value)} من ${toAr(range.max)} صفحة`;
     head.querySelector('b').textContent = `٪${toAr(percent)}`;
-  });
-
-  $('#app-main').addEventListener('input', (event) => {
-    const search = event.target.closest('#article-category-search');
-    if (!search) return;
-    state.articleCategorySearch = search.value;
-    saveState();
-    renderArticles();
   });
 
   $('#app-main').addEventListener('change', (event) => {
