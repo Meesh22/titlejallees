@@ -1270,7 +1270,7 @@ function openRecordedMeetingComposer() {
       <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="عنوان اللقاء المسجل"></div>
       <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء"></textarea></div>
       <div class="meeting-form-row">
-        <div class="field"><label for="recorded-date">تاريخ اللقاء</label><input class="input" id="recorded-date" type="date" required></div>
+        <div class="field"><label>تاريخ اللقاء (سنة / شهر / يوم)</label>${dateYMDField('recorded-date', 'تاريخ اللقاء')}</div>
         <div class="field"><label for="recorded-speaker">مقدم اللقاء</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدم اللقاء"></div>
       </div>
       <div class="meeting-form-row">
@@ -1322,7 +1322,7 @@ function openRecordedMeetingComposer() {
       event.preventDefault();
       if (!isSupervisor()) { toast('إضافة التسجيلات للمشرفين فقط', 'info'); return; }
       const title = root.querySelector('#recorded-title').value.trim();
-      const recordedAt = root.querySelector('#recorded-date').value;
+      const recordedAt = readYMD('recorded-date');
       const videoUrl = root.querySelector('#recorded-video-url').value.trim();
       if (!title || !recordedAt || !/^https?:\/\//i.test(videoUrl)) {
         toast('أكمل العنوان والتاريخ، وأدخل رابط تسجيل صحيحًا', 'info');
@@ -1404,19 +1404,22 @@ function meetingDateLabel(date) {
 function meetingTimeLabel(time) {
   if (!time) return '';
   const raw = time instanceof Date ? time.toISOString() : String(time).trim();
-  const match = raw.match(/(?:T|^)(\d{1,2}):(\d{2})/);
-  let hourText = match && match[1];
-  let minuteText = match && match[2];
-  if (!match) {
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) return raw;
-    hourText = parsed.getHours();
-    minuteText = String(parsed.getMinutes()).padStart(2, '0');
+  // Extract raw HH:MM without timezone conversion (supports "16:23", "16:23:00", ISO with T)
+  let match = raw.match(/(?:T|^)(\d{1,2}):(\d{2})(?::\d{2})?/);
+  let hourText;
+  let minuteText;
+  if (match) {
+    hourText = match[1];
+    minuteText = match[2];
+  } else {
+    // Fallback only if no raw time found; avoid shifting if raw is Date object from sheet
+    return raw.replace(/[A-Z]/g, '').trim();
   }
   const hour = Number(hourText);
-  if (!Number.isFinite(hour)) return raw;
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return raw;
   const hour12 = hour % 12 || 12;
-  return `${toAr(hour12)}:${toAr(minuteText)} ${hour >= 12 ? 'م' : 'ص'}`;
+  return `${toAr(hour12)}:${toAr(String(minute).padStart(2, '0'))} ${hour >= 12 ? 'مساءً' : 'صباحاً'}`;
 }
 
 function meetingLocationUrl(location) {
@@ -1435,8 +1438,11 @@ function renderMeetingCard() {
   const dateLabel = meetingDateLabel(meeting.date);
   const timeLabel = meetingTimeLabel(meeting.time || meeting.date);
   const locationUrl = meetingLocationUrl(meeting.location);
+  const cropStyle = meeting.image
+    ? `object-position:${clamp(Number(meeting.imagePosX) || 50, 0, 100)}% ${clamp(Number(meeting.imagePosY) || 50, 0, 100)}%;transform:scale(${(clamp(Number(meeting.imageScale) || 100, 100, 300) / 100).toFixed(2)})`
+    : '';
   const imageMarkup = meeting.image
-    ? `<img class="meeting-poster" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy">`
+    ? `<img class="meeting-poster" style="${cropStyle}" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy">`
     : `<div class="meeting-poster-placeholder"><svg class="ic"><use href="#i-calendar"/></svg><span>لقاء جليس القادم</span></div>`;
 
   root.innerHTML = `
@@ -1496,6 +1502,179 @@ function compressMeetingImage(file) {
 
 let currentMember = null;
 let state = null;
+let approvedMembersCache = [];
+
+/* أداة قصّ الصورة يدويًا قبل الحفظ: تحديد الزاوية (X/Y) والتكبير، ثم قصّ الصورة فعليًا لتكون أصغر من الأصل وتتناسب مع مقاس العرض */
+function cropImageDataUrl(dataUrl, crop) {
+  return new Promise((resolve, reject) => {
+    if (!dataUrl) { resolve(dataUrl); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const sx = clamp(Number(crop && crop.x) || 50, 0, 100) / 100;
+        const sy = clamp(Number(crop && crop.y) || 50, 0, 100) / 100;
+        const scaleVal = clamp(Number(crop && crop.scale) || 100, 100, 300) / 100;
+        const cropW = Math.max(1, Math.round(img.width / scaleVal));
+        const cropH = Math.max(1, Math.round(img.height / scaleVal));
+        const x = clamp(Math.round((img.width - cropW) * sx), 0, Math.max(0, img.width - cropW));
+        const y = clamp(Math.round((img.height - cropH) * sy), 0, Math.max(0, img.height - cropH));
+        const canvas = document.createElement('canvas');
+        canvas.width = cropW;
+        canvas.height = cropH;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, cropW, cropH);
+        ctx.drawImage(img, x, y, cropW, cropH, 0, 0, cropW, cropH);
+        resolve(canvas.toDataURL('image/jpeg', 0.76));
+      } catch (e) { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/* قصّ الصورة بسحب الأطراف مثل صورة الشجرة — إطار بزوايا وقابل للتحريك، الصورة تُقصّ فعليًا أصغر من الأصلي */
+function createCropControls(wrap, previewImg, initial = { x: 50, y: 50, scale: 100 }) {
+  const box = document.createElement('div');
+  box.className = 'drag-crop-box';
+  box.innerHTML = `
+    <div class="drag-crop-frame" role="application" aria-label="تحديد أطراف الصورة">
+      <span class="drag-crop-grid"></span>
+      <span class="drag-crop-handle tl"></span><span class="drag-crop-handle tr"></span>
+      <span class="drag-crop-handle bl"></span><span class="drag-crop-handle br"></span>
+      <span class="drag-crop-handle tm"></span><span class="drag-crop-handle bm"></span>
+      <span class="drag-crop-handle lm"></span><span class="drag-crop-handle rm"></span>
+    </div>
+    <div class="drag-crop-hint">اسحب الإطار لتحريكه، واسحب الزوايا لتحديد الأطراف</div>
+  `;
+  wrap.appendChild(box);
+  const frame = box.querySelector('.drag-crop-frame');
+  const crop = { x: initial.x, y: initial.y, scale: initial.scale };
+  // Convert initial pos/scale to frame rect (% of wrap)
+  const initW = clamp(10000 / Math.max(1, crop.scale), 20, 95);
+  const initH = clamp(10000 / Math.max(1, crop.scale), 20, 95);
+  let px = clamp((crop.x / 100) * (100 - initW), 0, 100 - initW);
+  let py = clamp((crop.y / 100) * (100 - initH), 0, 100 - initH);
+
+  const paint = () => {
+    frame.style.left = px + '%';
+    frame.style.top = py + '%';
+    frame.style.width = initW + '%';
+    frame.style.height = initH + '%';
+    crop.x = (px + initW / 2) / 100 * 100; crop.y = (py + initH / 2) / 100 * 100;
+    crop.scale = Math.round(10000 / initW);
+    // Apply preview: image clipped to frame roughly via object-position/scale
+    if (previewImg) {
+      previewImg.style.objectFit = 'cover';
+      previewImg.style.objectPosition = `${crop.x}% ${crop.y}%`;
+      previewImg.style.transform = `scale(${(crop.scale / 100).toFixed(2)})`;
+    }
+  };
+
+  const setPointer = (e, onMove) => {
+    e.preventDefault();
+    const rect = wrap.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const oPx = px, oPy = py, oW = initW, oH = initH;
+    const move = (ev) => {
+      const dx = ((ev.clientX - startX) / rect.width) * 100;
+      const dy = ((ev.clientY - startY) / rect.height) * 100;
+      onMove(dx, dy, oPx, oPy, oW, oH);
+      paint();
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  frame.querySelector('.tl').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy, oW, oH) => {
+    const nw = clamp(oW - dx, 15, 95); const fromLeft = oPx + oW - nw;
+    const nh = clamp(oH - dy, 15, 95); const fromTop = oPy + oH - nh;
+    px = clamp(fromLeft, 0, 100 - nw); py = clamp(fromTop, 0, 100 - nh);
+    initW = nw; initH = nh;
+    frame.style.left = px + '%'; frame.style.top = py + '%'; frame.style.width = initW + '%'; frame.style.height = initH + '%';
+  }));
+  frame.querySelector('.br').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy) => {
+    const nw = clamp(oW + dx, 15, 95 - oPx); const nh = clamp(oH + dy, 15, 95 - oPy);
+    initW = nw; initH = nh;
+    frame.style.width = initW + '%'; frame.style.height = initH + '%';
+  }));
+  frame.querySelector('.tr').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy, oW, oH) => {
+    const nw = clamp(oW + dx, 15, 95 - oPx); const nh = clamp(oH - dy, 15, 95);
+    const top = clamp(oPy + oH - nh, 0, 100 - nh);
+    initW = nw; initH = nh; py = top;
+    frame.style.top = py + '%'; frame.style.width = initW + '%'; frame.style.height = initH + '%';
+  }));
+  frame.querySelector('.bl').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy, oW, oH) => {
+    const nw = clamp(oW - dx, 15, 95); const nh = clamp(oH + dy, 15, 95 - oPy);
+    px = clamp(oPx + oW - nw, 0, 100 - nw);
+    initW = nw; initH = nh;
+    frame.style.left = px + '%'; frame.style.width = initW + '%'; frame.style.height = initH + '%';
+  }));
+  frame.addEventListener('pointerdown', (e) => {
+    if (e.target.classList.contains('drag-crop-handle')) return;
+    setPointer(e, (dx, dy, oPx, oPy) => {
+      px = clamp(oPx + dx, 0, 100 - initW); py = clamp(oPy + dy, 0, 100 - initH);
+      frame.style.left = px + '%'; frame.style.top = py + '%';
+    });
+  });
+
+  paint();
+  return crop;
+}
+
+function dateYMDField(idPrefix, label) {
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+  const today = new Date();
+  return `
+  <span class="ymd-group" role="group" aria-label="${label || 'التاريخ'}">
+    <label>سنة <select class="input ymd-y" id="${idPrefix}-y">${years.map((y) => `<option value="${y}" ${y === today.getFullYear() ? 'selected' : ''}>${toAr(y)}</option>`).join('')}</select></label>
+    <label>شهر <select class="input ymd-m" id="${idPrefix}-m">${months.map((m) => `<option value="${m}" ${m === today.getMonth() + 1 ? 'selected' : ''}>${toAr(m)}</option>`).join('')}</select></label>
+    <label>يوم <select class="input ymd-d" id="${idPrefix}-d">${days.map((d) => `<option value="${d}" ${d === today.getDate() ? 'selected' : ''}>${toAr(d)}</option>`).join('')}</select></label>
+    <input type="hidden" id="${idPrefix}-hidden">
+  </span>`;
+}
+function readYMD(idPrefix) {
+  const y = document.getElementById(`${idPrefix}-y`);
+  const m = document.getElementById(`${idPrefix}-m`);
+  const d = document.getElementById(`${idPrefix}-d`);
+  if (!y || !m || !d) return '';
+  const mm = String(m.value).padStart(2, '0');
+  const dd = String(d.value).padStart(2, '0');
+  return `${y.value}-${mm}-${dd}`;
+}
+
+function cacheApprovedMembers(list) {
+  if (Array.isArray(list)) approvedMembersCache = list.slice();
+}
+function photoByName(name) {
+  const key = normalizeName(name);
+  if (!key) return '';
+  if (currentMember && normalizeName(currentMember.name) === key) {
+    return (state && state.profile && state.profile.photo) || currentMember.photo || '';
+  }
+  const found = approvedMembersCache.find((m) => normalizeName(m.name) === key);
+  if (found && found.photo) return String(found.photo);
+  return '';
+}
+
+function memberPhoto(name, explicitPhoto) {
+  if (explicitPhoto) return explicitPhoto;
+  return photoByName(name) || '';
+}
+
+async function refreshApprovedMembersCache() {
+  try {
+    const result = await cloudRequest('getApprovedMembers');
+    if (result && result.success === true && Array.isArray(result.data)) {
+      cacheApprovedMembers(result.data);
+      return result.data;
+    }
+  } catch (error) { /* تجاهل */ }
+  return [];
+}
 
 /* ترحيل بيانات النسخة القديمة — فقط للعضو الذي يطابق اسمه اسم الملف الشخصي المحفوظ. */
 function readLegacyFor(member) {
@@ -1821,7 +2000,8 @@ function coverHTML(book) {
 }
 
 function avatarHTML(name, color, cls = 'avatar-mini', photo = '') {
-  const safePhoto = /^data:image\/(?:jpeg|png|webp);base64,/i.test(String(photo || '')) ? String(photo) : '';
+  const resolvedPhoto = memberPhoto(name, photo);
+  const safePhoto = /^data:image\/(?:jpeg|png|webp);base64,/i.test(String(resolvedPhoto || '')) ? String(resolvedPhoto) : '';
   return `<span class="${cls}" style="background:linear-gradient(135deg, ${color}, #14291D)">${safePhoto ? `<img class="avatar-photo-image" src="${esc(safePhoto)}" alt="صورة ${esc(name)}">` : esc(initials(name))}</span>`;
 }
 
@@ -1843,7 +2023,7 @@ function memberRowHTML(member, rank, options = {}) {
   return `
     <div class="board-row${me}${top}">
       <span class="board-rank">${toAr(rank)}</span>
-      ${avatarHTML(member.name, member.color, 'board-avatar')}
+      ${avatarHTML(member.name, member.color, 'board-avatar', memberPhoto(member.name, member.photo))}
       <div class="board-info">
         <button class="board-member-name" type="button" data-action="open-member-profile" data-name="${esc(member.name)}">${esc(member.name)}${member.isMe ? ' · أنت' : ''}</button>
         <span>${member.isMe ? 'وردك هذا الأسبوع' : esc(member.role)}</span>
@@ -2438,7 +2618,8 @@ function openAddBook() {
       <div class="field">
         <label for="add-book-image">صورة غلاف الكتاب (اختياري)</label>
         <input class="input" id="add-book-image" type="file" accept="image/*">
-        <div class="image-preview" id="image-preview" hidden></div>
+        <div class="image-preview crop-preview-wrap" id="image-preview" hidden></div>
+        <small id="add-book-image-status" class="meeting-image-status"></small>
       </div>
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> إضافة الكتاب
@@ -2446,21 +2627,37 @@ function openAddBook() {
     </form>`, (root) => {
     const imageInput = root.querySelector('#add-book-image');
     const preview = root.querySelector('#image-preview');
+    const status = root.querySelector('#add-book-image-status');
     let imageData = null;
+    let cropState = { x: 50, y: 50, scale: 100 };
 
-    imageInput.addEventListener('change', (event) => {
+    imageInput.addEventListener('change', async (event) => {
       const file = event.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        imageData = e.target.result;
-        preview.innerHTML = `<img src="${imageData}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px">`;
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await compressMeetingImage(file);
+        preview.innerHTML = `<img src="${imageData}" alt="غلاف الكتاب"><button type="button" class="meeting-image-remove" id="add-book-image-remove" aria-label="إزالة الصورة">×</button>`;
         preview.hidden = false;
-      };
-      reader.readAsDataURL(file);
+        const img = preview.querySelector('img');
+        if (!preview.dataset.cropInit) {
+          preview.dataset.cropInit = '1';
+          cropState = createCropControls(preview, img, cropState);
+        }
+        status.textContent = 'الصورة بحجم العرض — حدّد الزاوية والحجم';
+        preview.querySelector('#add-book-image-remove')?.addEventListener('click', () => {
+          imageData = null;
+          imageInput.value = '';
+          preview.innerHTML = '';
+          preview.hidden = true;
+          status.textContent = '';
+        });
+      } catch (error) {
+        status.textContent = error.message || 'تعذر قراءة الصورة';
+      }
     });
 
-    root.querySelector('#add-book-form').addEventListener('submit', (event) => {
+    root.querySelector('#add-book-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const title = root.querySelector('#add-book-title').value.trim();
       const author = root.querySelector('#add-book-author').value.trim() || 'مؤلف غير محدد';
@@ -2475,6 +2672,7 @@ function openAddBook() {
         return;
       }
 
+      const finalCover = imageData ? await cropImageDataUrl(imageData, cropState) : null;
       const newBook = {
         id: `club-${Date.now()}`,
         title,
@@ -2484,7 +2682,7 @@ function openAddBook() {
         pages,
         year,
         coverColor: color,
-        coverImage: imageData,
+        coverImage: finalCover,
         coverColor2: '#14291D',
         createdAt: Date.now(),
         memberId: currentMember.id,
@@ -2911,8 +3109,10 @@ async function openMemberProfileSheet(name) {
   const photo = isSelf
     ? (state.profile.photo || (currentMember && currentMember.photo) || '')
     : (approved && approved.photo ? approved.photo : '');
-  const articlesCount = (state && state.articles ? state.articles : []).filter((a) => normalizeName(authorNameOf(a)) === normalizeName(target)).length;
-  const quotesCount = (state && state.quotes ? state.quotes : []).filter((q) => normalizeName(authorNameOf(q)) === normalizeName(target)).length;
+  const myArticles = (state && state.articles ? state.articles : []).filter((a) => normalizeName(authorNameOf(a)) === normalizeName(target));
+  const myQuotes = (state && state.quotes ? state.quotes : []).filter((q) => normalizeName(authorNameOf(q)) === normalizeName(target));
+  const articlesCount = myArticles.length;
+  const quotesCount = myQuotes.length;
   const finished = isSelf ? state.myBooks.filter((item) => item.status === 'finished').length : 0;
   const color = isSelf ? '#C59B63' : (member ? member.color : (approved && approved.role === 'supervisor' ? '#1E3A2B' : '#C59B63'));
 
@@ -2934,6 +3134,22 @@ async function openMemberProfileSheet(name) {
         <div><strong>${toAr(quotesCount)}</strong><span>اقتباس</span></div>
         ${isSelf ? `<div><strong>${toAr(finished)}</strong><span>كتاب مكتمل</span></div>` : ''}
       </div>
+      <section class="member-contributions">
+        <h4>اقتباساته</h4>
+        ${myQuotes.length ? myQuotes.slice(0, 10).map((q) => `
+          <blockquote class="member-contribution-quote">
+            <p>«${esc(q.text)}»</p>
+            <footer>${esc(q.book || 'من هامش القراءة')}${q.page ? ` · ص ${esc(q.page)}` : ''} · ${esc(q.time || '')}</footer>
+          </blockquote>`).join('') : '<p class="member-contribution-empty">لا اقتباسات بعد</p>'}
+        <h4>مقالاته</h4>
+        ${myArticles.length ? myArticles.slice(0, 10).map((a) => `
+          <article class="member-contribution-article" data-action="open-article" data-id="${esc(a.id)}" role="button" tabindex="0">
+            <span class="chip chip-soft">${esc(a.category || 'قراءة')}</span>
+            <h5>${esc(a.title)}</h5>
+            <p>${esc(a.excerpt || a.body || '').slice(0, 120)}</p>
+            <small>${esc(a.time || '')} · ${toAr(a.read || 3)} دقائق</small>
+          </article>`).join('') : '<p class="member-contribution-empty">لا مقالات بعد</p>'}
+      </section>
       ${isSelf ? `<button class="btn btn-sm btn-primary" type="button" data-action="open-profile">عرض ملفي الشخصي</button>` : ''}
     </div>`, (root) => {
     const btn = root.querySelector('[data-action="open-profile"]');
@@ -3158,7 +3374,10 @@ function openBookSheet(id) {
       ${!isGuest() ? `<button class="btn btn-ghost btn-block book-review-add" type="button" data-action="rate-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-star"/></svg> أضف تقييمك ومراجعتك</button>` : ''}
       <div class="book-reviews-list">${reviewMarkup}</div>
     </section>
-    <section class="book-detail-panel" id="book-detail-quotes" hidden><div class="book-related-quotes">${quotesMarkup}</div></section>
+    <section class="book-detail-panel" id="book-detail-quotes" hidden>
+      ${!isGuest() ? `<button class="btn btn-gold btn-block book-quote-add" type="button" data-action="add-quote-from-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-quote"/></svg> أضف اقتباسًا من «${esc(book.title)}»</button>` : ''}
+      <div class="book-related-quotes">${quotesMarkup}</div>
+    </section>
   `, (root) => {
     root.querySelectorAll('[data-book-panel]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -3177,14 +3396,20 @@ function openBookSheet(id) {
   });
 }
 
-function openQuoteComposer() {
+function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
+  const presetBook = presetBookId ? (getBook(presetBookId) || (state.clubBooks || []).find((b) => String(b.id) === String(presetBookId))) : null;
+  const initialBook = presetBook ? presetBook.title : (presetBookTitle || '');
+  const initialBookId = presetBook ? String(presetBook.id) : '';
   const quoteBookOptions = [...new Map(
     [...BOOKS, ...((state && state.clubBooks) || [])]
       .filter((book) => book && book.title)
       .map((book) => [normalizeBookTitle(book.title), book.title])
   ).values()];
+  if (initialBook && !quoteBookOptions.some((t) => normalizeBookTitle(t) === normalizeBookTitle(initialBook))) {
+    quoteBookOptions.push(initialBook);
+  }
   openSheet(`
-    ${sheetHead('اقتبس ما ألهمك', 'جملة واحدة قد تفتح باباً لكتاب كامل.')}
+    ${sheetHead('اقتبس ما ألهمك', `جملة واحدة قد تفتح باباً لكتاب كامل.${initialBook ? ` — من «${esc(initialBook)}»` : ''}`)}
     <form id="quote-form" novalidate>
       <div class="field">
         <label for="quote-text">نص الاقتباس</label>
@@ -3193,7 +3418,7 @@ function openQuoteComposer() {
       <div class="field-grid">
         <div class="field">
           <label for="quote-book">الكتاب</label>
-          <input class="input" id="quote-book" list="quote-books" maxlength="80" placeholder="اسم الكتاب">
+          <input class="input" id="quote-book" list="quote-books" maxlength="80" placeholder="اسم الكتاب" value="${esc(initialBook)}" ${initialBookId ? `data-book-id="${esc(initialBookId)}"` : ''}>
           <datalist id="quote-books">${quoteBookOptions.map((title) => `<option value="${esc(title)}"></option>`).join('')}</datalist>
         </div>
         <div class="field">
@@ -3207,7 +3432,7 @@ function openQuoteComposer() {
         <span id="quote-preview-source">—</span>
       </div>
       <button class="btn btn-gold btn-block" type="submit">
-        <svg class="ic"><use href="#i-send"/></svg> انشر الاقتباس
+        <svg class="ic"><use href="#i-send"/></svg> انشر الاقتباس في قائمة الاقتباسات
       </button>
     </form>`, (root) => {
     const text = root.querySelector('#quote-text');
@@ -3215,6 +3440,8 @@ function openQuoteComposer() {
     const page = root.querySelector('#quote-page');
     const preview = root.querySelector('#quote-preview-text');
     const source = root.querySelector('#quote-preview-source');
+    const form = root.querySelector('#quote-form');
+    let presetId = initialBookId;
 
     const update = () => {
       const value = text.value.trim();
@@ -3223,10 +3450,13 @@ function openQuoteComposer() {
       source.textContent = [book.value.trim() || 'هامش الكتاب', page.value.trim() ? `ص ${page.value.trim()}` : '', state.profile.name]
         .filter(Boolean).join(' · ');
     };
-    [text, book, page].forEach((field) => field.addEventListener('input', update));
+    [text, book, page].forEach((field) => field.addEventListener('input', () => {
+      // إذا غيّر العضو اسم الكتاب يدويًا نعيد البحث عن المعرف، وإلا نحتفظ بالمعرّف المضبوط من صفحة الكتاب
+      if (presetId && normalizeBookTitle(book.value.trim()) !== normalizeBookTitle(initialBook)) presetId = '';
+      update();
+    }));
     update();
-
-    root.querySelector('#quote-form').addEventListener('submit', (event) => {
+    if (form) form.addEventListener('submit', (event) => {
       event.preventDefault();
       const value = text.value.trim();
       if (value.length < 4) {
@@ -3238,7 +3468,7 @@ function openQuoteComposer() {
         id: `q-${Date.now()}`,
         text: value,
         book: book.value.trim() || 'من هامش القراءة',
-        bookId: (() => {
+        bookId: presetId || (() => {
           const match = [...BOOKS, ...((state && state.clubBooks) || [])]
             .find((item) => normalizeBookTitle(item.title) === normalizeBookTitle(book.value.trim()));
           return match ? match.id : '';
@@ -3251,6 +3481,7 @@ function openQuoteComposer() {
         likes: 0,
         createdAt: Date.now()
       };
+      const savedBookId = newQuote.bookId;
       state.quotes = mergeQuoteLists([newQuote], state.quotes);
       saveLocalSharedQuotes(state.quotes);
       state.quoteFilter = 'all';
@@ -3260,8 +3491,12 @@ function openQuoteComposer() {
       renderQuotes();
       renderHome();
       updateNavBadges();
-      toast('نُشر اقتباسك وسُجّل في الشيت السحابي', 'quote');
+      toast('نُشر الاقتباس وظهر في قائمة الاقتباسات وفي صفحة الكتاب', 'quote');
       celebrate();
+      if (savedBookId) {
+        // إعادة فتح صفحة الكتاب لعرض التزامن فورًا
+        setTimeout(() => openBookSheet(savedBookId), 250);
+      }
     });
   });
 }
@@ -3712,6 +3947,8 @@ function renderPendingMembers(accounts) {
   }
   list.innerHTML = accounts.map((account) => {
     const meta = memberAccountStatusMeta(account.status);
+    const isConsultant = (account.role === 'consultant');
+    const memberType = account.memberType || 'member';
     return `
       <div class="join-request-card ${meta.className}">
         <span class="notif-icon"><svg class="ic"><use href="#i-user"/></svg></span>
@@ -3723,9 +3960,20 @@ function renderPendingMembers(accounts) {
           <p dir="ltr" style="text-align:right">${esc(account.email || '')}</p>
           ${account.phone ? `<p dir="ltr" style="text-align:right">${esc(account.phone)}</p>` : ''}
           <small>${account.createdAt ? new Date(Number(account.createdAt)).toLocaleDateString('ar-SA') : ''}</small>
+          ${meta.className === 'pending' ? `
+          <div class="member-type-row">
+            <label>نوع العضوية:
+              <select class="member-type-select" data-row="${esc(String(account.row))}">
+                <option value="member" ${memberType === 'member' ? 'selected' : ''}>عضو جليس</option>
+                <option value="friend" ${memberType === 'friend' ? 'selected' : ''}>صديق جليس</option>
+              </select>
+            </label>
+          </div>` : ''}
           <div class="join-request-actions">
             <button class="join-decision accept" type="button" data-action="member-accept" data-row="${esc(String(account.row))}" ${meta.className === 'accepted' ? 'disabled' : ''}>قبول</button>
             <button class="join-decision reject" type="button" data-action="member-reject" data-row="${esc(String(account.row))}" ${meta.className === 'rejected' ? 'disabled' : ''}>رفض</button>
+            ${meta.className === 'accepted' ? `
+            <button class="join-decision consultant-toggle" type="button" data-action="toggle-consultant" data-row="${esc(String(account.row))}" data-consultant="${isConsultant ? 'true' : 'false'}">${isConsultant ? 'إلغاء ترقية مستشار' : 'ترقية إلى مستشار'}</button>` : ''}
           </div>
         </div>
       </div>`;
@@ -3787,10 +4035,13 @@ async function setMemberAccountStatus(button, status) {
   button.disabled = true;
   const card = button.closest('.join-request-card');
   if (card) card.classList.add('busy');
+  const memberTypeSelect = card ? card.querySelector('.member-type-select') : null;
+  const memberType = memberTypeSelect ? memberTypeSelect.value : 'member';
   try {
     const result = await cloudRequest('setMemberStatus', {
       row,
       status,
+      memberType: status === 'active' ? memberType : undefined,
       by: (currentMember && currentMember.name) || 'مشرف'
     });
     if (!result || result.success !== true) {
@@ -3798,7 +4049,7 @@ async function setMemberAccountStatus(button, status) {
       button.disabled = false;
       return;
     }
-    toast(status === 'active' ? 'تم قبول العضو وفتح دخوله' : 'تم رفض طلب العضوية', status === 'active' ? 'check' : 'info');
+    toast(status === 'active' ? `تم قبول العضو كـ${memberType === 'friend' ? 'صديق جليس' : 'عضو جليس'}` : 'تم رفض طلب العضوية', status === 'active' ? 'check' : 'info');
     await refreshJoinRequests();
   } catch (error) {
     toast('تعذر تحديث حالة الحساب', 'info');
@@ -3927,7 +4178,7 @@ function openGuideSheet() {
     ${sheetHead('الدليل التعريفي', 'نادي جليس القرائي · 1445هـ - 2024م')}
     <div class="guide-sheet">
       <div class="guide-hero">
-        <div class="guide-hero-logo">جليس</div>
+        <div class="guide-hero-logo"><img src="logo.png?v=1" alt="شعار جليس"></div>
         <h3>الدليل التعريفي بنادي جليس</h3>
         <p>جمعية التنمية الأهلية بالمريدسية · القصيم – بريدة<br><small>ترخيص رقم 4373 · وزارة الموارد البشرية والتنمية الاجتماعية · المركز الوطني لتنمية القطاع غير الربحي</small></p>
         <div class="guide-hero-contacts">
@@ -4143,6 +4394,190 @@ function openClubProgramsSheet() {
   });
 }
 
+function openReadingWindowSheet() {
+  openSheet(`
+    ${sheetHead('نوافذ قرائية', 'صور ونصائح عن القراءة وفوائدها — بإضافة المشرف')}
+    <div class="reading-window">
+      <div class="reading-window-hero">
+        <span class="chip chip-soft">نوافذ قرائية</span>
+        <h3>نوافذ قرائية</h3>
+        <p>نافذة قصيرة تعرض صورًا ونصائح عن القراءة وفوائدها، يضيفها المشرف.</p>
+      </div>
+      <div class="reading-window-tips reading-windows-gallery" id="reading-window-tips"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>
+      ${isSupervisor() ? `<button class="btn btn-gold btn-block" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة قرائية (للمشرف)</button>` : ''}
+    </div>`, (root) => {
+    const tipsContainer = root.querySelector('#reading-window-tips');
+    loadReadingTips(tipsContainer);
+    const addBtn = root.querySelector('[data-action="add-reading-tip"]');
+    if (addBtn) addBtn.addEventListener('click', () => {
+      closeSheet();
+      openReadingTipComposer();
+    });
+  });
+}
+
+async function loadReadingTips(container) {
+  if (!container) return;
+  try {
+    const result = await cloudRequest('getReadingTips');
+    const tips = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+    if (!tips.length) {
+      container.innerHTML = '<div class="reading-tip-empty">لا توجد نصائح قرائية بعد. يمكن للمشرف إضافة نصائح.</div>';
+      return;
+    }
+    container.innerHTML = tips.map((tip) => `
+      <article class="reading-tip-card">
+        ${tip.image ? `<img class="reading-tip-image" src="${esc(tip.image)}" alt="${esc(tip.title || 'نصيحة قرائية')}">` : ''}
+        <div class="reading-tip-body">
+          <h5>${esc(tip.title || 'نصيحة قرائية')}</h5>
+          <p>${esc(tip.body || '')}</p>
+          ${isSupervisor() ? `<button class="btn btn-ghost btn-sm reading-tip-delete" type="button" data-action="delete-reading-tip" data-id="${esc(tip.id)}">حذف</button>` : ''}
+        </div>
+      </article>`).join('');
+    container.querySelectorAll('[data-action="delete-reading-tip"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const result = await cloudRequest('deleteReadingTip', { id: btn.dataset.id, by: (currentMember && currentMember.name) || 'مشرف' });
+        if (result && result.success) {
+          toast('تم حذف النصيحة', 'trash');
+          loadReadingTips(container);
+        } else {
+          toast('تعذر حذف النصيحة', 'info');
+        }
+      });
+    });
+  } catch (error) {
+    container.innerHTML = '<div class="reading-tip-empty">تعذر تحميل النصائح</div>';
+  }
+}
+
+function openMemberStatsSheet() {
+  const map = new Map();
+  const ensure = (name) => {
+    const key = normalizeName(name);
+    if (!key || !name) return null;
+    if (!map.has(key)) map.set(key, { name, quotes: 0, articles: 0, color: '#C59B63', photo: '' });
+    const entry = map.get(key);
+    if (!entry.photo) entry.photo = photoByName(name) || '';
+    return entry;
+  };
+  // Approved members first
+  (approvedMembersCache || []).forEach((m) => {
+    const e = ensure(m.name);
+    if (e) e.photo = m.photo || e.photo;
+  });
+  // Roster names
+  (MEMBERS || []).forEach((m) => { ensure(m.name); });
+  // Quotes
+  (state && state.quotes ? state.quotes : []).forEach((q) => {
+    const n = authorNameOf(q);
+    const e = ensure(n);
+    if (e) e.quotes += 1;
+  });
+  // Articles
+  (state && state.articles ? state.articles : []).forEach((a) => {
+    const n = authorNameOf(a);
+    const e = ensure(n);
+    if (e) e.articles += 1;
+  });
+  const list = [...map.values()].map((e) => ({ ...e, total: e.quotes + e.articles }));
+  const sorted = list.sort((a, b) => b.total - a.total || b.quotes - a.quotes);
+  const html = sorted.length ? sorted.map((e) => {
+    const known = MEMBERS.find((m) => normalizeName(m.name) === normalizeName(e.name));
+    const color = known ? known.color : '#C59B63';
+    const isMe = currentMember && normalizeName(currentMember.name) === normalizeName(e.name);
+    return `
+      <div class="member-stat-row">
+        <button class="member-profile-trigger" type="button" data-action="open-member-profile" data-name="${esc(e.name)}">${avatarHTML(e.name, color, 'member-avatar', e.photo)}</button>
+        <div class="member-stat-main">
+          <button class="member-name-trigger" type="button" data-action="open-member-profile" data-name="${esc(e.name)}">${esc(e.name)}${isMe ? ' · أنت' : ''}</button>
+          <small>اقتباسات: ${toAr(e.quotes)} · مقالات: ${toAr(e.articles)}</small>
+        </div>
+        <span class="member-stat-total"><strong>${toAr(e.total)}</strong><span>مساهمة</span></span>
+      </div>`;
+  }).join('') : emptyHTML('chart', 'لا إحصائيات بعد', 'ستظهر مساهمات الأعضاء هنا.');
+
+  openSheet(`
+    ${sheetHead('إحصائيات الأعضاء', 'عدد مساهمات الأعضاء من اقتباسات ومقالات — يظهر للجميع')}
+    <div class="member-stats-list">${html}</div>`);
+}
+
+function openReadingTipComposer() {
+  if (!isSupervisor()) { toast('إضافة النصائح للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('إضافة نصيحة قرائية', 'صورة + عنوان + نص — تظهر في النافذة القرائية')}
+    <form id="reading-tip-form" novalidate>
+      <div class="field">
+        <label for="tip-title">العنوان</label>
+        <input class="input" id="tip-title" maxlength="80" placeholder="مثال: ٢٠ دقيقة يوميًا" required>
+      </div>
+      <div class="field">
+        <label for="tip-body">النص</label>
+        <textarea class="input" id="tip-body" rows="4" maxlength="1000" placeholder="اكتب نصيحة قرائية أو فائدة…" required></textarea>
+      </div>
+      <div class="field">
+        <label for="tip-image-input">صورة النصيحة (اختياري)</label>
+        <label class="meeting-upload" for="tip-image-input">
+          <svg class="ic"><use href="#i-article"/></svg><span>اختر صورة</span><small>ستظهر كـ«نافذة» في النافذة القرائية</small>
+        </label>
+        <input id="tip-image-input" class="meeting-file-input" type="file" accept="image/*">
+        <div id="tip-image-preview-wrap" class="meeting-image-preview-wrap crop-preview-wrap" hidden><img id="tip-image-preview" alt="معاينة"><button type="button" class="meeting-image-remove" id="tip-image-remove" aria-label="إزالة">×</button></div>
+        <small id="tip-image-status" class="meeting-image-status"></small>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-plus"/></svg> نشر النصيحة</button>
+    </form>`, (root) => {
+    let imageData = '';
+    let cropState = { x: 50, y: 50, scale: 100 };
+    const fileInput = root.querySelector('#tip-image-input');
+    const previewWrap = root.querySelector('#tip-image-preview-wrap');
+    const preview = root.querySelector('#tip-image-preview');
+    const status = root.querySelector('#tip-image-status');
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) { toast('اختر ملف صورة صالحًا', 'info'); fileInput.value = ''; return; }
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await compressMeetingImage(file);
+        preview.src = imageData;
+        previewWrap.hidden = false;
+        if (!previewWrap.dataset.cropInit) {
+          previewWrap.dataset.cropInit = '1';
+          cropState = createCropControls(previewWrap, preview, cropState);
+        }
+        status.textContent = 'الصورة جاهزة — حدّد الزاوية والحجم بما يناسب العرض';
+      } catch (error) {
+        imageData = '';
+        fileInput.value = '';
+        previewWrap.hidden = true;
+        status.textContent = error.message;
+      }
+    });
+    root.querySelector('#tip-image-remove').addEventListener('click', () => {
+      imageData = '';
+      fileInput.value = '';
+      preview.removeAttribute('src');
+      previewWrap.hidden = true;
+      status.textContent = '';
+    });
+    root.querySelector('#reading-tip-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#tip-title').value.trim();
+      const body = root.querySelector('#tip-body').value.trim();
+      if (!title || !body) { toast('أكمل العنوان والنص', 'info'); return; }
+      const finalImage = imageData ? await cropImageDataUrl(imageData, cropState) : '';
+      const result = await cloudRequest('saveReadingTip', {
+        title, body, image: finalImage,
+        createdAt: Date.now(),
+        createdBy: (currentMember && currentMember.name) || 'مشرف'
+      });
+      if (!result || result.success !== true) { toast('تعذر حفظ النصيحة', 'info'); return; }
+      toast('تم نشر النصيحة في النافذة القرائية', 'check');
+      closeSheet();
+      openReadingWindowSheet();
+    });
+  });
+}
+
 function openMoreSheet() {
   openSheet(`
     ${sheetHead('المزيد', 'خدمات و programmes النادي')}
@@ -4155,6 +4590,11 @@ function openMoreSheet() {
       <button class="more-item" type="button" data-action="view-members">
         <span class="more-icon"><svg class="ic"><use href="#i-users"/></svg></span>
         <div class="more-body"><strong>أعضاء جليس</strong><p id="more-members-count">الأعضاء المسجلون رسميًا</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
+      <button class="more-item" type="button" data-action="reading-window">
+        <span class="more-icon"><svg class="ic"><use href="#i-book"/></svg></span>
+        <div class="more-body"><strong>نوافذ قرائية</strong><p>صور ونصائح عن القراءة وفوائدها — بإضافة المشرف</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
       <button class="more-item" type="button" data-action="club-programs">
@@ -4190,6 +4630,11 @@ function openMoreSheet() {
       closeSheet();
       openGuideSheet();
     });
+    const readingButton = root.querySelector('[data-action="reading-window"]');
+    if (readingButton) readingButton.addEventListener('click', () => {
+      closeSheet();
+      openReadingWindowSheet();
+    });
     refreshMembersCount(root);
   });
 }
@@ -4200,6 +4645,7 @@ async function refreshMembersCount(root) {
   try {
     const result = await cloudRequest('getApprovedMembers');
     if (result && result.success === true && Array.isArray(result.data)) {
+      cacheApprovedMembers(result.data);
       target.textContent = result.data.length
         ? `${toAr(result.data.length)} عضوًا مسجلًا`
         : 'لا أعضاء مسجلين بعد';
@@ -4226,16 +4672,20 @@ function renderApprovedMembers(root, members) {
     const known = MEMBERS.find((item) => normalizeName(item.name) === normalizeName(member.name));
     const color = known ? known.color : '#C59B63';
     const isSupervisorMember = member.role === 'supervisor';
+    const isConsultant = member.role === 'consultant';
     const joined = Number(member.joinedAt)
       ? `منذ ${toAr(new Date(Number(member.joinedAt)).getFullYear())}`
       : '';
-    return `<div class="member-row">
-      <button class="member-avatar member-profile-trigger" type="button" data-action="open-member-profile" data-name="${esc(member.name || '')}" style="background:${color}">${esc(initials(member.name))}</button>
+    const photo = memberPhoto(member.name, member.photo || '');
+    const roleLabel = isSupervisorMember ? 'مشرف النادي' : (isConsultant ? 'مستشار استشارات' : (member.memberType === 'friend' ? 'صديق جليس' : 'عضو جليس'));
+    return `<div class="member-row member-row-promote">
+      <button class="member-profile-trigger" type="button" data-action="open-member-profile" data-name="${esc(member.name || '')}">${avatarHTML(member.name || 'عضو جليس', color, 'member-avatar', photo)}</button>
       <div class="member-main">
         <button class="member-name-trigger" type="button" data-action="open-member-profile" data-name="${esc(member.name || '')}">${esc(member.name || 'عضو جليس')}</button>
-        <small>${isSupervisorMember ? 'مشرف النادي' : 'عضو'}${joined ? ' · ' + joined : ''}</small>
+        <small>${roleLabel}${joined ? ' · ' + joined : ''}</small>
       </div>
-      ${isSupervisorMember ? '<span class="member-role">مشرف</span>' : ''}
+      ${isSupervisorMember ? '<span class="member-role">مشرف</span>' : (isConsultant ? '<span class="member-role consultant">مستشار</span>' : (member.memberType === 'friend' ? '<span class="member-role friend">صديق</span>' : ''))}
+      ${isSupervisor() && member.row ? `<button class="btn btn-ghost btn-sm member-promote-btn" type="button" data-action="toggle-consultant" data-row="${esc(String(member.row))}" data-consultant="${isConsultant ? 'true' : 'false'}">${isConsultant ? 'إلغاء ترقية مستشار' : 'ترقية إلى مستشار'}</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -4486,8 +4936,11 @@ function openMeetingSheet(id = '') {
   const meeting = (state.meetings || []).find((item) => String(item.id) === String(id)) || getCurrentMeeting();
   const timeLabel = meetingTimeLabel(meeting.time || meeting.date);
   const locationUrl = meetingLocationUrl(meeting.location);
+  const cropStyle = meeting.image
+    ? `object-position:${clamp(Number(meeting.imagePosX) || 50, 0, 100)}% ${clamp(Number(meeting.imagePosY) || 50, 0, 100)}%;transform:scale(${(clamp(Number(meeting.imageScale) || 100, 100, 300) / 100).toFixed(2)})`
+    : '';
   const image = meeting.image
-    ? `<img class="meeting-sheet-poster" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title)}">`
+    ? `<img class="meeting-sheet-poster" style="${cropStyle}" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title)}">`
     : '';
   openSheet(`
     ${sheetHead('تفاصيل اللقاء', 'نلتقي على القراءة والحوار')}
@@ -4523,8 +4976,8 @@ function openMeetingComposer() {
         <textarea class="input" id="meeting-description-input" rows="4" maxlength="700" placeholder="اكتب نبذة قصيرة عن اللقاء…"></textarea>
       </div>
       <div class="meeting-form-row">
-        <div class="field"><label for="meeting-date-input">التاريخ</label><input class="input" id="meeting-date-input" type="date" required></div>
-        <div class="field"><label for="meeting-time-input">الوقت</label><input class="input" id="meeting-time-input" type="time" required></div>
+        <div class="field"><label>التاريخ (سنة / شهر / يوم)</label>${dateYMDField('meeting-date', 'تاريخ اللقاء')}</div>
+        <div class="field"><label for="meeting-time-input">الوقت</label><input class="input" id="meeting-time-input" type="time" required dir="ltr"></div>
       </div>
       <div class="field">
         <label for="meeting-location-input">المكان</label>
@@ -4536,12 +4989,16 @@ function openMeetingComposer() {
           <svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>ستظهر للأعضاء في الصفحة الرئيسية</small>
         </label>
         <input id="meeting-image-input" class="meeting-file-input" type="file" accept="image/*">
-        <div id="meeting-image-preview-wrap" class="meeting-image-preview-wrap" hidden><img id="meeting-image-preview" alt="معاينة صورة اللقاء"><button type="button" class="meeting-image-remove" id="meeting-image-remove" aria-label="إزالة الصورة">×</button></div>
+        <div id="meeting-image-preview-wrap" class="meeting-image-preview-wrap crop-preview-wrap" hidden>
+          <img id="meeting-image-preview" alt="معاينة صورة اللقاء">
+          <button type="button" class="meeting-image-remove" id="meeting-image-remove" aria-label="إزالة الصورة">×</button>
+        </div>
         <small id="meeting-image-status" class="meeting-image-status"></small>
       </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-calendar"/></svg> نشر اللقاء للأعضاء</button>
     </form>`, (root) => {
     let imageData = '';
+    let crop = { x: 50, y: 50, scale: 100 };
     const fileInput = root.querySelector('#meeting-image-input');
     const previewWrap = root.querySelector('#meeting-image-preview-wrap');
     const preview = root.querySelector('#meeting-image-preview');
@@ -4560,7 +5017,11 @@ function openMeetingComposer() {
         imageData = await compressMeetingImage(file);
         preview.src = imageData;
         previewWrap.hidden = false;
-        status.textContent = 'الصورة جاهزة';
+        if (!previewWrap.dataset.cropInit) {
+          previewWrap.dataset.cropInit = '1';
+          crop = createCropControls(previewWrap, preview, crop);
+        }
+        status.textContent = 'الصورة جاهزة — اسحب الإطار وزواياه لتحديد الأطراف';
       } catch (error) {
         imageData = '';
         fileInput.value = '';
@@ -4571,6 +5032,7 @@ function openMeetingComposer() {
 
     root.querySelector('#meeting-image-remove').addEventListener('click', () => {
       imageData = '';
+      crop = { x: 50, y: 50, scale: 100 };
       fileInput.value = '';
       preview.removeAttribute('src');
       previewWrap.hidden = true;
@@ -4581,7 +5043,7 @@ function openMeetingComposer() {
       event.preventDefault();
       if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
       const title = root.querySelector('#meeting-title-input').value.trim();
-      const date = root.querySelector('#meeting-date-input').value;
+      const date = readYMD('meeting-date');
       const time = root.querySelector('#meeting-time-input').value;
       if (!title || !date || !time) { toast('أكمل العنوان والتاريخ والوقت', 'info'); return; }
 
@@ -4593,6 +5055,9 @@ function openMeetingComposer() {
         time,
         location: root.querySelector('#meeting-location-input').value.trim(),
         image: imageData,
+        imagePosX: crop.x,
+        imagePosY: crop.y,
+        imageScale: crop.scale,
         createdAt: Date.now(),
         createdBy: currentMember.name
       };
@@ -4862,11 +5327,15 @@ function enterApp(welcome = false) {
   setTimeout(hideSplash, 2500);
   go('home');
   /* إظهار زر «التسجيل في النادي/دخول» فقط في وضع الزائر */
-  const guestBtn = $('#guest-login-btn');
-  if (guestBtn) {
-    guestBtn.hidden = !(currentMember && currentMember.id === 'guest');
-    guestBtn.style.display = (currentMember && currentMember.id === 'guest') ? '' : 'none';
-  }
+  const guestRegisterBtn = $('#guest-register-btn');
+  const guestLoginBtn = $('#guest-login-btn');
+  const isGuest = currentMember && currentMember.id === 'guest';
+  [guestRegisterBtn, guestLoginBtn].forEach((btn) => {
+    if (btn) {
+      btn.hidden = !isGuest;
+      btn.style.display = isGuest ? '' : 'none';
+    }
+  });
   /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
   /* جلب كتب النادي المشتركة حتى مع وجود حالة محلية قديمة للعضو */
@@ -4879,6 +5348,14 @@ function enterApp(welcome = false) {
   refreshMemberProfileFromCloud();
   /* جلب اللقاءات المشتركة من الشيت */
   refreshMeetingsFromCloud();
+  /* جلب صور الأعضاء حتى تظهر صورتك عند الكل في كل مكان */
+  refreshApprovedMembersCache().then(() => {
+    if (state && currentMember) {
+      renderHome();
+      renderQuotes();
+      renderArticles();
+    }
+  });
   /* جلب آراء الكتب المشتركة وتحديث متوسطات المكتبة */
   refreshBookRatingsFromCloud().then(() => {
     if (state && currentMember) {
@@ -4980,8 +5457,13 @@ function handleGlobalClick(event) {
 
   switch (action) {
     case 'open-gate':
-      showGate();
+    case 'open-gate-login':
+      showGate('login');
       toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user');
+      break;
+    case 'open-gate-register':
+      showGate('register');
+      toast('أنشئ حسابك الجديد للانضمام إلى نادي جليس', 'user');
       break;
     case 'open-join':
       openJoinSheet();
@@ -4992,6 +5474,14 @@ function handleGlobalClick(event) {
     case 'open-guide':
       closeSheet();
       openGuideSheet();
+      break;
+    case 'reading-window':
+      closeSheet();
+      openReadingWindowSheet();
+      break;
+    case 'member-stats':
+      closeSheet();
+      openMemberStatsSheet();
       break;
     case 'open-consultations':
       openConsultationsSheet();
@@ -5014,6 +5504,25 @@ function handleGlobalClick(event) {
     case 'member-reject':
       setMemberAccountStatus(actionEl, 'rejected');
       break;
+    case 'toggle-consultant': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const row = Number(actionEl.dataset.row);
+      const currently = actionEl.dataset.consultant === 'true';
+      const newStatus = !currently;
+      cloudRequest('setConsultantStatus', { row, isConsultant: newStatus, by: (currentMember && currentMember.name) || 'مشرف' })
+        .then((result) => {
+          if (result && result.success === true) {
+            toast(newStatus ? 'تمت ترقية العضو إلى مستشار استشارات' : 'تم إلغاء ترقية المستشار', 'check');
+            refreshJoinRequests();
+            const membersList = document.querySelector('#members-list');
+            if (membersList) loadApprovedMembers(document.querySelector('.sheet-root') || document);
+          } else {
+            toast(cleanServerError(result, 'تعذر تحديث الترقية'), 'info');
+          }
+        })
+        .catch(() => toast('تعذر تحديث الترقية', 'info'));
+      break;
+    }
     case 'go-home':
       go('home');
       break;
@@ -5064,6 +5573,12 @@ function handleGlobalClick(event) {
     case 'open-quote':
       openQuoteComposer();
       break;
+    case 'add-quote-from-book': {
+      const book = getBook(id) || (state.clubBooks || []).find((b) => String(b.id) === String(id));
+      closeSheet();
+      openQuoteComposer(id, book ? book.title : '');
+      break;
+    }
     case 'open-article-compose':
       openArticleComposer();
       break;
@@ -5777,6 +6292,8 @@ async function init() {
         }
         currentMember.photo = photo;
         state.profile.photo = photo;
+        const cached = approvedMembersCache.find((m) => normalizeName(m.name) === normalizeName(currentMember.name));
+        if (cached) cached.photo = photo;
         const account = readAccount();
         if (account && String(account.id) === String(currentMember.id)) {
           persistAccount({ ...account, photo });

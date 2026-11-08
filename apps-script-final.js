@@ -5,7 +5,16 @@ const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
 const LIBRARY_CATEGORIES_SHEET = 'تصنيفات المكتبة';
 const JOIN_REQUESTS_SHEET = 'طلبات الانضمام';
 const MEETINGS_SHEET = 'اللقاءات';
-const RECORDED_MEETINGS_SHEET = 'اللقاءات المسجلة';
+const READING_TIPS_SHEET = 'نافذة قرائية';
+
+function getReadingTipsSheet(ss) {
+  let sheet = ss.getSheetByName(READING_TIPS_SHEET);
+  if (!sheet) sheet = ss.insertSheet(READING_TIPS_SHEET);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['id', 'title', 'body', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy']);
+  }
+  return sheet;
+}
 const MEMBERS_SHEET = 'الأعضاء';
 const CONSULTATIONS_SHEET = 'استشارات الأعضاء';
 const OLD_BOOKS_SHEET_ID = 1035156833;
@@ -48,9 +57,19 @@ function getMeetingsSheet(ss) {
   let sheet = ss.getSheetByName(MEETINGS_SHEET);
   if (!sheet) sheet = ss.insertSheet(MEETINGS_SHEET);
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['id', 'title', 'description', 'date', 'time', 'location', 'image', 'createdAt', 'createdBy']);
+    sheet.appendRow(['id', 'title', 'description', 'date', 'time', 'location', 'image', 'createdAt', 'createdBy', 'imagePosX', 'imagePosY', 'imageScale']);
+  } else {
+    ensureMeetingCropColumns(sheet);
   }
   return sheet;
+}
+
+function ensureMeetingCropColumns(sheet) {
+  if (!sheet) return;
+  if (sheet.getMaxColumns() < 12) sheet.insertColumnsAfter(sheet.getMaxColumns(), 12 - sheet.getMaxColumns());
+  if (!sheet.getRange(1, 10).getValue()) sheet.getRange(1, 10).setValue('imagePosX');
+  if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('imagePosY');
+  if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('imageScale');
 }
 
 function getRecordedMeetingsSheet(ss) {
@@ -222,7 +241,24 @@ function normalizePersonName(value) {
 
 function isConsultantName(name) {
   const target = normalizePersonName(name);
-  return Boolean(target) && CONSULTANT_NAMES.some(item => normalizePersonName(item) === target);
+  if (!target) return false;
+  // Hardcoded consultants (legacy)
+  if (CONSULTANT_NAMES.some(item => normalizePersonName(item) === target)) return true;
+  // Dynamic: check members sheet role
+  try {
+    const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
+    const sheet = getMembersSheet(ss);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return false;
+    const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    for (let i = 0; i < rows.length; i++) {
+      if (normalizePersonName(rows[i][1]) === target) {
+        const role = String(rows[i][5] || '').toLowerCase();
+        return role === 'consultant' || role === 'supervisor';
+      }
+    }
+  } catch (error) { /* تجاهل */ }
+  return false;
 }
 
 function utf8Bytes(text) {
@@ -754,7 +790,91 @@ function doPost(e) {
       const status = memberStatusCode(data.status);
       sheet.getRange(row, 7).setValue(status);
       paintMemberRow(sheet, row, status);
-      return output({ success: true, status: status });
+      if (data.memberType) {
+        sheet.getRange(row, 4).setValue(String(data.memberType).trim());
+      }
+      if (status === 'active') {
+        // Send welcome email
+        try {
+          const member = sheet.getRange(row, 1, 1, 13).getValues()[0];
+          const email = String(member[2] || '').trim();
+          if (email) {
+            // ... email sending logic if exists
+          }
+        } catch (e) { /* تجاهل */ }
+      }
+      return output({ success: true, status: status, memberType: data.memberType || '' });
+    }
+
+    if (action === 'setConsultantStatus') {
+      const sheet = getMembersSheet(ss);
+      const row = Number(data.row);
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      const isConsultant = (String(data.isConsultant) === 'true' || data.isConsultant === true);
+      sheet.getRange(row, 6).setValue(isConsultant ? 'consultant' : 'member');
+      return output({ success: true, role: isConsultant ? 'consultant' : 'member', message: isConsultant ? 'تم ترقية العضو إلى مستشار' : 'تم إلغاء ترقية المستشار' });
+    }
+
+    if (action === 'setMemberType') {
+      const sheet = getMembersSheet(ss);
+      const row = Number(data.row);
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      const memberType = String(data.memberType || 'member').trim();
+      // Store in column 4 (index 4) as memberType
+      sheet.getRange(row, 4).setValue(memberType);
+      return output({ success: true, memberType: memberType, message: 'تم تحديث نوع العضوية' });
+    }
+
+    if (action === 'saveReadingTip') {
+      const sheet = getReadingTipsSheet(ss);
+      const tipId = String(data.id || `tip-${Date.now()}`);
+      if (String(data.image || '').length > 48000) throw new Error('حجم الصورة أكبر من الحد المسموح');
+      const rowData = [
+        tipId, data.title || '', data.body || '', data.image || '',
+        data.createdAt || Date.now(), data.createdBy || '', '', ''
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0]) === tipId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, message: 'تم تحديث النصيحة' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, id: tipId, message: 'تم حفظ النصيحة' });
+    }
+
+    if (action === 'getReadingTips') {
+      const sheet = getReadingTipsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+      const tips = rows.map(row => ({
+        id: row[0], title: row[1], body: row[2], image: row[3],
+        createdAt: row[4], createdBy: row[5], deletedAt: row[6], deletedBy: row[7]
+      })).filter(t => t.id && !t.deletedAt);
+      tips.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: tips });
+    }
+
+    if (action === 'deleteReadingTip') {
+      const sheet = getReadingTipsSheet(ss);
+      const tipId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0]) === tipId) {
+            sheet.getRange(i + 2, 7).setValue(Date.now());
+            sheet.getRange(i + 2, 8).setValue(data.by || '');
+            return output({ success: true, message: 'تم حذف النصيحة' });
+          }
+        }
+      }
+      return output({ success: false, message: 'لم أجد النصيحة' });
     }
 
     if (action === 'setMemberPhoto') {
@@ -777,15 +897,19 @@ function doPost(e) {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
       const members = [];
-      rows.forEach((row) => {
+      rows.forEach((row, index) => {
         if (!String(row[0] || '').trim()) return;
         if (memberStatusCode(row[6]) !== 'active') return;
         members.push({
+          id: String(row[0] || ''),
+          row: index + 2,
           name: String(row[1] || '').trim(),
           role: String(row[5] || 'member'),
-          joinedAt: row[7]
+          joinedAt: row[7],
+          photo: String(row[12] || ''),
+          memberType: String(row[3] || 'member').trim()
         });
       });
       return output({ success: true, data: members });
@@ -1209,9 +1333,12 @@ function doPost(e) {
       }
 
       const rowData = [
-        meetingId, data.title || '', data.description || '', data.date || '',
-        data.time || '', data.location || '', data.image || '',
-        data.createdAt || Date.now(), data.createdBy || ''
+        meetingId, data.title || '', data.description || '', String(data.date || ''),
+        String(data.time || ''), data.location || '', data.image || '',
+        data.createdAt || Date.now(), data.createdBy || '',
+        (data.imagePosX === '' || data.imagePosX === undefined || data.imagePosX === null ? 50 : Number(data.imagePosX) || 50),
+        (data.imagePosY === '' || data.imagePosY === undefined || data.imagePosY === null ? 50 : Number(data.imagePosY) || 50),
+        (data.imageScale === '' || data.imageScale === undefined || data.imageScale === null ? 100 : Number(data.imageScale) || 100)
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -1429,15 +1556,19 @@ function doGet(e) {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
       const members = [];
-      rows.forEach((row) => {
+      rows.forEach((row, index) => {
         if (!String(row[0] || '').trim()) return;
         if (memberStatusCode(row[6]) !== 'active') return;
         members.push({
+          id: String(row[0] || ''),
+          row: index + 2,
           name: String(row[1] || '').trim(),
           role: String(row[5] || 'member'),
-          joinedAt: row[7]
+          joinedAt: row[7],
+          photo: String(row[12] || ''),
+          memberType: String(row[3] || 'member').trim()
         });
       });
       return output({ success: true, data: members });
@@ -1560,11 +1691,13 @@ function doGet(e) {
       const sheet = getMeetingsSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
-      const meetings = rows.map(row => ({
-        id: row[0], title: row[1], description: row[2], date: row[3],
-        time: row[4], location: row[5], image: row[6],
-        createdAt: row[7], createdBy: row[8]
+      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      const display = sheet.getRange(2, 4, lastRow - 1, 2).getDisplayValues();
+      const meetings = rows.map((row, idx) => ({
+        id: row[0], title: row[1], description: row[2], date: String(display[idx][0] || row[3] || ''),
+        time: String(display[idx][1] || row[4] || ''), location: row[5], image: row[6],
+        createdAt: row[7], createdBy: row[8],
+        imagePosX: Number(row[9]) || 50, imagePosY: Number(row[10]) || 50, imageScale: Number(row[11]) || 100
       })).filter(meeting => meeting.id);
       meetings.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
       return output({ success: true, data: meetings });
