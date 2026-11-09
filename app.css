@@ -1243,7 +1243,8 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   box-shadow: 0 12px 28px rgba(30, 58, 43, 0.11);
 }
 .meeting-poster-wrap {
-  height: clamp(210px, 70vw, 290px);
+  aspect-ratio: 397 / 320;
+  height: auto;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -1282,7 +1283,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .meeting-card-actions .btn { flex:1; justify-content:center; }
 .btn-meeting-add { color:var(--green-700); background:var(--paper-2); border:1px solid var(--line); }
 .btn-meeting-add:hover { background:#f1e9da; }
-.meeting-sheet-poster { display:block; width:100%; max-height:300px; object-fit:cover; transform-origin:center center; background:var(--paper-2); border-radius:16px; margin:2px 0 14px; }
+.meeting-sheet-poster { display:block; width:100%; aspect-ratio:397 / 320; height:auto; max-height:none; object-fit:cover; transform-origin:center center; background:var(--paper-2); border-radius:16px; margin:2px 0 14px; }
 .meeting-sheet-heading h2 { color:var(--green-700); font-size:19px; margin:9px 0 5px; }
 .meeting-sheet-heading p { color:var(--muted); font-size:11px; line-height:1.9; white-space:pre-line; }
 .meeting-sheet-details { display:grid; gap:8px; margin:14px 0; }
@@ -2237,6 +2238,85 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .crop-preview-wrap { position: relative; }
 .crop-preview-wrap img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; }
 .reading-windows-gallery { display: grid; gap: 12px; }
+
+/* ---------- واجهة النوافذ القرائية (مكتبة الصور) ---------- */
+.reading-window { display: grid; gap: 13px; }
+.reading-window-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 15px; border-radius: 18px;
+  background: linear-gradient(150deg, #16352A 0%, #1E3A2B 45%, #2A5240 100%);
+  box-shadow: 0 12px 26px rgba(30, 58, 43, .20);
+  color: #F8F5EE;
+}
+.reading-window-head-text { flex: 1; min-width: 0; display: grid; gap: 4px; justify-items: start; }
+.reading-window-head .chip-soft { background: rgba(197, 155, 99, .18); color: #E3C393; border-color: rgba(197, 155, 99, .35); }
+.reading-window-head h3 { font-size: 15px; font-weight: 850; color: #fff; }
+.reading-window-head p { font-size: 8.5px; line-height: 1.85; color: rgba(248, 245, 238, .78); }
+.reading-window-counter {
+  flex: none; display: grid; place-items: center; gap: 2px;
+  min-width: 56px; padding: 9px 8px; border-radius: 15px;
+  background: rgba(248, 245, 238, .10); border: 1px solid rgba(197, 155, 99, .38);
+}
+.reading-window-counter b { font-size: 19px; font-weight: 850; color: #E3C393; line-height: 1; }
+.reading-window-counter span { font-size: 7px; color: rgba(248, 245, 238, .65); }
+
+.reading-windows-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.reading-window-card {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 16px; background: var(--white);
+  border: 1px solid rgba(197, 155, 99, .28);
+  box-shadow: 0 8px 18px rgba(30, 58, 43, .09);
+}
+.reading-window-card-open {
+  display: block; width: 100%; padding: 0; border: 0; background: none;
+  text-align: start; font-family: inherit; cursor: pointer;
+}
+.reading-window-card-media {
+  position: relative; display: block; width: 100%;
+  aspect-ratio: 1080 / 1115; overflow: hidden;
+  background: linear-gradient(160deg, #243f31, #14291d);
+}
+.reading-window-card-image { display: block; width: 100%; height: 100%; object-fit: cover; }
+.reading-window-card.is-text .reading-window-card-media {
+  aspect-ratio: 4 / 3; display: grid; place-items: center;
+  background: linear-gradient(160deg, #FBF7EE, #EFE5D1);
+}
+.reading-window-card-quote {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 46px; line-height: .8; color: rgba(197, 155, 99, .75);
+}
+.reading-window-card-tag {
+  position: absolute; inset-block-end: 7px; inset-inline-start: 7px;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(12, 24, 18, .62); border: 1px solid rgba(255, 255, 255, .18);
+  color: #F3E4C6; font-size: 7px; font-weight: 800;
+}
+.reading-window-card-body { display: grid; gap: 4px; padding: 9px 10px 11px; }
+.reading-window-card-body strong { font-size: 10px; font-weight: 800; color: var(--green-700); }
+.reading-window-card-text {
+  font-size: 8.5px; line-height: 1.75; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.reading-window-card-body small { font-size: 7px; color: var(--muted-2); }
+.reading-window-card-delete {
+  position: absolute; inset-block-start: 7px; inset-inline-end: 7px;
+  padding: 4px 9px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .32); background: rgba(12, 24, 18, .62);
+  color: #fff; font-size: 7.5px; font-weight: 800; font-family: inherit; cursor: pointer;
+}
+
+/* ---------- عرض النافذة بالحجم الكامل ---------- */
+.reading-window-viewer { display: grid; gap: 12px; padding-bottom: 6px; }
+.reading-window-viewer-image {
+  display: block; width: 100%; height: auto; border-radius: 18px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .30); background: var(--paper-2);
+}
+.reading-window-viewer-text {
+  font-size: 11px; line-height: 2.05; color: var(--text); white-space: pre-line;
+  padding: 12px 14px; border-radius: 14px; background: #F8F5EE; border: 1px solid rgba(197, 155, 99, .28);
+}
+.reading-window-viewer-delete { margin-top: 4px; }
+.reading-window-viewer-head h2 { font-size: 17px; }
 .reading-window .reading-tip-card { grid-template-columns: 1fr; }
 .reading-window .reading-tip-image { width: 100%; height: 180px; object-fit: cover; }
 .member-role.consultant { background: rgba(30,58,43,.12); color: var(--green-700); }
@@ -3221,7 +3301,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .member-contribution-empty { font-size: 8.5px; color: var(--muted-2); text-align: center; padding: 8px; }
 .drag-crop-stage { position: relative; overflow: hidden; background: #000; line-height: 0; }
 .drag-crop-stage.full-image { background: #1a1a1a; padding: 0; }
-.drag-crop-stage.full-image img { max-height: 340px; width: 100%; height: auto; object-fit: contain; }
+.drag-crop-stage.full-image img { max-height: none; width: 100%; height: auto; object-fit: contain; }
 .drag-crop-box { position: absolute; inset: 0; pointer-events: none; }
 .drag-crop-frame { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border: 2px solid #fff; box-shadow: 0 0 0 999px rgba(0,0,0,.5); cursor: move; touch-action: none; z-index: 3; pointer-events: auto; }
 .drag-crop-frame::before { content: ''; position: absolute; inset: 0; background:
@@ -3278,6 +3358,39 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .drag-crop-handle.lm { left: -8px; top: 50%; margin-top: -11px; width: 14px; height: 14px; border-radius: 50%; border-width: 2px; cursor: ew-resize; }
 .drag-crop-handle.rm { right: -8px; top: 50%; margin-top: -11px; width: 14px; height: 14px; border-radius: 50%; border-width: 2px; cursor: ew-resize; }
 .drag-crop-hint { font-size: 7.5px; color: var(--muted-2); text-align: center; margin-top: 6px; }
+
+/* ---------- إطار القص الثابت (صور اللقاءات ٣٩٧×٣٢٠) ---------- */
+.drag-crop-frame-locked {
+  border: 2px solid var(--gold);
+  border-radius: 10px;
+  cursor: grab;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, .52), 0 0 0 1px rgba(0, 0, 0, .35);
+}
+.drag-crop-frame-locked:active { cursor: grabbing; }
+.drag-crop-frame-locked .drag-crop-grid { display: block; }
+.crop-size-controls-fixed {
+  background: linear-gradient(180deg, rgba(197,155,99,.10), rgba(30,58,43,.05));
+  border: 1px solid rgba(197, 155, 99, .45);
+}
+.crop-fixed-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--green-700);
+  font-size: 10px;
+  font-weight: 800;
+}
+.crop-fixed-size .ic { flex: none; width: 16px; height: 16px; color: var(--green-600); }
+.crop-fixed-size b { font-size: 12.5px; color: var(--gold-700); letter-spacing: .5px; }
+.crop-size-controls-fixed .drag-crop-hint {
+  position: static;
+  bottom: auto;
+  font-size: 8.5px;
+  line-height: 1.75;
+  text-align: right;
+  margin: 0;
+  color: var(--muted);
+}
 .ymd-group { display: flex; gap: 6px; }
 .ymd-group label { flex: 1; display: grid; gap: 4px; font-size: 8px; font-weight: 700; color: var(--muted); }
 .ymd-group select { width: 100%; }

@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r10';
+const CODE_VERSION = 'jalees-2026-11-10-r11';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -1188,6 +1188,19 @@ function doPost(e) {
       const index = ids.findIndex(row => String(row[0] || '') === consultationId);
       if (index < 0) throw new Error('لم أجد الاستشارة');
       const row = index + 2;
+      const existing = sheet.getRange(row, 6, 1, 4).getValues()[0];
+      const existingAnswer = String(existing[0] || '').trim();
+      if (existingAnswer) {
+        const existingBy = String(existing[2] || 'مستشار آخر').trim();
+        const existingById = String(existing[1] || '').trim();
+        if (existingById !== memberId) {
+          throw new Error('هذه الاستشارة أجاب عليها ' + existingBy + ' — الإجابة محفوظة لصاحبها ولا يمكن نسبتها لغيره');
+        }
+        // صاحب الإجابة نفسه يعدّل نصّ إجابته فقط دون تغيير صاحبها
+        sheet.getRange(row, 6).setValue(answer);
+        sheet.getRange(row, 9).setValue(Date.now());
+        return output({ success: true, message: 'تم تحديث إجابتك' });
+      }
       sheet.getRange(row, 6, 1, 4).setValues([[answer, memberId, advisorName, Date.now()]]);
       return output({ success: true, message: 'تم نشر الإجابة' });
     }

@@ -1519,7 +1519,11 @@ let state = null;
 let approvedMembersCache = [];
 
 /* قصّ يدوي كما في الآيفون: صورة كاملة + إطار قابل للسحب وتغيير الحجم + شبكة + أبعاد بكسل */
-function createCropControls(wrap, previewImg) {
+function createCropControls(wrap, previewImg, options = {}) {
+  const fixedW = Math.round(Number(options.fixedWidth) || 0);
+  const fixedH = Math.round(Number(options.fixedHeight) || 0);
+  const locked = fixedW > 0 && fixedH > 0;
+
   const stage = document.createElement('div');
   stage.className = 'drag-crop-stage full-image';
   if (previewImg && previewImg.parentElement === wrap) {
@@ -1535,8 +1539,14 @@ function createCropControls(wrap, previewImg) {
   previewImg.style.objectFit = 'contain';
 
   const box = document.createElement('div');
-  box.className = 'drag-crop-box';
-  box.innerHTML = `
+  box.className = 'drag-crop-box' + (locked ? ' drag-crop-box-locked' : '');
+  box.innerHTML = locked
+    ? `
+    <div class="drag-crop-frame drag-crop-frame-locked" role="application" aria-label="تحريك إطار الصورة">
+      <span class="drag-crop-grid"></span>
+    </div>
+  `
+    : `
     <div class="drag-crop-frame" role="application" aria-label="تحديد أطراف الصورة">
       <span class="drag-crop-grid"></span>
       <span class="drag-crop-handle tl"></span><span class="drag-crop-handle tr"></span>
@@ -1548,8 +1558,16 @@ function createCropControls(wrap, previewImg) {
   stage.appendChild(box);
 
   const controls = document.createElement('div');
-  controls.className = 'crop-size-controls';
-  controls.innerHTML = `
+  controls.className = 'crop-size-controls' + (locked ? ' crop-size-controls-fixed' : '');
+  controls.innerHTML = locked
+    ? `
+    <div class="crop-fixed-size">
+      <svg class="ic"><use href="#i-check"/></svg>
+      <span>المقاس ثابت <b>${toAr(fixedW)}×${toAr(fixedH)}</b> بكسل</span>
+    </div>
+    <div class="drag-crop-hint">اسحب الإطار فوق الصورة لاختيار الجزء الذي سيظهر — مقاس الإطار لا يتغيّر.</div>
+  `
+    : `
     <div class="crop-size-row">
       <label>العرض (بكسل) <input type="number" class="crop-w" min="80" max="1400" step="10" value="640"></label>
       <label>الطول (بكسل) <input type="number" class="crop-h" min="80" max="1400" step="10" value="420"></label>
@@ -1567,7 +1585,15 @@ function createCropControls(wrap, previewImg) {
   const widthInput = controls.querySelector('.crop-w');
   const heightInput = controls.querySelector('.crop-h');
   const frame = box.querySelector('.drag-crop-frame');
-  const crop = { width: 640, height: 420, x: 0, y: 0, zoom: 1 };
+  const crop = {
+    width: locked ? fixedW : 640,
+    height: locked ? fixedH : 420,
+    x: 0.5,
+    y: 0.5,
+    zoom: 1,
+    hFraction: 1,
+    locked: locked
+  };
 
   /* حالة الإطار كنِسَب مئوية من الصورة */
   let fx = 0, fy = 0, fw = 100, fh = 100;
@@ -1578,25 +1604,57 @@ function createCropControls(wrap, previewImg) {
       imageRatio.h = previewImg.naturalHeight;
     }
   };
+
+  /* في الوضع الثابت: أكبر إطار ممكن بنسبة 397:320 في منتصف الصورة */
+  const fitLockedFrame = () => {
+    if (!locked) return;
+    const ratio = (fixedW / fixedH) * (imageRatio.h / imageRatio.w); // نسبة العرض/الطول بالمئوية
+    if (ratio >= 1) { fw = 100; fh = 100 / ratio; }
+    else { fh = 100; fw = 100 * ratio; }
+    fw = clamp(fw, 5, 100);
+    fh = clamp(fh, 5, 100);
+    fx = (100 - fw) / 2;
+    fy = (100 - fh) / 2;
+  };
+
   if (previewImg && previewImg.complete) updateImageRatio();
-  if (previewImg) previewImg.addEventListener('load', updateImageRatio);
+  if (previewImg) {
+    previewImg.addEventListener('load', () => {
+      updateImageRatio();
+      if (locked) fitLockedFrame();
+      paint();
+    });
+  }
 
   const paint = () => {
+    const maxFx = Math.max(0, 100 - fw);
+    const maxFy = Math.max(0, 100 - fh);
+    fx = clamp(fx, 0, maxFx);
+    fy = clamp(fy, 0, maxFy);
     frame.style.left = fx + '%';
     frame.style.top = fy + '%';
     frame.style.width = fw + '%';
     frame.style.height = fh + '%';
-    // الأبعاد الفعلية بالمظهر: البكسل = نسبة من الصورة الأصلية
-    crop.x = fx / 100;
-    crop.y = fy / 100;
+    // نحفظ الموضع كنسبة من المساحة الحرة حتى يطابق القصّ ما يظهر داخل الإطار
+    crop.x = maxFx > 0.01 ? fx / maxFx : 0;
+    crop.y = maxFy > 0.01 ? fy / maxFy : 0;
     crop.zoom = fw / 100;
-    const pxW = Math.round(imageRatio.w * (fw / 100));
-    const pxH = Math.round(imageRatio.h * (fh / 100));
-    crop.width = clamp(pxW, 80, 1400);
-    crop.height = clamp(pxH, 80, 1400);
-    widthInput.value = crop.width;
-    heightInput.value = crop.height;
+    crop.hFraction = fh / 100;
+    if (locked) {
+      crop.width = fixedW;
+      crop.height = fixedH;
+      crop.locked = true;
+    } else {
+      const pxW = Math.round(imageRatio.w * (fw / 100));
+      const pxH = Math.round(imageRatio.h * (fh / 100));
+      crop.width = clamp(pxW, 80, 1400);
+      crop.height = clamp(pxH, 80, 1400);
+      if (widthInput) widthInput.value = crop.width;
+      if (heightInput) heightInput.value = crop.height;
+    }
   };
+
+  if (locked) fitLockedFrame();
 
   const setPointer = (e, onMove) => {
     e.preventDefault();
@@ -1614,43 +1672,45 @@ function createCropControls(wrap, previewImg) {
     window.addEventListener('pointerup', up);
   };
 
-  /* زوايا الأركان — تعديل الطول والعرض مع الحفاظ على الزاوية المقابلة */
-  const corner = (name, xDir, yDir) => {
-    const el = frame.querySelector(`.drag-crop-handle.${name}`);
-    if (!el) return;
-    el.addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oX, oY, oW, oH) => {
-      const nW = clamp(xDir > 0 ? oW + dx : oW - dx, 12, 100 - (xDir > 0 ? oX : 0));
-      const nH = clamp(yDir > 0 ? oH + dy : oH - dy, 12, 100 - (yDir > 0 ? oY : 0));
-      fw = nW; fh = nH;
-      if (xDir < 0) fx = clamp(oX + oW - nW, 0, 100 - nW);
-      if (yDir < 0) fy = clamp(oY + oH - nH, 0, 100 - nH);
-    }));
-  };
-  corner('tl', -1, -1);
-  corner('tr', 1, -1);
-  corner('bl', -1, 1);
-  corner('br', 1, 1);
+  if (!locked) {
+    /* زوايا الأركان — تعديل الطول والعرض مع الحفاظ على الزاوية المقابلة */
+    const corner = (name, xDir, yDir) => {
+      const el = frame.querySelector(`.drag-crop-handle.${name}`);
+      if (!el) return;
+      el.addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oX, oY, oW, oH) => {
+        const nW = clamp(xDir > 0 ? oW + dx : oW - dx, 12, 100 - (xDir > 0 ? oX : 0));
+        const nH = clamp(yDir > 0 ? oH + dy : oH - dy, 12, 100 - (yDir > 0 ? oY : 0));
+        fw = nW; fh = nH;
+        if (xDir < 0) fx = clamp(oX + oW - nW, 0, 100 - nW);
+        if (yDir < 0) fy = clamp(oY + oH - nH, 0, 100 - nH);
+      }));
+    };
+    corner('tl', -1, -1);
+    corner('tr', 1, -1);
+    corner('bl', -1, 1);
+    corner('br', 1, 1);
 
-  /* المقابض الجانبية */
-  const edge = (name, axis, dir) => {
-    const el = frame.querySelector(`.drag-crop-handle.${name}`);
-    if (!el) return;
-    el.addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oX, oY, oW, oH) => {
-      if (axis === 'x') {
-        const nW = clamp(dir > 0 ? oW + dx : oW - dx, 12, 100 - (dir > 0 ? oX : 0));
-        fw = nW;
-        if (dir < 0) fx = clamp(oX + oW - nW, 0, 100 - nW);
-      } else {
-        const nH = clamp(dir > 0 ? oH + dy : oH - dy, 12, 100 - (dir > 0 ? oY : 0));
-        fh = nH;
-        if (dir < 0) fy = clamp(oY + oH - nH, 0, 100 - nH);
-      }
-    }));
-  };
-  edge('lm', 'x', -1);
-  edge('rm', 'x', 1);
-  edge('tm', 'y', -1);
-  edge('bm', 'y', 1);
+    /* المقابض الجانبية */
+    const edge = (name, axis, dir) => {
+      const el = frame.querySelector(`.drag-crop-handle.${name}`);
+      if (!el) return;
+      el.addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oX, oY, oW, oH) => {
+        if (axis === 'x') {
+          const nW = clamp(dir > 0 ? oW + dx : oW - dx, 12, 100 - (dir > 0 ? oX : 0));
+          fw = nW;
+          if (dir < 0) fx = clamp(oX + oW - nW, 0, 100 - nW);
+        } else {
+          const nH = clamp(dir > 0 ? oH + dy : oH - dy, 12, 100 - (dir > 0 ? oY : 0));
+          fh = nH;
+          if (dir < 0) fy = clamp(oY + oH - nH, 0, 100 - nH);
+        }
+      }));
+    };
+    edge('lm', 'x', -1);
+    edge('rm', 'x', 1);
+    edge('tm', 'y', -1);
+    edge('bm', 'y', 1);
+  }
 
   /* تحريك الإطار نفسه */
   frame.addEventListener('pointerdown', (e) => {
@@ -1661,31 +1721,37 @@ function createCropControls(wrap, previewImg) {
     });
   });
 
-  widthInput.addEventListener('input', () => {
-    const want = clamp(Number(widthInput.value) || 640, 80, 1400);
-    fw = clamp((want / Math.max(1, imageRatio.w)) * 100, 12, 100);
-    paint();
-  });
-  heightInput.addEventListener('input', () => {
-    const want = clamp(Number(heightInput.value) || 420, 80, 1400);
-    fh = clamp((want / Math.max(1, imageRatio.h)) * 100, 12, 100);
-    paint();
-  });
-  controls.querySelectorAll('[data-preset]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const [w, h] = btn.dataset.preset.split('x').map(Number);
-      // اضبط نسبة الإطار على الصورة مع الحفاظ على المركز
-      const targetRatio = w / h;
-      let newW = fw;
-      let newH = newW / targetRatio / (imageRatio.w / imageRatio.h);
-      if (newH > 100) { newH = 100; newW = newH * targetRatio * (imageRatio.w / imageRatio.h); }
-      fw = clamp(newW, 12, 100);
-      fh = clamp(newH, 12, 100);
-      fx = clamp(fx + (fw - newW) / 2, 0, 100 - fw);
-      fy = clamp(fy + (fh - newH) / 2, 0, 100 - fh);
+  if (widthInput) {
+    widthInput.addEventListener('input', () => {
+      const want = clamp(Number(widthInput.value) || 640, 80, 1400);
+      fw = clamp((want / Math.max(1, imageRatio.w)) * 100, 12, 100);
       paint();
     });
-  });
+  }
+  if (heightInput) {
+    heightInput.addEventListener('input', () => {
+      const want = clamp(Number(heightInput.value) || 420, 80, 1400);
+      fh = clamp((want / Math.max(1, imageRatio.h)) * 100, 12, 100);
+      paint();
+    });
+  }
+  if (!locked) {
+    controls.querySelectorAll('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [w, h] = btn.dataset.preset.split('x').map(Number);
+        // اضبط نسبة الإطار على الصورة مع الحفاظ على المركز
+        const targetRatio = w / h;
+        let newW = fw;
+        let newH = newW / targetRatio / (imageRatio.w / imageRatio.h);
+        if (newH > 100) { newH = 100; newW = newH * targetRatio * (imageRatio.w / imageRatio.h); }
+        fw = clamp(newW, 12, 100);
+        fh = clamp(newH, 12, 100);
+        fx = clamp(fx + (fw - newW) / 2, 0, 100 - fw);
+        fy = clamp(fy + (fh - newH) / 2, 0, 100 - fh);
+        paint();
+      });
+    });
+  }
   paint();
   return crop;
 }
@@ -1697,25 +1763,25 @@ function cropImageDataUrl(dataUrl, size) {
     const img = new Image();
     img.onload = () => {
       try {
-        const targetW = clamp(Number(size && size.width) || 640, 80, 1400);
-        const targetH = clamp(Number(size && size.height) || 420, 80, 1400);
+        const locked = Boolean(size && size.locked);
+        const targetW = locked ? Math.round(Number(size.width)) : clamp(Number(size && size.width) || 640, 80, 1400);
+        const targetH = locked ? Math.round(Number(size.height)) : clamp(Number(size && size.height) || 420, 80, 1400);
         const zoom = clamp(Number(size && size.zoom) || 1, 0.05, 1);
-        const cropW = Math.max(1, Math.round(img.width * zoom));
-        const cropH = Math.max(1, Math.round(img.height * zoom * (targetH / targetW) * (targetW / targetH) * (cropW / cropW)));
-        const hRatio = targetH / targetW;
-        const finalH = Math.max(1, Math.round(cropW * hRatio));
+        const hFraction = clamp(Number(size && size.hFraction) || zoom, 0.05, 1);
+        const cropW = Math.max(1, Math.min(img.width, Math.round(img.width * zoom)));
+        const cropH = Math.max(1, Math.min(img.height, Math.round(img.height * hFraction)));
         const maxX = Math.max(0, img.width - cropW);
-        const maxY = Math.max(0, img.height - finalH);
+        const maxY = Math.max(0, img.height - cropH);
         const x = clamp(Math.round((Number(size && size.x) || 0) * maxX), 0, maxX);
         const y = clamp(Math.round((Number(size && size.y) || 0) * maxY), 0, maxY);
         const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
+        canvas.width = Math.max(1, targetW);
+        canvas.height = Math.max(1, targetH);
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, targetW, targetH);
-        ctx.drawImage(img, x, y, cropW, finalH, 0, 0, targetW, targetH);
-        resolve(canvas.toDataURL('image/jpeg', 0.76));
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, x, y, cropW, cropH, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
       } catch (e) { resolve(dataUrl); }
     };
     img.onerror = () => resolve(dataUrl);
@@ -4560,15 +4626,29 @@ function openClubProgramsSheet() {
   });
 }
 
+/* مقاس النافذة القرائية الثابت (كما في تصميم المشرف) */
+const READING_WINDOW_WIDTH = 1080;
+const READING_WINDOW_HEIGHT = 1115;
+let readingTipsCache = [];
+
+function readingWindowDate(value) {
+  const date = value instanceof Date ? value : new Date(Number(value) || 0);
+  if (!Number.isFinite(date.getTime()) || date.getTime() <= 0) return '';
+  return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(date);
+}
+
 function openReadingWindowSheet() {
   openSheet(`
-    ${sheetHead('نوافذ قرائية', 'صور ونصائح عن القراءة وفوائدها — بإضافة المشرف')}
+    ${sheetHead('نوافذ قرائية', 'مكتبة صور ونصائح يضيفها المشرف — اضغط أي نافذة لعرضها بالحجم الكامل')}
     <div class="reading-window">
-      <div class="reading-window-hero">
-        <span class="chip chip-soft">نوافذ قرائية</span>
-        <h3>نوافذ قرائية</h3>
-        <p>نافذة قصيرة تعرض صورًا ونصائح عن القراءة وفوائدها، يضيفها المشرف.</p>
-      </div>
+      <header class="reading-window-head">
+        <div class="reading-window-head-text">
+          <span class="chip chip-soft">النوافذ القرائية</span>
+          <h3>مكتبة نوافذ جليس</h3>
+          <p>كل نافذة بمقاس ${toAr(READING_WINDOW_WIDTH)}×${toAr(READING_WINDOW_HEIGHT)} بكسل، وتظهر للأعضاء تمامًا كما صممها المشرف.</p>
+        </div>
+        <div class="reading-window-counter"><b id="reading-window-count">٠</b><span>نافذة</span></div>
+      </header>
       <div class="reading-window-tips reading-windows-gallery" id="reading-window-tips"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>
       ${isSupervisor() ? `<button class="btn btn-gold btn-block" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة قرائية (للمشرف)</button>` : ''}
     </div>`, (root) => {
@@ -4582,37 +4662,80 @@ function openReadingWindowSheet() {
   });
 }
 
+async function deleteReadingWindow(tipId, onDone) {
+  const result = await cloudRequest('deleteReadingTip', { id: tipId, by: (currentMember && currentMember.name) || 'مشرف' });
+  if (result && result.success) {
+    toast('تم حذف النافذة القرائية', 'trash');
+    if (typeof onDone === 'function') onDone();
+    return true;
+  }
+  toast('تعذر حذف النافذة', 'info');
+  return false;
+}
+
+function openReadingWindowViewer(id) {
+  const tip = readingTipsCache.find((item) => item.id === id);
+  if (!tip) { toast('تعذر فتح النافذة', 'info'); return; }
+  openSheet(`
+    <div class="sheet-head reading-window-viewer-head">
+      <div>
+        <h2>${esc(tip.title || 'نافذة قرائية')}</h2>
+        <p>${esc(readingWindowDate(tip.createdAt) || 'نافذة قرائية')}</p>
+      </div>
+      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+        <svg class="ic"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div class="reading-window-viewer">
+      ${tip.image ? `<img class="reading-window-viewer-image" src="${esc(tip.image)}" alt="${esc(tip.title || 'نافذة قرائية')}">` : ''}
+      ${tip.body ? `<p class="reading-window-viewer-text">${esc(tip.body)}</p>` : ''}
+      ${isSupervisor() ? `<button class="btn btn-ghost btn-block reading-window-viewer-delete" type="button" data-action="delete-reading-window" data-id="${esc(tip.id)}">حذف النافذة</button>` : ''}
+    </div>`, (root) => {
+    const del = root.querySelector('[data-action="delete-reading-window"]');
+    if (del) del.addEventListener('click', async () => {
+      const ok = await deleteReadingWindow(del.dataset.id);
+      if (ok) { closeSheet(); setTimeout(() => openReadingWindowSheet(), 340); }
+    });
+  }, { fullscreen: true });
+}
+
 async function loadReadingTips(container) {
   if (!container) return;
   try {
     const result = await cloudRequest('getReadingTips');
     const tips = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+    readingTipsCache = tips;
+    const counter = document.getElementById('reading-window-count');
+    if (counter) counter.textContent = toAr(tips.length);
     if (!tips.length) {
-      container.innerHTML = '<div class="reading-tip-empty">لا توجد نصائح قرائية بعد. يمكن للمشرف إضافة نصائح.</div>';
+      container.innerHTML = '<div class="reading-tip-empty">لا توجد نوافذ قرائية بعد. يمكن للمشرف إضافة أول نافذة.</div>';
       return;
     }
     container.innerHTML = tips.map((tip) => `
-      <article class="reading-tip-card">
-        ${tip.image ? `<img class="reading-tip-image" src="${esc(tip.image)}" alt="${esc(tip.title || 'نصيحة قرائية')}">` : ''}
-        <div class="reading-tip-body">
-          <h5>${esc(tip.title || 'نصيحة قرائية')}</h5>
-          <p>${esc(tip.body || '')}</p>
-          ${isSupervisor() ? `<button class="btn btn-ghost btn-sm reading-tip-delete" type="button" data-action="delete-reading-tip" data-id="${esc(tip.id)}">حذف</button>` : ''}
-        </div>
+      <article class="reading-window-card${tip.image ? '' : ' is-text'}">
+        <button class="reading-window-card-open" type="button" data-action="open-reading-window" data-id="${esc(tip.id)}" aria-label="عرض ${esc(tip.title || 'نافذة قرائية')}">
+          <span class="reading-window-card-media">
+            ${tip.image
+              ? `<img class="reading-window-card-image" src="${esc(tip.image)}" alt="${esc(tip.title || 'نافذة قرائية')}" loading="lazy">`
+              : '<span class="reading-window-card-quote" aria-hidden="true">“</span>'}
+            <span class="reading-window-card-tag">${tip.image ? 'نافذة مصوّرة' : 'نصيحة نصية'}</span>
+          </span>
+          <span class="reading-window-card-body">
+            <strong>${esc(tip.title || 'نصيحة قرائية')}</strong>
+            ${tip.body ? `<span class="reading-window-card-text">${esc(tip.body)}</span>` : ''}
+            ${tip.createdAt ? `<small>${esc(readingWindowDate(tip.createdAt))}</small>` : ''}
+          </span>
+        </button>
+        ${isSupervisor() ? `<button class="reading-window-card-delete" type="button" data-action="delete-reading-tip" data-id="${esc(tip.id)}" aria-label="حذف النافذة">حذف</button>` : ''}
       </article>`).join('');
     container.querySelectorAll('[data-action="delete-reading-tip"]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const result = await cloudRequest('deleteReadingTip', { id: btn.dataset.id, by: (currentMember && currentMember.name) || 'مشرف' });
-        if (result && result.success) {
-          toast('تم حذف النصيحة', 'trash');
-          loadReadingTips(container);
-        } else {
-          toast('تعذر حذف النصيحة', 'info');
-        }
+      btn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await deleteReadingWindow(btn.dataset.id, () => loadReadingTips(container));
       });
     });
   } catch (error) {
-    container.innerHTML = '<div class="reading-tip-empty">تعذر تحميل النصائح</div>';
+    container.innerHTML = '<div class="reading-tip-empty">تعذر تحميل النوافذ القرائية</div>';
   }
 }
 
@@ -4670,20 +4793,20 @@ function openMemberStatsSheet() {
 function openReadingTipComposer() {
   if (!isSupervisor()) { toast('إضافة النصائح للمشرفين فقط', 'info'); return; }
   openSheet(`
-    ${sheetHead('إضافة نصيحة قرائية', 'صورة + عنوان + نص — تظهر في النافذة القرائية')}
+    ${sheetHead('إضافة نافذة قرائية', `نص أو صورة — أحدهما يكفي · مقاس الصورة ${toAr(READING_WINDOW_WIDTH)}×${toAr(READING_WINDOW_HEIGHT)} بكسل`)}
     <form id="reading-tip-form" novalidate>
       <div class="field">
-        <label for="tip-title">العنوان</label>
-        <input class="input" id="tip-title" maxlength="80" placeholder="مثال: ٢٠ دقيقة يوميًا" required>
+        <label for="tip-title">العنوان (اختياري)</label>
+        <input class="input" id="tip-title" maxlength="80" placeholder="مثال: ٢٠ دقيقة يوميًا">
       </div>
       <div class="field">
         <label for="tip-body">النص</label>
-        <textarea class="input" id="tip-body" rows="4" maxlength="1000" placeholder="اكتب نصيحة قرائية أو فائدة…" required></textarea>
+        <textarea class="input" id="tip-body" rows="4" maxlength="1000" placeholder="اكتب نصيحة قرائية أو فائدة… (اتركه فارغًا إن أضفت صورة فقط)"></textarea>
       </div>
       <div class="field">
-        <label for="tip-image-input">صورة النصيحة (اختياري)</label>
+        <label for="tip-image-input">أو أضف صورة فقط (اختياري)</label>
         <label class="meeting-upload" for="tip-image-input">
-          <svg class="ic"><use href="#i-article"/></svg><span>اختر صورة</span><small>ستظهر كـ«نافذة» في النافذة القرائية</small>
+          <svg class="ic"><use href="#i-article"/></svg><span>اختر صورة</span><small>مقاسها ${toAr(READING_WINDOW_WIDTH)}×${toAr(READING_WINDOW_HEIGHT)} بكسل — اسحب الإطار لاختيار الجزء</small>
         </label>
         <input id="tip-image-input" class="meeting-file-input" type="file" accept="image/*">
         <div id="tip-image-preview-wrap" class="meeting-image-preview-wrap crop-preview-wrap" hidden><img id="tip-image-preview" alt="معاينة"><button type="button" class="meeting-image-remove" id="tip-image-remove" aria-label="إزالة">×</button></div>
@@ -4692,7 +4815,7 @@ function openReadingTipComposer() {
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-plus"/></svg> نشر النصيحة</button>
     </form>`, (root) => {
     let imageData = '';
-    let cropState = { width: 640, height: 420 };
+    let cropState = { width: READING_WINDOW_WIDTH, height: READING_WINDOW_HEIGHT, locked: true };
     const fileInput = root.querySelector('#tip-image-input');
     const previewWrap = root.querySelector('#tip-image-preview-wrap');
     const preview = root.querySelector('#tip-image-preview');
@@ -4708,9 +4831,9 @@ function openReadingTipComposer() {
         previewWrap.hidden = false;
         if (!previewWrap.dataset.cropInit) {
           previewWrap.dataset.cropInit = '1';
-          cropState = createCropControls(previewWrap, preview);
+          cropState = createCropControls(previewWrap, preview, { fixedWidth: READING_WINDOW_WIDTH, fixedHeight: READING_WINDOW_HEIGHT });
         }
-        status.textContent = 'الصورة جاهزة — حدّد العرض والطول يدويًا';
+        status.textContent = `الصورة جاهزة — اسحب الإطار لتحديد الجزء الذي سيظهر (المقاس ثابت ${toAr(READING_WINDOW_WIDTH)}×${toAr(READING_WINDOW_HEIGHT)})`;
       } catch (error) {
         imageData = '';
         fileInput.value = '';
@@ -4729,8 +4852,12 @@ function openReadingTipComposer() {
       event.preventDefault();
       const title = root.querySelector('#tip-title').value.trim();
       const body = root.querySelector('#tip-body').value.trim();
-      if (!title || !body) { toast('أكمل العنوان والنص', 'info'); return; }
-      const finalImage = imageData ? await cropImageDataUrl(imageData, cropState) : '';
+      const hasImage = Boolean(imageData);
+      if (!hasImage && (!title || !body)) {
+        toast('أضف نصًا (عنوان ونص) أو صورة — أحدهما يكفي', 'info');
+        return;
+      }
+      const finalImage = hasImage ? await cropImageDataUrl(imageData, cropState) : '';
       const result = await cloudRequest('saveReadingTip', {
         title, body, image: finalImage,
         createdAt: Date.now(),
@@ -4907,12 +5034,6 @@ function renderConsultations(root, consultations, mayAnswer, consultantsConfigur
           <button class="btn btn-sm btn-primary" type="submit"><svg class="ic"><use href="#i-send"/></svg> نشر الإجابة</button>
         </form>` : `
         <div class="consultation-awaiting"><svg class="ic"><use href="#i-clock"/></svg><span>${consultantsConfigured ? 'بانتظار إجابة أحد المستشارين المعتمدين' : 'سيُتاح الرد بعد اعتماد أسماء المستشارين'}</span></div>`}
-      ${item.answer && canAnswerAll ? `
-        <form class="consultation-answer-form consultation-answer-edit" data-id="${esc(item.id)}">
-          <label for="consultation-reanswer-${esc(item.id)}">تعديل الإجابة أو إضافة ردّ</label>
-          <textarea class="input" id="consultation-reanswer-${esc(item.id)}" name="answer" rows="2" maxlength="4000" placeholder="اكتب ردّك…">${esc(item.answer || '')}</textarea>
-          <button class="btn btn-sm btn-ghost" type="submit">حفظ الرد</button>
-        </form>` : ''}
     </article>`).join('');
 
   list.querySelectorAll('.consultation-answer-form').forEach((form) => {
@@ -5176,7 +5297,7 @@ function openMeetingComposer() {
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-calendar"/></svg> نشر اللقاء للأعضاء</button>
     </form>`, (root) => {
     let imageData = '';
-    let crop = { width: 640, height: 420 };
+    let crop = { width: 397, height: 320, locked: true };
     const fileInput = root.querySelector('#meeting-image-input');
     const previewWrap = root.querySelector('#meeting-image-preview-wrap');
     const preview = root.querySelector('#meeting-image-preview');
@@ -5197,9 +5318,9 @@ function openMeetingComposer() {
         previewWrap.hidden = false;
         if (!previewWrap.dataset.cropInit) {
           previewWrap.dataset.cropInit = '1';
-          crop = createCropControls(previewWrap, preview);
+          crop = createCropControls(previewWrap, preview, { fixedWidth: 397, fixedHeight: 320 });
         }
-        status.textContent = 'الصورة جاهزة — حدّد العرض والطول يدويًا بما يناسب العرض';
+        status.textContent = 'الصورة جاهزة — اسحب الإطار لتحديد الجزء الذي سيظهر (المقاس ثابت ٣٩٧×٣٢٠)';
       } catch (error) {
         imageData = '';
         fileInput.value = '';
@@ -5210,7 +5331,7 @@ function openMeetingComposer() {
 
     root.querySelector('#meeting-image-remove').addEventListener('click', () => {
       imageData = '';
-      crop = { width: 640, height: 420 };
+      crop = { width: 397, height: 320, locked: true };
       fileInput.value = '';
       preview.removeAttribute('src');
       previewWrap.hidden = true;
@@ -5690,6 +5811,9 @@ function handleGlobalClick(event) {
     case 'reading-window':
       closeSheet();
       openReadingWindowSheet();
+      break;
+    case 'open-reading-window':
+      openReadingWindowViewer(id);
       break;
     case 'member-stats':
       closeSheet();
