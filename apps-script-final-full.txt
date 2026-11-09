@@ -1,41 +1,63 @@
-const QUOTES_SHEET = 'الاقتباسات';
-const BOOKS_SHEET = 'المكتبة';
-const ARTICLES_SHEET = 'المقالات';
-const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
-const LIBRARY_CATEGORIES_SHEET = 'تصنيفات المكتبة';
-const JOIN_REQUESTS_SHEET = 'طلبات الانضمام';
-const MEETINGS_SHEET = 'اللقاءات';
-const READING_TIPS_SHEET = 'نافذة قرائية';
+﻿const QUOTES_SHEET = 'ط§ظ„ط§ظ‚طھط¨ط§ط³ط§طھ';
+const CODE_VERSION = 'jalees-2026-11-09-r8';
+const BOOKS_SHEET = 'ط§ظ„ظ…ظƒطھط¨ط©';
+const ARTICLES_SHEET = 'ط§ظ„ظ…ظ‚ط§ظ„ط§طھ';
+const BOOK_RATINGS_SHEET = 'طھظ‚ظٹظٹظ…ط§طھ ط§ظ„ظƒطھط¨';
+const LIBRARY_CATEGORIES_SHEET = 'طھطµظ†ظٹظپط§طھ ط§ظ„ظ…ظƒطھط¨ط©';
+const JOIN_REQUESTS_SHEET = 'ط·ظ„ط¨ط§طھ ط§ظ„ط§ظ†ط¶ظ…ط§ظ…';
+const MEETINGS_SHEET = 'ط§ظ„ظ„ظ‚ط§ط،ط§طھ';
+const RECORDED_MEETINGS_SHEET = 'ط§ظ„ظ„ظ‚ط§ط،ط§طھ ط§ظ„ظ…ط³ط¬ظ„ط©';
+const READING_TIPS_SHEET = 'ظ†ط§ظپط°ط© ظ‚ط±ط§ط¦ظٹط©';
+const PROFILES_SHEET = 'ط§ظ„ظ…ظ„ظپط§طھ ط§ظ„ط´ط®طµظٹط©';
+const ENTRIES_SHEET = 'ط³ط¬ظ„ط§طھ ط§ظ„ظ‚ط±ط§ط،ط©';
+
+const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
+
+/* ط­ظ…ط§ظٹط© ط´ط§ظ…ظ„ط©: ط£ظٹ ط¯ط§ظ„ط© ظˆط±ظ‚ط© طھط¹ظ…ظ„ ط­طھظ‰ ظ„ظˆ ظ„ظ… ظٹظڈظ…ط±ظژظ‘ط± ظ„ظ‡ط§ ss */
+function resolveSpreadsheet(ss) {
+  if (ss && typeof ss.getSheetByName === 'function') return ss;
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
+function getProfilesSheet(ss) {
+  return getDataSheet(resolveSpreadsheet(ss), PROFILES_SHEET, ['memberId', 'name', 'role', 'joined', 'goal', 'lastWeekPages', 'notifications']);
+}
+function getEntriesSheet(ss) {
+  return getDataSheet(resolveSpreadsheet(ss), ENTRIES_SHEET, ['id', 'memberId', 'memberName', 'bookId', 'bookTitle', 'pages', 'date', 'createdAt']);
+}
 
 function getReadingTipsSheet(ss) {
-  let sheet = ss.getSheetByName(READING_TIPS_SHEET);
-  if (!sheet) sheet = ss.insertSheet(READING_TIPS_SHEET);
+  const target = resolveSpreadsheet(ss);
+  let sheet = target.getSheetByName(READING_TIPS_SHEET);
+  if (!sheet) sheet = target.insertSheet(READING_TIPS_SHEET);
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['id', 'title', 'body', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy']);
   }
   return sheet;
 }
-const MEMBERS_SHEET = 'الأعضاء';
-const CONSULTATIONS_SHEET = 'استشارات الأعضاء';
+const MEMBERS_SHEET = 'ط§ظ„ط£ط¹ط¶ط§ط،';
+const CONSULTATIONS_SHEET = 'ط§ط³طھط´ط§ط±ط§طھ ط§ظ„ط£ط¹ط¶ط§ط،';
 const OLD_BOOKS_SHEET_ID = 1035156833;
-const SUPERVISOR_NAMES = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي'];
-// تُضاف أسماء المستشارين المعتمدين هنا بعد استلامها؛ لا يُسمح بالإجابة قبل اعتماد الاسم.
+const SUPERVISOR_NAMES = ['ظ…ط´ط¹ظ„ ط¹ط¨ط¯ط§ظ„ط±ط­ظ…ظ† ط§ظ„ط­ظپظٹط±', 'ظ…ط´ط¹ظ„ ط§ظ„ط­ظپظٹط±', 'ظ…ط­ظ…ط¯ طµط§ظ„ط­ ط§ظ„ط¯ط¨ظٹط®ظٹ', 'ظ…ط­ظ…ط¯ ط§ظ„ط¯ط¨ظٹط®ظٹ'];
+// طھظڈط¶ط§ظپ ط£ط³ظ…ط§ط، ط§ظ„ظ…ط³طھط´ط§ط±ظٹظ† ط§ظ„ظ…ط¹طھظ…ط¯ظٹظ† ظ‡ظ†ط§ ط¨ط¹ط¯ ط§ط³طھظ„ط§ظ…ظ‡ط§ط› ظ„ط§ ظٹظڈط³ظ…ط­ ط¨ط§ظ„ط¥ط¬ط§ط¨ط© ظ‚ط¨ظ„ ط§ط¹طھظ…ط§ط¯ ط§ظ„ط§ط³ظ….
 const CONSULTANT_NAMES = [];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_ROUNDS = 10000;
 const DEFAULT_LIBRARY_CATEGORIES = [
-  'أدب', 'إدارة', 'اقتصاد', 'أسرة وطفولة', 'تاريخ', 'تاريخ إسلامي', 'تاريخ سعودي',
-  'تربية', 'تنمية ذاتية', 'تراجم', 'تقنية', 'تعليم', 'تفسير وعلوم القرآن', 'ثقافة عامة',
-  'جغرافيا ورحلات', 'حديث وسيرة نبوية', 'حكايات شعبية', 'رواية', 'رواية تاريخية',
-  'رياضة', 'سيرة', 'سيرة ذاتية', 'شعر', 'صحة', 'علم اجتماع', 'علم نفس', 'علوم',
-  'فكر', 'فكر وفلسفة', 'فن ومسرح', 'قصة قصيرة', 'قصص أطفال', 'لغة عربية', 'مذكرات',
-  'مقالات', 'فنون', 'فقه', 'تطوير', 'تجارب', 'أخرى'
+  'ط£ط¯ط¨', 'ط¥ط¯ط§ط±ط©', 'ط§ظ‚طھطµط§ط¯', 'ط£ط³ط±ط© ظˆط·ظپظˆظ„ط©', 'طھط§ط±ظٹط®', 'طھط§ط±ظٹط® ط¥ط³ظ„ط§ظ…ظٹ', 'طھط§ط±ظٹط® ط³ط¹ظˆط¯ظٹ',
+  'طھط±ط¨ظٹط©', 'طھظ†ظ…ظٹط© ط°ط§طھظٹط©', 'طھط±ط§ط¬ظ…', 'طھظ‚ظ†ظٹط©', 'طھط¹ظ„ظٹظ…', 'طھظپط³ظٹط± ظˆط¹ظ„ظˆظ… ط§ظ„ظ‚ط±ط¢ظ†', 'ط«ظ‚ط§ظپط© ط¹ط§ظ…ط©',
+  'ط¬ط؛ط±ط§ظپظٹط§ ظˆط±ط­ظ„ط§طھ', 'ط­ط¯ظٹط« ظˆط³ظٹط±ط© ظ†ط¨ظˆظٹط©', 'ط­ظƒط§ظٹط§طھ ط´ط¹ط¨ظٹط©', 'ط±ظˆط§ظٹط©', 'ط±ظˆط§ظٹط© طھط§ط±ظٹط®ظٹط©',
+  'ط±ظٹط§ط¶ط©', 'ط³ظٹط±ط©', 'ط³ظٹط±ط© ط°ط§طھظٹط©', 'ط´ط¹ط±', 'طµط­ط©', 'ط¹ظ„ظ… ط§ط¬طھظ…ط§ط¹', 'ط¹ظ„ظ… ظ†ظپط³', 'ط¹ظ„ظˆظ…',
+  'ظپظƒط±', 'ظپظƒط± ظˆظپظ„ط³ظپط©', 'ظپظ† ظˆظ…ط³ط±ط­', 'ظ‚طµط© ظ‚طµظٹط±ط©', 'ظ‚طµطµ ط£ط·ظپط§ظ„', 'ظ„ط؛ط© ط¹ط±ط¨ظٹط©', 'ظ…ط°ظƒط±ط§طھ',
+  'ظ…ظ‚ط§ظ„ط§طھ', 'ظپظ†ظˆظ†', 'ظپظ‚ظ‡', 'طھط·ظˆظٹط±', 'طھط¬ط§ط±ط¨', 'ط£ط®ط±ظ‰'
 ];
 
 function output(data) {
+  const payload = (data && typeof data === 'object') ? { ...data } : { data: data };
+  payload.version = CODE_VERSION;
   return ContentService
-    .createTextOutput(JSON.stringify(data))
+    .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -54,8 +76,9 @@ function readData(e) {
 }
 
 function getMeetingsSheet(ss) {
-  let sheet = ss.getSheetByName(MEETINGS_SHEET);
-  if (!sheet) sheet = ss.insertSheet(MEETINGS_SHEET);
+  const target = resolveSpreadsheet(ss);
+  let sheet = target.getSheetByName(MEETINGS_SHEET);
+  if (!sheet) sheet = target.insertSheet(MEETINGS_SHEET);
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['id', 'title', 'description', 'date', 'time', 'location', 'image', 'createdAt', 'createdBy', 'imagePosX', 'imagePosY', 'imageScale']);
   } else {
@@ -73,8 +96,9 @@ function ensureMeetingCropColumns(sheet) {
 }
 
 function getRecordedMeetingsSheet(ss) {
-  let sheet = ss.getSheetByName(RECORDED_MEETINGS_SHEET);
-  if (!sheet) sheet = ss.insertSheet(RECORDED_MEETINGS_SHEET);
+  const target = resolveSpreadsheet(ss);
+  let sheet = target.getSheetByName(RECORDED_MEETINGS_SHEET);
+  if (!sheet) sheet = target.insertSheet(RECORDED_MEETINGS_SHEET);
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy']);
   }
@@ -116,12 +140,12 @@ function paintDeletedRow(sheet, row, deleted, width) {
     range.setBackground('#f4cccc');
     range.setFontColor('#9c0006');
   } else {
-    range.setBackground(null);
-    range.setFontColor(null);
+    try { range.setBackground(null); } catch (error) { /* طھط¬ط§ظ‡ظ„ */ }
+    try { range.setFontColor(null); } catch (error) { /* طھط¬ط§ظ‡ظ„ */ }
   }
 }
 
-/* ---- طلبات الانضمام: حالة الطلب ولون الصف ---- */
+/* ---- ط·ظ„ط¨ط§طھ ط§ظ„ط§ظ†ط¶ظ…ط§ظ…: ط­ط§ظ„ط© ط§ظ„ط·ظ„ط¨ ظˆظ„ظˆظ† ط§ظ„طµظپ ---- */
 const JOIN_REQUEST_COLORS = {
   pending: { background: '#efefef', font: '#555555' },
   accepted: { background: '#d9ead3', font: '#274e13' },
@@ -168,7 +192,7 @@ function ensureJoinRequestStatuses(sheet) {
   });
 }
 
-/* ---- حسابات الأعضاء: حالة الحساب ولون الصف ---- */
+/* ---- ط­ط³ط§ط¨ط§طھ ط§ظ„ط£ط¹ط¶ط§ط،: ط­ط§ظ„ط© ط§ظ„ط­ط³ط§ط¨ ظˆظ„ظˆظ† ط§ظ„طµظپ ---- */
 const MEMBER_STATUS_COLORS = {
   active: { background: '#d9ead3', font: '#274e13' },
   pending: { background: '#efefef', font: '#555555' },
@@ -199,12 +223,14 @@ function normalizeTabName(value) {
 }
 
 function getDataSheet(ss, name, headers) {
-  let sheet = ss.getSheetByName(name);
+  const target = resolveSpreadsheet(ss);
+  let sheet = target.getSheetByName(name);
   if (!sheet) {
-    const target = normalizeTabName(name);
-    sheet = ss.getSheets().find((item) => normalizeTabName(item.getName()) === target) || null;
+    const wanted = normalizeTabName(name);
+    const all = typeof target.getSheets === 'function' ? target.getSheets() : [];
+    sheet = all.find((item) => normalizeTabName(item.getName()) === wanted) || null;
   }
-  if (!sheet) sheet = ss.insertSheet(name);
+  if (!sheet) sheet = target.insertSheet(name);
   if (sheet.getLastRow() === 0) sheet.appendRow(headers);
   return sheet;
 }
@@ -216,7 +242,7 @@ function getArticlesSheet(ss) {
 }
 
 /* ==========================================================================
-   حسابات الأعضاء: البريد الإلكتروني + الرمز السري
+   ط­ط³ط§ط¨ط§طھ ط§ظ„ط£ط¹ط¶ط§ط،: ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ + ط§ظ„ط±ظ…ط² ط§ظ„ط³ط±ظٹ
    ========================================================================== */
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -224,17 +250,17 @@ function normalizeEmail(value) {
 
 function normalizePhone(value) {
   return String(value || '')
-    .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-    .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[ظ -ظ©]/g, digit => String('ظ ظ،ظ¢ظ£ظ¤ظ¥ظ¦ظ§ظ¨ظ©'.indexOf(digit)))
+    .replace(/[غ°-غ¹]/g, digit => String('غ°غ±غ²غ³غ´غµغ¶غ·غ¸غ¹'.indexOf(digit)))
     .replace(/[\s().-]/g, '');
 }
 
 function normalizePersonName(value) {
   return String(value || '')
     .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
+    .replace(/[ط£ط¥ط¢ظ±]/g, 'ط§')
+    .replace(/ظ‰/g, 'ظٹ')
+    .replace(/ط©/g, 'ظ‡')
     .replace(/\s+/g, '')
     .trim();
 }
@@ -257,7 +283,7 @@ function isConsultantName(name) {
         return role === 'consultant' || role === 'supervisor';
       }
     }
-  } catch (error) { /* تجاهل */ }
+  } catch (error) { /* طھط¬ط§ظ‡ظ„ */ }
   return false;
 }
 
@@ -436,9 +462,18 @@ function getMembersSheet(ss) {
   }
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('phone');
   if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('profilePhoto');
+  // ط¹ظ…ظˆط¯ ظ†ظˆط¹ ط§ظ„ط¹ط¶ظˆظٹط©: 14 = memberType (ط¹ط¶ظˆ / طµط¯ظٹظ‚) â€” ط¹ظ…ظˆط¯ ظ…ظ†ظپطµظ„ ط¹ظ† ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±
+  if (sheet.getMaxColumns() < 14) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
+  }
+  const typeHeader = String(sheet.getRange(1, 14).getValue() || '').trim();
+  if (!typeHeader) sheet.getRange(1, 14).setValue('memberType');
   return sheet;
 }
 
+function getMyBooksSheet(ss) {
+  return getDataSheet(ss, 'ظ…ظƒطھط¨ط§طھ ط§ظ„ط£ط¹ط¶ط§ط،', ['memberId', 'memberName', 'bookId', 'status', 'currentPage', 'addedAt']);
+}
 function getConsultationsSheet(ss) {
   const sheet = getDataSheet(ss, CONSULTATIONS_SHEET, [
     'id', 'memberId', 'memberName', 'question', 'askedAt',
@@ -512,7 +547,7 @@ function memberRecord(values) {
   };
 }
 
-/* ---- طلبات التسجيل المنتظرة لتأكيد البريد ---- */
+/* ---- ط·ظ„ط¨ط§طھ ط§ظ„طھط³ط¬ظٹظ„ ط§ظ„ظ…ظ†طھط¸ط±ط© ظ„طھط£ظƒظٹط¯ ط§ظ„ط¨ط±ظٹط¯ ---- */
 function pendingRegistrationKey(email) {
   return `pending-registration:${normalizeEmail(email)}`;
 }
@@ -539,11 +574,11 @@ function sendCodeEmail(email, name, code, subject, intro) {
     to: email,
     subject,
     htmlBody: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
-      <h2 style="margin:0 0 12px">مساحة أعضاء جليس</h2>
-      <p>مرحبًا ${name}،</p>
+      <h2 style="margin:0 0 12px">ظ…ط³ط§ط­ط© ط£ط¹ط¶ط§ط، ط¬ظ„ظٹط³</h2>
+      <p>ظ…ط±ط­ط¨ظ‹ط§ ${name}طŒ</p>
       <p>${intro}</p>
       <p style="font-size:32px;letter-spacing:10px;font-weight:bold;color:#8C532D">${code}</p>
-      <p>الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلبه فتجاهل هذه الرسالة.</p>
+      <p>ط§ظ„ط±ظ…ط² طµط§ظ„ط­ ظ„ظ…ط¯ط© ظ،ظ¥ ط¯ظ‚ظٹظ‚ط©. ط¥ط°ط§ ظ„ظ… طھط·ظ„ط¨ظ‡ ظپطھط¬ط§ظ‡ظ„ ظ‡ط°ظ‡ ط§ظ„ط±ط³ط§ظ„ط©.</p>
     </div>`
   });
 }
@@ -647,7 +682,7 @@ function doPost(e) {
 
     if (action === 'saveClubBook') {
       const sheet = ss.getSheetByName(BOOKS_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب المكتبة');
+      if (!sheet) throw new Error('ظ„ظ… ط£ط¬ط¯ طھط¨ظˆظٹط¨ ط§ظ„ظ…ظƒطھط¨ط©');
       ensureBookDeleteColumns(sheet);
 
       const bookId = String(data.id || '');
@@ -660,7 +695,7 @@ function doPost(e) {
         if (lastRow < 2 || !bookId) continue;
         const ids = source.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
         if (ids.some(row => String(row[0]) === bookId)) {
-          return output({ success: true, message: 'الكتاب موجود مسبقًا' });
+          return output({ success: true, message: 'ط§ظ„ظƒطھط§ط¨ ظ…ظˆط¬ظˆط¯ ظ…ط³ط¨ظ‚ظ‹ط§' });
         }
       }
 
@@ -671,14 +706,14 @@ function doPost(e) {
         data.createdAt || Date.now(), data.coverImage || '',
         '', '', data.year || ''
       ]);
-      return output({ success: true, message: 'تم حفظ الكتاب' });
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط§ظ„ظƒطھط§ط¨' });
     }
 
     if (action === 'updateClubBook') {
       const bookId = String(data.id || '');
-      if (!bookId) throw new Error('معرّف الكتاب مطلوب');
+      if (!bookId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ظƒطھط§ط¨ ظ…ط·ظ„ظˆط¨');
       if (String(data.coverImage || '').length > 48000) {
-        throw new Error('حجم صورة الغلاف أكبر من الحد المسموح');
+        throw new Error('ط­ط¬ظ… طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ط£ظƒط¨ط± ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­');
       }
 
       const oldSheet = ss.getSheetById(OLD_BOOKS_SHEET_ID);
@@ -700,15 +735,15 @@ function doPost(e) {
         ]]);
         source.getRange(row, 11).setValue(data.coverImage || '');
         source.getRange(row, 14).setValue(data.year || '');
-        return output({ success: true, message: 'تم تحديث بيانات الكتاب' });
+        return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط¨ظٹط§ظ†ط§طھ ط§ظ„ظƒطھط§ط¨' });
       }
 
-      throw new Error('لم أجد الكتاب المطلوب في المكتبة');
+      throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ظƒطھط§ط¨ ط§ظ„ظ…ط·ظ„ظˆط¨ ظپظٹ ط§ظ„ظ…ظƒطھط¨ط©');
     }
 
     if (action === 'deleteClubBook' || action === 'restoreClubBook') {
       const bookId = String(data.id || '');
-      if (!bookId) throw new Error('معرّف الكتاب مطلوب');
+      if (!bookId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ظƒطھط§ط¨ ظ…ط·ظ„ظˆط¨');
       const deleting = action === 'deleteClubBook';
       const sources = [ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID)]
         .filter((source, index, list) => source && list.indexOf(source) === index);
@@ -721,11 +756,11 @@ function doPost(e) {
         const matchIndex = ids.findIndex((row, index) => bookIdForRow(source, row[0], index) === bookId);
         if (matchIndex < 0) continue;
         const row = matchIndex + 2;
-        source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
+        source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ'] : ['', '']]);
         paintDeletedRow(source, row, deleting, 14);
-        return output({ success: true, message: deleting ? 'نُقل الكتاب إلى سلة المحذوفات' : 'تمت استعادة الكتاب' });
+        return output({ success: true, message: deleting ? 'ظ†ظڈظ‚ظ„ ط§ظ„ظƒطھط§ط¨ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' : 'طھظ…طھ ط§ط³طھط¹ط§ط¯ط© ط§ظ„ظƒطھط§ط¨' });
       }
-      throw new Error('لم أجد الكتاب المطلوب');
+      throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ظƒطھط§ط¨ ط§ظ„ظ…ط·ظ„ظˆط¨');
     }
 
     if (action === 'saveJoinRequest') {
@@ -741,18 +776,18 @@ function doPost(e) {
         ''
       ]);
       paintJoinRequestRow(sheet, row, 'pending');
-      return output({ success: true, message: 'تم حفظ طلب الانضمام' });
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ…' });
     }
 
     if (action === 'setJoinRequestStatus') {
       const sheet = getJoinRequestsSheet(ss);
       const row = Number(data.row);
-      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد طلب الانضمام');
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('ظ„ظ… ط£ط¬ط¯ ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ…');
       const status = normalizeJoinStatus(data.status);
       sheet.getRange(row, 5, 1, 3).setValues([[
         status,
         status === 'pending' ? '' : Date.now(),
-        status === 'pending' ? '' : (data.by || 'مشرف')
+        status === 'pending' ? '' : (data.by || 'ظ…ط´ط±ظپ')
       ]]);
       paintJoinRequestRow(sheet, row, status);
       return output({ success: true, status: status });
@@ -762,7 +797,7 @@ function doPost(e) {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
       const pending = [];
       rows.forEach((row, index) => {
         const id = String(row[0] || '');
@@ -776,6 +811,8 @@ function doPost(e) {
           email: String(row[2] || ''),
           phone: normalizePhone(row[11]),
           status: status,
+          role: String(row[5] || 'member'),
+          memberType: String(row[13] || 'member').trim(),
           createdAt: row[7]
         });
       });
@@ -786,12 +823,12 @@ function doPost(e) {
     if (action === 'setMemberStatus') {
       const sheet = getMembersSheet(ss);
       const row = Number(data.row);
-      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط­ط³ط§ط¨');
       const status = memberStatusCode(data.status);
       sheet.getRange(row, 7).setValue(status);
       paintMemberRow(sheet, row, status);
       if (data.memberType) {
-        sheet.getRange(row, 4).setValue(String(data.memberType).trim());
+        sheet.getRange(row, 14).setValue(String(data.memberType).trim());
       }
       if (status === 'active') {
         // Send welcome email
@@ -801,7 +838,7 @@ function doPost(e) {
           if (email) {
             // ... email sending logic if exists
           }
-        } catch (e) { /* تجاهل */ }
+        } catch (e) { /* طھط¬ط§ظ‡ظ„ */ }
       }
       return output({ success: true, status: status, memberType: data.memberType || '' });
     }
@@ -809,26 +846,122 @@ function doPost(e) {
     if (action === 'setConsultantStatus') {
       const sheet = getMembersSheet(ss);
       const row = Number(data.row);
-      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط­ط³ط§ط¨');
       const isConsultant = (String(data.isConsultant) === 'true' || data.isConsultant === true);
       sheet.getRange(row, 6).setValue(isConsultant ? 'consultant' : 'member');
-      return output({ success: true, role: isConsultant ? 'consultant' : 'member', message: isConsultant ? 'تم ترقية العضو إلى مستشار' : 'تم إلغاء ترقية المستشار' });
+      return output({ success: true, role: isConsultant ? 'consultant' : 'member', message: isConsultant ? 'طھظ… طھط±ظ‚ظٹط© ط§ظ„ط¹ط¶ظˆ ط¥ظ„ظ‰ ظ…ط³طھط´ط§ط±' : 'طھظ… ط¥ظ„ط؛ط§ط، طھط±ظ‚ظٹط© ط§ظ„ظ…ط³طھط´ط§ط±' });
     }
 
     if (action === 'setMemberType') {
       const sheet = getMembersSheet(ss);
       const row = Number(data.row);
-      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط­ط³ط§ط¨');
       const memberType = String(data.memberType || 'member').trim();
-      // Store in column 4 (index 4) as memberType
-      sheet.getRange(row, 4).setValue(memberType);
-      return output({ success: true, memberType: memberType, message: 'تم تحديث نوع العضوية' });
+      // ط§ظ„ط¹ظ…ظˆط¯ 14 = memberType (ظ„ط§ ظٹظ…ط³ ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±)
+      sheet.getRange(row, 14).setValue(memberType);
+      return output({ success: true, memberType: memberType, message: 'طھظ… طھط­ط¯ظٹط« ظ†ظˆط¹ ط§ظ„ط¹ط¶ظˆظٹط©' });
+    }
+
+    if (action === 'saveProfile') {
+      const memberId = String(data.memberId || '').trim();
+      if (!memberId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ط¹ط¶ظˆ ظ…ط·ظ„ظˆط¨');
+      const sheet = getProfilesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      const rowData = [
+        memberId, data.name || '', data.role || 'member', data.joined || 'ظ¢ظ ظ¢ظ¤',
+        Number(data.goal) || 200, Number(data.lastWeekPages) || 0,
+        data.notifications === false ? 'false' : 'true'
+      ];
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        const index = ids.findIndex((row) => String(row[0] || '') === memberId);
+        if (index >= 0) {
+          sheet.getRange(index + 2, 1, 1, rowData.length).setValues([rowData]);
+          return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط§ظ„ظ…ظ„ظپ ط§ظ„ط´ط®طµظٹ' });
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط§ظ„ظ…ظ„ظپ ط§ظ„ط´ط®طµظٹ' });
+    }
+
+    if (action === 'saveEntry') {
+      const sheet = getEntriesSheet(ss);
+      const memberId = String(data.memberId || '').trim();
+      if (!memberId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ط¹ط¶ظˆ ظ…ط·ظ„ظˆط¨');
+      const entryId = String(data.id || `entry-${Date.now()}`);
+      const rowData = [
+        entryId, memberId, data.memberName || '', data.bookId || '',
+        data.bookTitle || '', Number(data.pages) || 0, data.date || '', data.createdAt || Date.now()
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        const index = ids.findIndex((row) => String(row[0] || '') === entryId);
+        if (index >= 0) {
+          sheet.getRange(index + 2, 1, 1, rowData.length).setValues([rowData]);
+          return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط³ط¬ظ„ ط§ظ„ظ‚ط±ط§ط،ط©' });
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط³ط¬ظ„ ط§ظ„ظ‚ط±ط§ط،ط©' });
+    }
+
+    if (action === 'saveMyBook') {
+      const sheet = getMyBooksSheet(ss);
+      const memberId = String(data.memberId || '').trim();
+      const bookId = String(data.bookId || '').trim();
+      if (!memberId || !bookId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ط¹ط¶ظˆ ظˆط§ظ„ظƒطھط§ط¨ ظ…ط·ظ„ظˆط¨ط§ظ†');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const keys = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+        for (let i = 0; i < keys.length; i++) {
+          if (String(keys[i][0]) === memberId && String(keys[i][2]) === bookId) {
+            sheet.getRange(i + 2, 4).setValue(String(data.status || 'reading'));
+            sheet.getRange(i + 2, 5).setValue(Number(data.currentPage) || 0);
+            return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ظ…ظƒطھط¨طھظٹ' });
+          }
+        }
+      }
+      sheet.appendRow([memberId, data.memberName || '', bookId, String(data.status || 'reading'), Number(data.currentPage) || 0, data.createdAt || Date.now()]);
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط§ظ„ظƒطھط§ط¨ ظپظٹ ظ…ظƒطھط¨طھظٹ' });
+    }
+
+    if (action === 'deleteMyBook') {
+      const sheet = getMyBooksSheet(ss);
+      const memberId = String(data.memberId || '').trim();
+      const bookId = String(data.bookId || '').trim();
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const keys = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+        for (let i = 0; i < keys.length; i++) {
+          if (String(keys[i][0]) === memberId && String(keys[i][2]) === bookId) {
+            sheet.deleteRow(i + 2);
+            return output({ success: true, message: 'طھظ…طھ ط§ظ„ط¥ط²ط§ظ„ط© ظ…ظ† ظ…ظƒطھط¨طھظٹ' });
+          }
+        }
+      }
+      return output({ success: true, message: 'ط§ظ„ظƒطھط§ط¨ ط؛ظٹط± ظ…ظˆط¬ظˆط¯ ظپظٹ ظ…ظƒطھط¨طھظٹ' });
+    }
+
+    if (action === 'getMyBooks') {
+      const memberId = String((data && data.memberId) || (e && e.parameter && e.parameter.memberId) || '').trim();
+      const sheet = getMyBooksSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2 || !memberId) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+      const mine = rows.filter((row) => String(row[0]) === memberId).map((row) => ({
+        bookId: String(row[2] || ''),
+        status: String(row[3] || 'reading'),
+        currentPage: Number(row[4]) || 0,
+        addedAt: row[5] || null
+      })).filter((item) => item.bookId);
+      return output({ success: true, data: mine });
     }
 
     if (action === 'saveReadingTip') {
       const sheet = getReadingTipsSheet(ss);
       const tipId = String(data.id || `tip-${Date.now()}`);
-      if (String(data.image || '').length > 48000) throw new Error('حجم الصورة أكبر من الحد المسموح');
+      if (String(data.image || '').length > 48000) throw new Error('ط­ط¬ظ… ط§ظ„طµظˆط±ط© ط£ظƒط¨ط± ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­');
       const rowData = [
         tipId, data.title || '', data.body || '', data.image || '',
         data.createdAt || Date.now(), data.createdBy || '', '', ''
@@ -839,12 +972,12 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === tipId) {
             sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
-            return output({ success: true, message: 'تم تحديث النصيحة' });
+            return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط§ظ„ظ†طµظٹط­ط©' });
           }
         }
       }
       sheet.appendRow(rowData);
-      return output({ success: true, id: tipId, message: 'تم حفظ النصيحة' });
+      return output({ success: true, id: tipId, message: 'طھظ… ط­ظپط¸ ط§ظ„ظ†طµظٹط­ط©' });
     }
 
     if (action === 'getReadingTips') {
@@ -870,34 +1003,34 @@ function doPost(e) {
           if (String(ids[i][0]) === tipId) {
             sheet.getRange(i + 2, 7).setValue(Date.now());
             sheet.getRange(i + 2, 8).setValue(data.by || '');
-            return output({ success: true, message: 'تم حذف النصيحة' });
+            return output({ success: true, message: 'طھظ… ط­ط°ظپ ط§ظ„ظ†طµظٹط­ط©' });
           }
         }
       }
-      return output({ success: false, message: 'لم أجد النصيحة' });
+      return output({ success: false, message: 'ظ„ظ… ط£ط¬ط¯ ط§ظ„ظ†طµظٹط­ط©' });
     }
 
     if (action === 'setMemberPhoto') {
       const memberId = String(data.memberId || '').trim();
       const photo = String(data.photo || '');
       if (!/^data:image\/(?:jpeg|png|webp);base64,/i.test(photo)) {
-        throw new Error('اختر صورة بصيغة JPG أو PNG أو WebP');
+        throw new Error('ط§ط®طھط± طµظˆط±ط© ط¨طµظٹط؛ط© JPG ط£ظˆ PNG ط£ظˆ WebP');
       }
-      if (photo.length > 48000) throw new Error('الصورة أكبر من الحد المسموح؛ اختر صورة أصغر');
+      if (photo.length > 48000) throw new Error('ط§ظ„طµظˆط±ط© ط£ظƒط¨ط± ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­ط› ط§ط®طھط± طµظˆط±ط© ط£طµط؛ط±');
       const sheet = getMembersSheet(ss);
       const row = findMemberRowById(sheet, memberId);
-      if (row < 2) throw new Error('لم أجد حساب العضو');
+      if (row < 2) throw new Error('ظ„ظ… ط£ط¬ط¯ ط­ط³ط§ط¨ ط§ظ„ط¹ط¶ظˆ');
       const member = sheet.getRange(row, 1, 1, 13).getValues()[0];
-      if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
+      if (memberStatusCode(member[6]) !== 'active') throw new Error('ط§ظ„ط­ط³ط§ط¨ ط؛ظٹط± ظ…ط¹طھظ…ط¯');
       sheet.getRange(row, 13).setValue(photo);
-      return output({ success: true, photo: photo, message: 'تم تحديث الصورة الشخصية' });
+      return output({ success: true, photo: photo, message: 'طھظ… طھط­ط¯ظٹط« ط§ظ„طµظˆط±ط© ط§ظ„ط´ط®طµظٹط©' });
     }
 
     if (action === 'getApprovedMembers') {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
       const members = [];
       rows.forEach((row, index) => {
         if (!String(row[0] || '').trim()) return;
@@ -909,7 +1042,7 @@ function doPost(e) {
           role: String(row[5] || 'member'),
           joinedAt: row[7],
           photo: String(row[12] || ''),
-          memberType: String(row[3] || 'member').trim()
+          memberType: String(row[13] || 'member').trim()
         });
       });
       return output({ success: true, data: members });
@@ -918,43 +1051,43 @@ function doPost(e) {
     if (action === 'submitConsultation') {
       const memberId = String(data.memberId || '').trim();
       const question = String(data.question || '').trim();
-      if (question.length < 8) throw new Error('اكتب سؤالك بتفصيل أكبر');
-      if (question.length > 2000) throw new Error('السؤال أطول من الحد المسموح');
+      if (question.length < 8) throw new Error('ط§ظƒطھط¨ ط³ط¤ط§ظ„ظƒ ط¨طھظپطµظٹظ„ ط£ظƒط¨ط±');
+      if (question.length > 2000) throw new Error('ط§ظ„ط³ط¤ط§ظ„ ط£ط·ظˆظ„ ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­');
       const membersSheet = getMembersSheet(ss);
       const memberRow = findMemberRowById(membersSheet, memberId);
-      if (memberRow < 2) throw new Error('سجّل الدخول كعضو لطرح استشارة');
+      if (memberRow < 2) throw new Error('ط³ط¬ظ‘ظ„ ط§ظ„ط¯ط®ظˆظ„ ظƒط¹ط¶ظˆ ظ„ط·ط±ط­ ط§ط³طھط´ط§ط±ط©');
       const member = membersSheet.getRange(memberRow, 1, 1, 12).getValues()[0];
-      if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
+      if (memberStatusCode(member[6]) !== 'active') throw new Error('ط§ظ„ط­ط³ط§ط¨ ط؛ظٹط± ظ…ط¹طھظ…ط¯');
       const id = `consult-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
       const sheet = getConsultationsSheet(ss);
       sheet.appendRow([id, memberId, String(member[1] || ''), question, Date.now(), '', '', '', '']);
-      return output({ success: true, id: id, message: 'تم إرسال استشارتك للمستشارين' });
+      return output({ success: true, id: id, message: 'طھظ… ط¥ط±ط³ط§ظ„ ط§ط³طھط´ط§ط±طھظƒ ظ„ظ„ظ…ط³طھط´ط§ط±ظٹظ†' });
     }
 
     if (action === 'answerConsultation') {
       const memberId = String(data.memberId || '').trim();
       const consultationId = String(data.id || '').trim();
       const answer = String(data.answer || '').trim();
-      if (!consultationId) throw new Error('معرّف الاستشارة مطلوب');
-      if (answer.length < 2) throw new Error('اكتب الإجابة');
-      if (answer.length > 4000) throw new Error('الإجابة أطول من الحد المسموح');
+      if (!consultationId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ط§ط³طھط´ط§ط±ط© ظ…ط·ظ„ظˆط¨');
+      if (answer.length < 2) throw new Error('ط§ظƒطھط¨ ط§ظ„ط¥ط¬ط§ط¨ط©');
+      if (answer.length > 4000) throw new Error('ط§ظ„ط¥ط¬ط§ط¨ط© ط£ط·ظˆظ„ ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­');
       const membersSheet = getMembersSheet(ss);
       const memberRow = findMemberRowById(membersSheet, memberId);
-      if (memberRow < 2) throw new Error('سجّل الدخول بحساب المستشار');
+      if (memberRow < 2) throw new Error('ط³ط¬ظ‘ظ„ ط§ظ„ط¯ط®ظˆظ„ ط¨ط­ط³ط§ط¨ ط§ظ„ظ…ط³طھط´ط§ط±');
       const member = membersSheet.getRange(memberRow, 1, 1, 12).getValues()[0];
       const advisorName = String(member[1] || '').trim();
       if (memberStatusCode(member[6]) !== 'active' || !isConsultantName(advisorName)) {
-        throw new Error('الإجابة متاحة للمستشارين المعتمدين فقط');
+        throw new Error('ط§ظ„ط¥ط¬ط§ط¨ط© ظ…طھط§ط­ط© ظ„ظ„ظ…ط³طھط´ط§ط±ظٹظ† ط§ظ„ظ…ط¹طھظ…ط¯ظٹظ† ظپظ‚ط·');
       }
       const sheet = getConsultationsSheet(ss);
       const lastRow = sheet.getLastRow();
-      if (lastRow < 2) throw new Error('لم أجد الاستشارة');
+      if (lastRow < 2) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط§ط³طھط´ط§ط±ط©');
       const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
       const index = ids.findIndex(row => String(row[0] || '') === consultationId);
-      if (index < 0) throw new Error('لم أجد الاستشارة');
+      if (index < 0) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط§ط³طھط´ط§ط±ط©');
       const row = index + 2;
       sheet.getRange(row, 6, 1, 4).setValues([[answer, memberId, advisorName, Date.now()]]);
-      return output({ success: true, message: 'تم نشر الإجابة' });
+      return output({ success: true, message: 'طھظ… ظ†ط´ط± ط§ظ„ط¥ط¬ط§ط¨ط©' });
     }
 
     if (action === 'requestRegistrationCode') {
@@ -965,22 +1098,22 @@ function doPost(e) {
       const password = String(data.password || '');
 
       if (name.split(' ').filter(Boolean).length < 3) {
-        throw new Error('اكتب الاسم الثلاثي كما هو في الهوية');
+        throw new Error('ط§ظƒطھط¨ ط§ظ„ط§ط³ظ… ط§ظ„ط«ظ„ط§ط«ظٹ ظƒظ…ط§ ظ‡ظˆ ظپظٹ ط§ظ„ظ‡ظˆظٹط©');
       }
       if (!/^\+?\d{8,15}$/.test(phone)) {
-        throw new Error('أدخل رقم جوال صحيحًا');
+        throw new Error('ط£ط¯ط®ظ„ ط±ظ‚ظ… ط¬ظˆط§ظ„ طµط­ظٹط­ظ‹ط§');
       }
-      if (!EMAIL_PATTERN.test(email)) throw new Error('صيغة البريد الإلكتروني غير صحيحة');
+      if (!EMAIL_PATTERN.test(email)) throw new Error('طµظٹط؛ط© ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط؛ظٹط± طµط­ظٹط­ط©');
       if (password.length < PASSWORD_MIN_LENGTH) {
-        throw new Error(`الرمز يجب أن يكون ${PASSWORD_MIN_LENGTH} أحرف أو أكثر`);
+        throw new Error(`ط§ظ„ط±ظ…ط² ظٹط¬ط¨ ط£ظ† ظٹظƒظˆظ† ${PASSWORD_MIN_LENGTH} ط£ط­ط±ظپ ط£ظˆ ط£ظƒط«ط±`);
       }
       if (findMemberRow(sheet, email) > 0) {
-        throw new Error('هذا البريد مسجل مسبقًا، جرّب الدخول أو استعادة الرمز');
+        throw new Error('ظ‡ط°ط§ ط§ظ„ط¨ط±ظٹط¯ ظ…ط³ط¬ظ„ ظ…ط³ط¨ظ‚ظ‹ط§طŒ ط¬ط±ظ‘ط¨ ط§ظ„ط¯ط®ظˆظ„ ط£ظˆ ط§ط³طھط¹ط§ط¯ط© ط§ظ„ط±ظ…ط²');
       }
 
       const previous = readPendingRegistration(email);
       if (previous && previous.sentAt && Date.now() - Number(previous.sentAt) < 60000) {
-        throw new Error('انتظر دقيقة قبل طلب رمز جديد');
+        throw new Error('ط§ظ†طھط¸ط± ط¯ظ‚ظٹظ‚ط© ظ‚ط¨ظ„ ط·ظ„ط¨ ط±ظ…ط² ط¬ط¯ظٹط¯');
       }
 
       const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -1002,15 +1135,15 @@ function doPost(e) {
       try {
         sendCodeEmail(
           email, name, code,
-          'جليس | رمز تأكيد بريدك',
-          'رمز تأكيد بريدك لإنشاء حسابك في جليس هو:'
+          'ط¬ظ„ظٹط³ | ط±ظ…ط² طھط£ظƒظٹط¯ ط¨ط±ظٹط¯ظƒ',
+          'ط±ظ…ط² طھط£ظƒظٹط¯ ط¨ط±ظٹط¯ظƒ ظ„ط¥ظ†ط´ط§ط، ط­ط³ط§ط¨ظƒ ظپظٹ ط¬ظ„ظٹط³ ظ‡ظˆ:'
         );
       } catch (mailError) {
         clearPendingRegistration(email);
-        throw new Error('تعذر إرسال البريد، حاول مرة أخرى بعد قليل');
+        throw new Error('طھط¹ط°ط± ط¥ط±ط³ط§ظ„ ط§ظ„ط¨ط±ظٹط¯طŒ ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰ ط¨ط¹ط¯ ظ‚ظ„ظٹظ„');
       }
 
-      return output({ success: true, message: 'أرسلنا رمز التحقق إلى بريدك' });
+      return output({ success: true, message: 'ط£ط±ط³ظ„ظ†ط§ ط±ظ…ط² ط§ظ„طھط­ظ‚ظ‚ ط¥ظ„ظ‰ ط¨ط±ظٹط¯ظƒ' });
     }
 
     if (action === 'verifyRegistrationCode') {
@@ -1018,27 +1151,27 @@ function doPost(e) {
       const email = normalizeEmail(data.email);
       const code = String(data.code || '').trim();
 
-      if (!/^\d{6}$/.test(code)) throw new Error('رمز التحقق ستة أرقام');
+      if (!/^\d{6}$/.test(code)) throw new Error('ط±ظ…ط² ط§ظ„طھط­ظ‚ظ‚ ط³طھط© ط£ط±ظ‚ط§ظ…');
 
       const record = readPendingRegistration(email);
-      if (!record) throw new Error('لا يوجد طلب تسجيل لهذا البريد، أعد التسجيل');
+      if (!record) throw new Error('ظ„ط§ ظٹظˆط¬ط¯ ط·ظ„ط¨ طھط³ط¬ظٹظ„ ظ„ظ‡ط°ط§ ط§ظ„ط¨ط±ظٹط¯طŒ ط£ط¹ط¯ ط§ظ„طھط³ط¬ظٹظ„');
 
       if (!record.expiry || Date.now() > Number(record.expiry)) {
         clearPendingRegistration(email);
-        throw new Error('انتهت صلاحية الرمز، أعد التسجيل لطلب رمز جديد');
+        throw new Error('ط§ظ†طھظ‡طھ طµظ„ط§ط­ظٹط© ط§ظ„ط±ظ…ط²طŒ ط£ط¹ط¯ ط§ظ„طھط³ط¬ظٹظ„ ظ„ط·ظ„ط¨ ط±ظ…ط² ط¬ط¯ظٹط¯');
       }
       if (findMemberRow(sheet, email) > 0) {
         clearPendingRegistration(email);
-        throw new Error('هذا البريد مسجل مسبقًا، يمكنك الدخول الآن');
+        throw new Error('ظ‡ط°ط§ ط§ظ„ط¨ط±ظٹط¯ ظ…ط³ط¬ظ„ ظ…ط³ط¨ظ‚ظ‹ط§طŒ ظٹظ…ظƒظ†ظƒ ط§ظ„ط¯ط®ظˆظ„ ط§ظ„ط¢ظ†');
       }
       if (!verifyPassword(code, record.codeSalt, record.codeHash)) {
         record.attempts = (Number(record.attempts) || 0) + 1;
         if (record.attempts >= 6) {
           clearPendingRegistration(email);
-          throw new Error('تجاوزت عدد المحاولات، أعد التسجيل لطلب رمز جديد');
+          throw new Error('طھط¬ط§ظˆط²طھ ط¹ط¯ط¯ ط§ظ„ظ…ط­ط§ظˆظ„ط§طھطŒ ط£ط¹ط¯ ط§ظ„طھط³ط¬ظٹظ„ ظ„ط·ظ„ط¨ ط±ظ…ط² ط¬ط¯ظٹط¯');
         }
         savePendingRegistration(record);
-        throw new Error('رمز التحقق غير صحيح');
+        throw new Error('ط±ظ…ط² ط§ظ„طھط­ظ‚ظ‚ ط؛ظٹط± طµط­ظٹط­');
       }
 
       const id = `u-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
@@ -1054,12 +1187,12 @@ function doPost(e) {
       return output({
         success: true,
         status: 'pending',
-        message: 'تم تأكيد بريدك، وحسابك بانتظار موافقة الإدارة'
+        message: 'طھظ… طھط£ظƒظٹط¯ ط¨ط±ظٹط¯ظƒطŒ ظˆط­ط³ط§ط¨ظƒ ط¨ط§ظ†طھط¸ط§ط± ظ…ظˆط§ظپظ‚ط© ط§ظ„ط¥ط¯ط§ط±ط©'
       });
     }
 
     if (action === 'registerMember') {
-      throw new Error('حدّثنا نظام التسجيل، أعد تحميل الصفحة ثم أنشئ الحساب من جديد');
+      throw new Error('ط­ط¯ظ‘ط«ظ†ط§ ظ†ط¸ط§ظ… ط§ظ„طھط³ط¬ظٹظ„طŒ ط£ط¹ط¯ طھط­ظ…ظٹظ„ ط§ظ„طµظپط­ط© ط«ظ… ط£ظ†ط´ط¦ ط§ظ„ط­ط³ط§ط¨ ظ…ظ† ط¬ط¯ظٹط¯');
     }
 
     if (action === 'loginMember') {
@@ -1071,25 +1204,25 @@ function doPost(e) {
         row = findMemberRow(sheet, identifier);
       } else {
         if (identifier.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length < 3) {
-          throw new Error('أدخل الاسم الثلاثي أو البريد الإلكتروني');
+          throw new Error('ط£ط¯ط®ظ„ ط§ظ„ط§ط³ظ… ط§ظ„ط«ظ„ط§ط«ظٹ ط£ظˆ ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ');
         }
         const nameRows = findMemberRowsByName(sheet, identifier);
         if (nameRows.length > 1) {
-          throw new Error('يوجد أكثر من عضو بهذا الاسم، استخدم البريد الإلكتروني للدخول');
+          throw new Error('ظٹظˆط¬ط¯ ط£ظƒط«ط± ظ…ظ† ط¹ط¶ظˆ ط¨ظ‡ط°ط§ ط§ظ„ط§ط³ظ…طŒ ط§ط³طھط®ط¯ظ… ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ظ„ظ„ط¯ط®ظˆظ„');
         }
         if (nameRows.length === 1) row = nameRows[0];
       }
-      if (row < 0) throw new Error('الاسم أو البريد الإلكتروني أو الرمز غير صحيح');
+      if (row < 0) throw new Error('ط§ظ„ط§ط³ظ… ط£ظˆ ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط£ظˆ ط§ظ„ط±ظ…ط² ط؛ظٹط± طµط­ظٹط­');
 
       const values = sheet.getRange(row, 1, 1, 13).getValues()[0];
       const status = memberStatusCode(values[6]);
-      if (status === 'rejected') throw new Error('تم رفض طلب حسابك، تواصل مع إدارة النادي');
-      if (status !== 'active') throw new Error('حسابك بانتظار موافقة المشرف');
+      if (status === 'rejected') throw new Error('طھظ… ط±ظپط¶ ط·ظ„ط¨ ط­ط³ط§ط¨ظƒطŒ طھظˆط§طµظ„ ظ…ط¹ ط¥ط¯ط§ط±ط© ط§ظ„ظ†ط§ط¯ظٹ');
+      if (status !== 'active') throw new Error('ط­ط³ط§ط¨ظƒ ط¨ط§ظ†طھط¸ط§ط± ظ…ظˆط§ظپظ‚ط© ط§ظ„ظ…ط´ط±ظپ');
 
       const expected = String(values[3] || '');
       const salt = String(values[4] || '');
       if (!verifyPassword(password, salt, expected)) {
-        throw new Error('الاسم أو البريد الإلكتروني أو الرمز غير صحيح');
+        throw new Error('ط§ظ„ط§ط³ظ… ط£ظˆ ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط£ظˆ ط§ظ„ط±ظ…ط² ط؛ظٹط± طµط­ظٹط­');
       }
       if (isLegacyPasswordHash(expected)) {
         const newSalt = Utilities.getUuid();
@@ -1109,7 +1242,7 @@ function doPost(e) {
         const code = String(Math.floor(100000 + Math.random() * 900000));
         const codeSalt = Utilities.getUuid();
         const expiry = Date.now() + 15 * 60 * 1000;
-        const name = String(sheet.getRange(row, 2).getValue() || 'عضو جليس');
+        const name = String(sheet.getRange(row, 2).getValue() || 'ط¹ط¶ظˆ ط¬ظ„ظٹط³');
         sheet.getRange(row, 10, 1, 2).setValues([[
           JSON.stringify({ hash: hashPassword(code, codeSalt), salt: codeSalt }),
           expiry
@@ -1117,14 +1250,14 @@ function doPost(e) {
         try {
           sendCodeEmail(
             email, name, code,
-            'جليس | رمز استعادة الرمز السري',
-            'رمز استعادة الرمز السري الخاص بك هو:'
+            'ط¬ظ„ظٹط³ | ط±ظ…ط² ط§ط³طھط¹ط§ط¯ط© ط§ظ„ط±ظ…ط² ط§ظ„ط³ط±ظٹ',
+            'ط±ظ…ط² ط§ط³طھط¹ط§ط¯ط© ط§ظ„ط±ظ…ط² ط§ظ„ط³ط±ظٹ ط§ظ„ط®ط§طµ ط¨ظƒ ظ‡ظˆ:'
           );
         } catch (mailError) {
           console.error('MailApp error:', mailError);
         }
       }
-      return output({ success: true, message: 'إن كان البريد مسجلًا فسيصلك رمز الاستعادة خلال لحظات' });
+      return output({ success: true, message: 'ط¥ظ† ظƒط§ظ† ط§ظ„ط¨ط±ظٹط¯ ظ…ط³ط¬ظ„ظ‹ط§ ظپط³ظٹطµظ„ظƒ ط±ظ…ط² ط§ظ„ط§ط³طھط¹ط§ط¯ط© ط®ظ„ط§ظ„ ظ„ط­ط¸ط§طھ' });
     }
 
     if (action === 'resetPassword') {
@@ -1133,15 +1266,15 @@ function doPost(e) {
       const code = String(data.code || '').trim();
       const password = String(data.password || '');
       if (password.length < PASSWORD_MIN_LENGTH) {
-        throw new Error(`الرمز الجديد يجب أن يكون ${PASSWORD_MIN_LENGTH} أحرف أو أكثر`);
+        throw new Error(`ط§ظ„ط±ظ…ط² ط§ظ„ط¬ط¯ظٹط¯ ظٹط¬ط¨ ط£ظ† ظٹظƒظˆظ† ${PASSWORD_MIN_LENGTH} ط£ط­ط±ظپ ط£ظˆ ط£ظƒط«ط±`);
       }
       const row = findMemberRow(sheet, email);
-      if (row < 0) throw new Error('رمز التحقق غير صحيح أو منتهي الصلاحية');
+      if (row < 0) throw new Error('ط±ظ…ط² ط§ظ„طھط­ظ‚ظ‚ ط؛ظٹط± طµط­ظٹط­ ط£ظˆ ظ…ظ†طھظ‡ظٹ ط§ظ„طµظ„ط§ط­ظٹط©');
 
       const stored = String(sheet.getRange(row, 10).getValue() || '');
       const expiry = Number(sheet.getRange(row, 11).getValue()) || 0;
       if (!stored || !expiry || Date.now() > expiry) {
-        throw new Error('انتهت صلاحية الرمز، اطلب رمزًا جديدًا');
+        throw new Error('ط§ظ†طھظ‡طھ طµظ„ط§ط­ظٹط© ط§ظ„ط±ظ…ط²طŒ ط§ط·ظ„ط¨ ط±ظ…ط²ظ‹ط§ ط¬ط¯ظٹط¯ظ‹ط§');
       }
 
       let valid = false;
@@ -1153,36 +1286,36 @@ function doPost(e) {
         const parts = stored.split(':');
         if (parts.length === 2) valid = verifyPassword(code, parts[1], parts[0]);
       }
-      if (!valid) throw new Error('رمز التحقق غير صحيح');
+      if (!valid) throw new Error('ط±ظ…ط² ط§ظ„طھط­ظ‚ظ‚ ط؛ظٹط± طµط­ظٹط­');
 
       const salt = Utilities.getUuid();
       sheet.getRange(row, 4, 1, 2).setValues([[hashPassword(password, salt), salt]]);
       sheet.getRange(row, 10, 1, 2).setValues([['', '']]);
-      return output({ success: true, message: 'تم تعيين الرمز الجديد، يمكنك الدخول الآن' });
+      return output({ success: true, message: 'طھظ… طھط¹ظٹظٹظ† ط§ظ„ط±ظ…ط² ط§ظ„ط¬ط¯ظٹط¯طŒ ظٹظ…ظƒظ†ظƒ ط§ظ„ط¯ط®ظˆظ„ ط§ظ„ط¢ظ†' });
     }
 
     if (action === 'addLibraryCategory') {
       const category = String(data.category || '').trim();
-      if (!category) throw new Error('اسم التصنيف مطلوب');
+      if (!category) throw new Error('ط§ط³ظ… ط§ظ„طھطµظ†ظٹظپ ظ…ط·ظ„ظˆط¨');
       const existing = getLibraryCategoryNames(ss);
       if (existing.some(name => normalizeTabName(name) === normalizeTabName(category))) {
-        return output({ success: true, message: 'التصنيف موجود مسبقًا', categories: existing });
+        return output({ success: true, message: 'ط§ظ„طھطµظ†ظٹظپ ظ…ظˆط¬ظˆط¯ ظ…ط³ط¨ظ‚ظ‹ط§', categories: existing });
       }
       getLibraryCategoriesSheet(ss).appendRow([category]);
-      return output({ success: true, message: 'تمت إضافة التصنيف', categories: getLibraryCategoryNames(ss) });
+      return output({ success: true, message: 'طھظ…طھ ط¥ط¶ط§ظپط© ط§ظ„طھطµظ†ظٹظپ', categories: getLibraryCategoryNames(ss) });
     }
 
     if (action === 'renameLibraryCategory') {
       const oldCategory = String(data.oldCategory || '').trim();
       const category = String(data.category || '').trim();
-      if (!oldCategory || !category) throw new Error('اسم التصنيف الجديد مطلوب');
+      if (!oldCategory || !category) throw new Error('ط§ط³ظ… ط§ظ„طھطµظ†ظٹظپ ط§ظ„ط¬ط¯ظٹط¯ ظ…ط·ظ„ظˆط¨');
       const current = getLibraryCategoryNames(ss);
       if (!current.some(name => normalizeTabName(name) === normalizeTabName(oldCategory))) {
-        throw new Error('التصنيف الأصلي غير موجود');
+        throw new Error('ط§ظ„طھطµظ†ظٹظپ ط§ظ„ط£طµظ„ظٹ ط؛ظٹط± ظ…ظˆط¬ظˆط¯');
       }
       if (current.some(name => normalizeTabName(name) === normalizeTabName(category)
         && normalizeTabName(name) !== normalizeTabName(oldCategory))) {
-        throw new Error('يوجد تصنيف آخر بهذا الاسم');
+        throw new Error('ظٹظˆط¬ط¯ طھطµظ†ظٹظپ ط¢ط®ط± ط¨ظ‡ط°ط§ ط§ظ„ط§ط³ظ…');
       }
 
       const sheet = getLibraryCategoriesSheet(ss);
@@ -1196,24 +1329,24 @@ function doPost(e) {
         }
       }
       const booksUpdated = renameLibraryCategoryInBooks(ss, oldCategory, category);
-      return output({ success: true, message: 'تم تعديل اسم التصنيف', booksUpdated, categories: getLibraryCategoryNames(ss) });
+      return output({ success: true, message: 'طھظ… طھط¹ط¯ظٹظ„ ط§ط³ظ… ط§ظ„طھطµظ†ظٹظپ', booksUpdated, categories: getLibraryCategoryNames(ss) });
     }
 
     if (action === 'deleteLibraryCategory' || action === 'restoreLibraryCategory') {
       const category = String(data.id || data.category || '').trim();
-      if (!category) throw new Error('اسم الرف مطلوب');
+      if (!category) throw new Error('ط§ط³ظ… ط§ظ„ط±ظپ ظ…ط·ظ„ظˆط¨');
       const sheet = getLibraryCategoriesSheet(ss);
       const lastRow = sheet.getLastRow();
-      if (lastRow < 2) throw new Error('لا توجد رفوف لإدارتها');
+      if (lastRow < 2) throw new Error('ظ„ط§ طھظˆط¬ط¯ ط±ظپظˆظپ ظ„ط¥ط¯ط§ط±طھظ‡ط§');
       const rows = sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
       const restoring = action === 'restoreLibraryCategory';
       const rowIndex = rows.findIndex(row => normalizeTabName(row[0]) === normalizeTabName(category)
         && (restoring ? Boolean(row[1]) : !row[1]));
-      if (rowIndex < 0) throw new Error('لم أجد الرف المطلوب');
+      if (rowIndex < 0) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط±ظپ ط§ظ„ظ…ط·ظ„ظˆط¨');
       const sheetRow = rowIndex + 2;
 
       if (action === 'deleteLibraryCategory') {
-        if (rows[rowIndex][1]) return output({ success: true, message: 'الرف موجود بالفعل في سلة المحذوفات' });
+        if (rows[rowIndex][1]) return output({ success: true, message: 'ط§ظ„ط±ظپ ظ…ظˆط¬ظˆط¯ ط¨ط§ظ„ظپط¹ظ„ ظپظٹ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' });
         const snapshotIds = [];
         libraryBookSheets(ss).forEach(bookSheet => {
           ensureBookDeleteColumns(bookSheet);
@@ -1225,22 +1358,22 @@ function doPost(e) {
           categories.forEach((row, index) => {
             if (normalizeTabName(row[0]) === normalizeTabName(category)) {
               snapshotIds.push(bookIdForRow(bookSheet, ids[index][0], index));
-              row[0] = 'غير مصنف';
+              row[0] = 'ط؛ظٹط± ظ…طµظ†ظپ';
               changed = true;
             }
           });
           if (changed) bookSheet.getRange(2, 6, lastBookRow - 1, 1).setValues(categories);
         });
 
-        sheet.getRange(sheetRow, 2, 1, 3).setValues([[Date.now(), data.deletedBy || 'مشرف', JSON.stringify(snapshotIds)]]);
+        sheet.getRange(sheetRow, 2, 1, 3).setValues([[Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ', JSON.stringify(snapshotIds)]]);
         paintDeletedRow(sheet, sheetRow, true, 4);
-        if (!getLibraryCategoryNames(ss).some(name => normalizeTabName(name) === normalizeTabName('غير مصنف'))) {
-          sheet.appendRow(['غير مصنف', '', '', '']);
+        if (!getLibraryCategoryNames(ss).some(name => normalizeTabName(name) === normalizeTabName('ط؛ظٹط± ظ…طµظ†ظپ'))) {
+          sheet.appendRow(['ط؛ظٹط± ظ…طµظ†ظپ', '', '', '']);
         }
-        return output({ success: true, message: 'نُقل الرف إلى سلة المحذوفات، وحُفظت كتبه في غير مصنف', movedBooks: snapshotIds.length });
+        return output({ success: true, message: 'ظ†ظڈظ‚ظ„ ط§ظ„ط±ظپ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھطŒ ظˆط­ظڈظپط¸طھ ظƒطھط¨ظ‡ ظپظٹ ط؛ظٹط± ظ…طµظ†ظپ', movedBooks: snapshotIds.length });
       }
 
-      if (!rows[rowIndex][1]) return output({ success: true, message: 'الرف غير محذوف' });
+      if (!rows[rowIndex][1]) return output({ success: true, message: 'ط§ظ„ط±ظپ ط؛ظٹط± ظ…ط­ط°ظˆظپ' });
       let snapshotIds = [];
       try { snapshotIds = JSON.parse(rows[rowIndex][3] || '[]'); } catch (error) { snapshotIds = []; }
       sheet.getRange(sheetRow, 2, 1, 3).setValues([['', '', '']]);
@@ -1260,7 +1393,7 @@ function doPost(e) {
         });
         if (changed) bookSheet.getRange(2, 6, lastBookRow - 1, 1).setValues(categories);
       });
-      return output({ success: true, message: 'تمت استعادة الرف وكتبه', restoredBooks: snapshotIds.length });
+      return output({ success: true, message: 'طھظ…طھ ط§ط³طھط¹ط§ط¯ط© ط§ظ„ط±ظپ ظˆظƒطھط¨ظ‡', restoredBooks: snapshotIds.length });
     }
 
     if (action === 'saveArticle') {
@@ -1273,7 +1406,7 @@ function doPost(e) {
           const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
           for (let i = 0; i < ids.length; i++) {
             if (String(ids[i][0]) === articleId) {
-              // تحديث صف موجود
+              // طھط­ط¯ظٹط« طµظپ ظ…ظˆط¬ظˆط¯
               sheet.getRange(i + 2, 2).setValue(data.memberId || '');
               sheet.getRange(i + 2, 3).setValue(data.memberName || '');
               sheet.getRange(i + 2, 4).setValue(data.title || '');
@@ -1282,7 +1415,7 @@ function doPost(e) {
               sheet.getRange(i + 2, 7).setValue(data.excerpt || '');
               sheet.getRange(i + 2, 8).setValue(data.read || 0);
               sheet.getRange(i + 2, 9).setValue(data.createdAt || Date.now());
-              return output({ success: true, message: 'تم تحديث المقال' });
+              return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط§ظ„ظ…ظ‚ط§ظ„' });
             }
           }
         }
@@ -1293,7 +1426,7 @@ function doPost(e) {
         data.title || '', data.category || '', data.body || '',
         data.excerpt || '', data.read || 0, data.createdAt || Date.now()
       ]);
-      return output({ success: true, message: 'تم حفظ المقال' });
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط§ظ„ظ…ظ‚ط§ظ„' });
     }
 
     if (action === 'saveBookRating') {
@@ -1301,9 +1434,9 @@ function doPost(e) {
       const bookId = String(data.bookId || '');
       const memberId = String(data.memberId || '');
       const ratingValue = Number(data.rating);
-      if (!bookId || !memberId) throw new Error('معرّف الكتاب والعضو مطلوبان للتقييم');
+      if (!bookId || !memberId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ظƒطھط§ط¨ ظˆط§ظ„ط¹ط¶ظˆ ظ…ط·ظ„ظˆط¨ط§ظ† ظ„ظ„طھظ‚ظٹظٹظ…');
       if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
-        throw new Error('التقييم يجب أن يكون من نجمة إلى خمس نجوم');
+        throw new Error('ط§ظ„طھظ‚ظٹظٹظ… ظٹط¬ط¨ ط£ظ† ظٹظƒظˆظ† ظ…ظ† ظ†ط¬ظ…ط© ط¥ظ„ظ‰ ط®ظ…ط³ ظ†ط¬ظˆظ…');
       }
 
       const rowData = [
@@ -1316,20 +1449,20 @@ function doPost(e) {
         for (let i = 0; i < rows.length; i++) {
           if (String(rows[i][1]) === bookId && String(rows[i][2]) === memberId) {
             sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
-            return output({ success: true, message: 'تم تحديث تقييم الكتاب' });
+            return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« طھظ‚ظٹظٹظ… ط§ظ„ظƒطھط§ط¨' });
           }
         }
       }
       sheet.appendRow(rowData);
-      return output({ success: true, message: 'تم حفظ تقييم الكتاب' });
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ طھظ‚ظٹظٹظ… ط§ظ„ظƒطھط§ط¨' });
     }
 
     if (action === 'saveMeeting') {
       const sheet = getMeetingsSheet(ss);
       const meetingId = String(data.id || '');
-      if (!meetingId) throw new Error('معرّف اللقاء مطلوب');
+      if (!meetingId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ظ„ظ‚ط§ط، ظ…ط·ظ„ظˆط¨');
       if (String(data.image || '').length > 48000) {
-        throw new Error('حجم صورة اللقاء أكبر من الحد المسموح');
+        throw new Error('ط­ط¬ظ… طµظˆط±ط© ط§ظ„ظ„ظ‚ط§ط، ط£ظƒط¨ط± ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­');
       }
 
       const rowData = [
@@ -1346,19 +1479,19 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === meetingId) {
             sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
-            return output({ success: true, message: 'تم تحديث اللقاء' });
+            return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط§ظ„ظ„ظ‚ط§ط،' });
           }
         }
       }
       sheet.appendRow(rowData);
-      return output({ success: true, message: 'تم حفظ اللقاء' });
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط§ظ„ظ„ظ‚ط§ط،' });
     }
 
     if (action === 'saveRecordedMeeting') {
       const sheet = getRecordedMeetingsSheet(ss);
       const recordId = String(data.id || '');
-      if (!recordId) throw new Error('معرّف التسجيل مطلوب');
-      if (String(data.image || '').length > 48000) throw new Error('حجم صورة اللقاء أكبر من الحد المسموح');
+      if (!recordId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„طھط³ط¬ظٹظ„ ظ…ط·ظ„ظˆط¨');
+      if (String(data.image || '').length > 48000) throw new Error('ط­ط¬ظ… طµظˆط±ط© ط§ظ„ظ„ظ‚ط§ط، ط£ظƒط¨ط± ظ…ظ† ط§ظ„ط­ط¯ ط§ظ„ظ…ط³ظ…ظˆط­');
 
       const rowData = [
         recordId, data.title || '', data.description || '', data.recordedAt || '',
@@ -1371,12 +1504,12 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === recordId) {
             sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
-            return output({ success: true, message: 'تم تحديث التسجيل' });
+            return output({ success: true, message: 'طھظ… طھط­ط¯ظٹط« ط§ظ„طھط³ط¬ظٹظ„' });
           }
         }
       }
       sheet.appendRow(rowData);
-      return output({ success: true, message: 'تم حفظ التسجيل' });
+      return output({ success: true, message: 'طھظ… ط­ظپط¸ ط§ظ„طھط³ط¬ظٹظ„' });
     }
 
     if (action === 'deleteRecordedMeeting' || action === 'restoreRecordedMeeting') {
@@ -1389,14 +1522,14 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === recordId) {
             const row = i + 2;
-            sheet.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
+            sheet.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ'] : ['', '']]);
             paintDeletedRow(sheet, row, deleting, 13);
-            return output({ success: true, message: deleting ? 'نُقل اللقاء المسجل إلى سلة المحذوفات' : 'تمت استعادة اللقاء المسجل' });
+            return output({ success: true, message: deleting ? 'ظ†ظڈظ‚ظ„ ط§ظ„ظ„ظ‚ط§ط، ط§ظ„ظ…ط³ط¬ظ„ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' : 'طھظ…طھ ط§ط³طھط¹ط§ط¯ط© ط§ظ„ظ„ظ‚ط§ط، ط§ظ„ظ…ط³ط¬ظ„' });
           }
         }
       }
-      if (!deleting) throw new Error('لم أجد اللقاء المسجل');
-      return output({ success: true, message: 'التسجيل غير موجود' });
+      if (!deleting) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ظ„ظ‚ط§ط، ط§ظ„ظ…ط³ط¬ظ„');
+      return output({ success: true, message: 'ط§ظ„طھط³ط¬ظٹظ„ ط؛ظٹط± ظ…ظˆط¬ظˆط¯' });
     }
 
     if (action === 'deleteMeeting') {
@@ -1408,11 +1541,11 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === meetingId) {
             sheet.deleteRow(i + 2);
-            return output({ success: true, message: 'تم حذف اللقاء' });
+            return output({ success: true, message: 'طھظ… ط­ط°ظپ ط§ظ„ظ„ظ‚ط§ط،' });
           }
         }
       }
-      return output({ success: true, message: 'اللقاء غير موجود' });
+      return output({ success: true, message: 'ط§ظ„ظ„ظ‚ط§ط، ط؛ظٹط± ظ…ظˆط¬ظˆط¯' });
     }
 
     if (action === 'deleteArticle' || action === 'restoreArticle') {
@@ -1425,32 +1558,32 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === articleId) {
             const row = i + 2;
-            sheet.getRange(row, 10, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
+            sheet.getRange(row, 10, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ'] : ['', '']]);
             paintDeletedRow(sheet, row, deleting, 11);
-            return output({ success: true, message: deleting ? 'نُقل المقال إلى سلة المحذوفات' : 'تمت استعادة المقال' });
+            return output({ success: true, message: deleting ? 'ظ†ظڈظ‚ظ„ ط§ظ„ظ…ظ‚ط§ظ„ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' : 'طھظ…طھ ط§ط³طھط¹ط§ط¯ط© ط§ظ„ظ…ظ‚ط§ظ„' });
           }
         }
       }
-      if (!deleting) throw new Error('لم أجد المقال المطلوب');
-      /* مقال محلي/قديم غير موجود في الشيت: نحفظ نسخة قابلة للاستعادة بدل فقدانه. */
+      if (!deleting) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ظ…ظ‚ط§ظ„ ط§ظ„ظ…ط·ظ„ظˆط¨');
+      /* ظ…ظ‚ط§ظ„ ظ…ط­ظ„ظٹ/ظ‚ط¯ظٹظ… ط؛ظٹط± ظ…ظˆط¬ظˆط¯ ظپظٹ ط§ظ„ط´ظٹطھ: ظ†ط­ظپط¸ ظ†ط³ط®ط© ظ‚ط§ط¨ظ„ط© ظ„ظ„ط§ط³طھط¹ط§ط¯ط© ط¨ط¯ظ„ ظپظ‚ط¯ط§ظ†ظ‡. */
       if (data.title) {
         sheet.appendRow([
           articleId, data.memberId || '', data.memberName || '', data.title || '',
           data.category || '', data.body || '', data.excerpt || '', Number(data.read) || 3,
-          data.createdAt || Date.now(), Date.now(), data.deletedBy || 'مشرف'
+          data.createdAt || Date.now(), Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ'
         ]);
         paintDeletedRow(sheet, sheet.getLastRow(), true, 11);
-        return output({ success: true, message: 'نُقل المقال إلى سلة المحذوفات' });
+        return output({ success: true, message: 'ظ†ظڈظ‚ظ„ ط§ظ„ظ…ظ‚ط§ظ„ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' });
       }
-      return output({ success: true, message: 'المقال غير موجود' });
+      return output({ success: true, message: 'ط§ظ„ظ…ظ‚ط§ظ„ ط؛ظٹط± ظ…ظˆط¬ظˆط¯' });
     }
 
     if (action === 'deleteQuote' || action === 'restoreQuote') {
       const sheet = ss.getSheetByName(QUOTES_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب الاقتباسات');
+      if (!sheet) throw new Error('ظ„ظ… ط£ط¬ط¯ طھط¨ظˆظٹط¨ ط§ظ„ط§ظ‚طھط¨ط§ط³ط§طھ');
       ensureQuoteDeleteColumns(sheet);
       const quoteId = String(data.id || '');
-      if (!quoteId) throw new Error('معرّف الاقتباس مطلوب');
+      if (!quoteId) throw new Error('ظ…ط¹ط±ظ‘ظپ ط§ظ„ط§ظ‚طھط¨ط§ط³ ظ…ط·ظ„ظˆط¨');
       const deleting = action === 'deleteQuote';
       const lastRow = sheet.getLastRow();
       let rowNumber = 0;
@@ -1468,30 +1601,30 @@ function doPost(e) {
         sheet.appendRow([
           data.created_at || new Date().toLocaleString('ar-SA'),
           data.author_name || '', data.page_number || '', data.book_title || '',
-          data.text, quoteId, Date.now(), data.deletedBy || 'مشرف'
+          data.text, quoteId, Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ'
         ]);
         paintDeletedRow(sheet, sheet.getLastRow(), true, 8);
-        return output({ success: true, message: 'نُقل الاقتباس إلى سلة المحذوفات' });
+        return output({ success: true, message: 'ظ†ظڈظ‚ظ„ ط§ظ„ط§ظ‚طھط¨ط§ط³ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' });
       }
-      if (!rowNumber) throw new Error('لم أجد الاقتباس المطلوب');
+      if (!rowNumber) throw new Error('ظ„ظ… ط£ط¬ط¯ ط§ظ„ط§ظ‚طھط¨ط§ط³ ط§ظ„ظ…ط·ظ„ظˆط¨');
 
       if (deleting) {
         sheet.getRange(rowNumber, 6).setValue(quoteId);
-        sheet.getRange(rowNumber, 7, 1, 2).setValues([[Date.now(), data.deletedBy || 'مشرف']]);
+        sheet.getRange(rowNumber, 7, 1, 2).setValues([[Date.now(), data.deletedBy || 'ظ…ط´ط±ظپ']]);
         paintDeletedRow(sheet, rowNumber, true, 8);
-        return output({ success: true, message: 'نُقل الاقتباس إلى سلة المحذوفات' });
+        return output({ success: true, message: 'ظ†ظڈظ‚ظ„ ط§ظ„ط§ظ‚طھط¨ط§ط³ ط¥ظ„ظ‰ ط³ظ„ط© ط§ظ„ظ…ط­ط°ظˆظپط§طھ' });
       }
       sheet.getRange(rowNumber, 7, 1, 2).setValues([['', '']]);
       paintDeletedRow(sheet, rowNumber, false, 8);
-      return output({ success: true, message: 'تمت استعادة الاقتباس' });
+      return output({ success: true, message: 'طھظ…طھ ط§ط³طھط¹ط§ط¯ط© ط§ظ„ط§ظ‚طھط¨ط§ط³' });
     }
 
-    // حفظ الاقتباس (fallback)
+    // ط­ظپط¸ ط§ظ„ط§ظ‚طھط¨ط§ط³ (fallback)
     if (action && action !== 'saveQuote' && action !== 'addQuote' && action !== 'saveSharedQuote') {
-      throw new Error(`إجراء غير معروف: ${action}`);
+      throw new Error(`ط¥ط¬ط±ط§ط، ط؛ظٹط± ظ…ط¹ط±ظˆظپ: ${action}`);
     }
     const sheet = ss.getSheetByName(QUOTES_SHEET);
-    if (!sheet) throw new Error('لم أجد تبويب الاقتباسات');
+    if (!sheet) throw new Error('ظ„ظ… ط£ط¬ط¯ طھط¨ظˆظٹط¨ ط§ظ„ط§ظ‚طھط¨ط§ط³ط§طھ');
 
     ensureQuoteDeleteColumns(sheet);
     sheet.appendRow([
@@ -1503,7 +1636,7 @@ function doPost(e) {
       data.id || `q-${Date.now()}`,
       '', ''
     ]);
-    return output({ status: 'success', message: 'تم حفظ الاقتباس' });
+    return output({ status: 'success', message: 'طھظ… ط­ظپط¸ ط§ظ„ط§ظ‚طھط¨ط§ط³' });
   } catch (error) {
     return output({ success: false, status: 'error', error: error.toString() });
   }
@@ -1518,20 +1651,93 @@ function doGet(e) {
       const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
       const membersSheet = getMembersSheet(ss);
       const row = findMemberRowById(membersSheet, memberId);
-      if (row < 2) throw new Error('لم أجد حساب العضو');
+      if (row < 2) throw new Error('ظ„ظ… ط£ط¬ط¯ ط­ط³ط§ط¨ ط§ظ„ط¹ط¶ظˆ');
       const member = membersSheet.getRange(row, 1, 1, 13).getValues()[0];
-      if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
+      if (memberStatusCode(member[6]) !== 'active') throw new Error('ط§ظ„ط­ط³ط§ط¨ ط؛ظٹط± ظ…ط¹طھظ…ط¯');
       return output({
         success: true,
         member: { id: String(member[0] || ''), name: String(member[1] || ''), photo: String(member[12] || '') }
       });
     }
 
+    if (action === 'getVersion') {
+      return output({ success: true, version: CODE_VERSION, deployed: true });
+    }
+
+    if (action === 'getProfile') {
+      const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      if (!memberId) return output({ success: true, data: null });
+      const sheet = getProfilesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: null });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+      const found = rows.find((row) => String(row[0] || '') === memberId);
+      if (!found) return output({ success: true, data: null });
+      return output({
+        success: true,
+        data: {
+          memberId: String(found[0] || ''),
+          name: String(found[1] || ''),
+          role: String(found[2] || 'member'),
+          joined: String(found[3] || 'ظ¢ظ ظ¢ظ¤'),
+          goal: Number(found[4]) || 200,
+          lastWeekPages: Number(found[5]) || 0,
+          notifications: found[6] !== 'false'
+        }
+      });
+    }
+
+    if (action === 'getEntries') {
+      const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      const sheet = getEntriesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2 || !memberId) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+      const entries = rows.filter((row) => String(row[1] || '') === memberId).map((row) => ({
+        id: String(row[0] || ''),
+        bookId: row[3] || '',
+        bookTitle: String(row[4] || ''),
+        pages: Number(row[5]) || 0,
+        date: row[6] || '',
+        ts: Number(row[7]) || 0
+      })).filter((item) => item.id);
+      entries.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
+      return output({ success: true, data: entries });
+    }
+
+    if (action === 'getMyBooks') {
+      const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      const sheet = getMyBooksSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2 || !memberId) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+      const mine = rows.filter((row) => String(row[0]) === memberId).map((row) => ({
+        bookId: String(row[2] || ''),
+        status: String(row[3] || 'reading'),
+        currentPage: Number(row[4]) || 0,
+        addedAt: row[5] || null
+      })).filter((item) => item.bookId);
+      return output({ success: true, data: mine });
+    }
+
+    if (action === 'getReadingTips') {
+      const sheet = getReadingTipsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+      const tips = rows.map((row) => ({
+        id: row[0], title: row[1], body: row[2], image: row[3],
+        createdAt: row[4], createdBy: row[5], deletedAt: row[6], deletedBy: row[7]
+      })).filter((t) => t.id && !t.deletedAt);
+      tips.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: tips });
+    }
+
     if (action === 'getPendingMembers') {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
       const pending = [];
       rows.forEach((row, index) => {
         const id = String(row[0] || '');
@@ -1545,6 +1751,8 @@ function doGet(e) {
           email: String(row[2] || ''),
           phone: normalizePhone(row[11]),
           status: status,
+          role: String(row[5] || 'member'),
+          memberType: String(row[13] || 'member').trim(),
           createdAt: row[7]
         });
       });
@@ -1556,7 +1764,7 @@ function doGet(e) {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
       const members = [];
       rows.forEach((row, index) => {
         if (!String(row[0] || '').trim()) return;
@@ -1568,7 +1776,7 @@ function doGet(e) {
           role: String(row[5] || 'member'),
           joinedAt: row[7],
           photo: String(row[12] || ''),
-          memberType: String(row[3] || 'member').trim()
+          memberType: String(row[13] || 'member').trim()
         });
       });
       return output({ success: true, data: members });
@@ -1594,11 +1802,11 @@ function doGet(e) {
       });
       const requestedMemberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
       let canAnswer = false;
-      if (requestedMemberId && CONSULTANT_NAMES.length) {
+      if (requestedMemberId) {
         const membersSheet = getMembersSheet(ss);
         const memberRow = findMemberRowById(membersSheet, requestedMemberId);
         if (memberRow > 1) {
-          const member = membersSheet.getRange(memberRow, 1, 1, 12).getValues()[0];
+          const member = membersSheet.getRange(memberRow, 1, 1, 13).getValues()[0];
           canAnswer = memberStatusCode(member[6]) === 'active' && isConsultantName(member[1]);
         }
       }
@@ -1606,7 +1814,7 @@ function doGet(e) {
         success: true,
         data: consultations,
         canAnswer: canAnswer,
-        consultantsConfigured: CONSULTANT_NAMES.length > 0
+        consultantsConfigured: true
       });
     }
 
@@ -1624,8 +1832,10 @@ function doGet(e) {
       const deletedIds = new Set();
       sources.forEach(sheet => {
         ensureBookDeleteColumns(sheet);
-        const rows = sheet.getDataRange().getValues();
-        rows.slice(1).forEach((row, index) => {
+        const lastRow = sheet.getLastRow();
+        if (lastRow < 2) return;
+        const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+        rows.forEach((row, index) => {
           if (!row[3]) return;
           const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
           if (row[11]) { deletedIds.add(id); return; }
@@ -1754,7 +1964,7 @@ function doGet(e) {
           rows.forEach((row, index) => {
             if (!row[11]) return;
             deleted.push({
-              type: 'book', id: bookIdForRow(sheet, row[0], index), title: row[3] || 'كتاب',
+              type: 'book', id: bookIdForRow(sheet, row[0], index), title: row[3] || 'ظƒطھط§ط¨',
               category: row[5] || '', deletedAt: row[11], deletedBy: row[12] || ''
             });
           });
@@ -1780,7 +1990,7 @@ function doGet(e) {
         rows.forEach(row => {
           if (!row[9] || !row[0]) return;
           deleted.push({
-            type: 'article', id: String(row[0]), title: row[3] || 'مقال',
+            type: 'article', id: String(row[0]), title: row[3] || 'ظ…ظ‚ط§ظ„',
             category: row[4] || '', deletedAt: row[9], deletedBy: row[10] || ''
           });
         });
@@ -1792,7 +2002,7 @@ function doGet(e) {
         rows.forEach(row => {
           if (!row[11] || !row[0]) return;
           deleted.push({
-            type: 'recording', id: String(row[0]), title: row[1] || 'لقاء مسجل',
+            type: 'recording', id: String(row[0]), title: row[1] || 'ظ„ظ‚ط§ط، ظ…ط³ط¬ظ„',
             category: row[4] || '', deletedAt: row[11], deletedBy: row[12] || ''
           });
         });
@@ -1802,9 +2012,9 @@ function doGet(e) {
       return output({ success: true, data: deleted });
     }
 
-    // قراءة الاقتباسات
+    // ظ‚ط±ط§ط،ط© ط§ظ„ط§ظ‚طھط¨ط§ط³ط§طھ
     const sheet = ss.getSheetByName(QUOTES_SHEET);
-    if (!sheet) throw new Error('لم أجد تبويب الاقتباسات');
+    if (!sheet) throw new Error('ظ„ظ… ط£ط¬ط¯ طھط¨ظˆظٹط¨ ط§ظ„ط§ظ‚طھط¨ط§ط³ط§طھ');
     ensureQuoteDeleteColumns(sheet);
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return output({ success: true, status: 'success', data: [], deletedIds: [], deletedTexts: [] });
@@ -1837,53 +2047,122 @@ function doGet(e) {
 }
 
 /* ==========================================================================
-   دالة تجهيز تُشغَّل يدويًا مرة واحدة من محرر Apps Script (Run)
-   تنشئ أعمدة الحذف وسنة النشر، وتُعيد تلوين الصفوف المحذوفة بالأحمر.
+   ط¯ط§ظ„ط© طھط¬ظ‡ظٹط² طھظڈط´ط؛ظژظ‘ظ„ ظٹط¯ظˆظٹظ‹ط§ ظ…ط±ط© ظˆط§ط­ط¯ط© ظ…ظ† ظ…ط­ط±ط± Apps Script (Run)
+   طھظ†ط´ط¦ ط£ط¹ظ…ط¯ط© ط§ظ„ط­ط°ظپ ظˆط³ظ†ط© ط§ظ„ظ†ط´ط±طŒ ظˆطھظڈط¹ظٹط¯ طھظ„ظˆظٹظ† ط§ظ„طµظپظˆظپ ط§ظ„ظ…ط­ط°ظˆظپط© ط¨ط§ظ„ط£ط­ظ…ط±.
    ========================================================================== */
 function setupJaleesSheets() {
   const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
   const report = [];
+  /* ظƒظ„ ط®ط·ظˆط© ط¯ط§ط®ظ„ try/catch ط­طھظ‰ ظ„ط§ ظٹظˆظ‚ظپ ط®ط·ط£ ظˆط§ط­ط¯ ë‚کë¨¸ط­ ط§ظ„ط¥ط¹ط¯ط§ط¯ */
+  const step = (label, fn) => {
+    try {
+      const value = fn();
+      report.push(label + (value === undefined || value === null ? '' : ': ' + value));
+    } catch (error) {
+      report.push(label + ': ظپط´ظ„ - ' + (error && error.message ? error.message : String(error)));
+    }
+  };
 
-  const books = ss.getSheetByName(BOOKS_SHEET);
-  if (books) {
+  step(BOOKS_SHEET, () => {
+    const books = ss.getSheetByName(BOOKS_SHEET);
+    if (!books) return 'ط؛ظٹط± ظ…ظˆط¬ظˆط¯';
     ensureBookDeleteColumns(books);
     books.getRange(1, 11, 1, 4).setValues([['coverImage', 'deletedAt', 'deletedBy', 'year']]);
     repaintDeletedRows(books, 12, 14);
-    report.push(`${BOOKS_SHEET}: ${books.getMaxColumns()} عمود`);
-  }
+    return books.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  const articles = getArticlesSheet(ss);
-  articles.getRange(1, 10, 1, 2).setValues([['deletedAt', 'deletedBy']]);
-  repaintDeletedRows(articles, 10, 11);
-  report.push(`${ARTICLES_SHEET}: ${articles.getMaxColumns()} عمود`);
+  step(ARTICLES_SHEET, () => {
+    const articles = getArticlesSheet(ss);
+    articles.getRange(1, 10, 1, 2).setValues([['deletedAt', 'deletedBy']]);
+    repaintDeletedRows(articles, 10, 11);
+    return articles.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  const quotes = ss.getSheetByName(QUOTES_SHEET);
-  if (quotes) {
+  step(QUOTES_SHEET, () => {
+    const quotes = ss.getSheetByName(QUOTES_SHEET);
+    if (!quotes) return 'ط؛ظٹط± ظ…ظˆط¬ظˆط¯';
     ensureQuoteDeleteColumns(quotes);
     repaintDeletedRows(quotes, 7, 8);
-    report.push(`${QUOTES_SHEET}: ${quotes.getMaxColumns()} عمود`);
-  }
+    return quotes.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  const recorded = getRecordedMeetingsSheet(ss);
-  repaintDeletedRows(recorded, 12, 13);
-  report.push(`${RECORDED_MEETINGS_SHEET}: ${recorded.getMaxColumns()} عمود`);
+  step(MEETINGS_SHEET, () => {
+    const meetings = getMeetingsSheet(ss);
+    return meetings.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  const categories = getLibraryCategoriesSheet(ss);
-  repaintDeletedRows(categories, 2, 4);
-  report.push(`${LIBRARY_CATEGORIES_SHEET}: ${categories.getMaxColumns()} عمود`);
+  step(RECORDED_MEETINGS_SHEET, () => {
+    const recorded = getRecordedMeetingsSheet(ss);
+    repaintDeletedRows(recorded, 12, 13);
+    return recorded.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  const members = getMembersSheet(ss);
-  report.push(`${MEMBERS_SHEET}: ${members.getMaxColumns()} عمود`);
+  step(LIBRARY_CATEGORIES_SHEET, () => {
+    const categories = getLibraryCategoriesSheet(ss);
+    repaintDeletedRows(categories, 2, 4);
+    return categories.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  const consultations = getConsultationsSheet(ss);
-  report.push(`${CONSULTATIONS_SHEET}: ${consultations.getMaxColumns()} عمود`);
+  step(MEMBERS_SHEET, () => {
+    const members = getMembersSheet(ss);
+    const repaired = repairMemberPasswordColumn(members);
+    return members.getMaxColumns() + ' ط¹ظ…ظˆط¯' + (repaired ? ' آ· ط¥طµظ„ط§ط­ ' + repaired + ' ط­ط³ط§ط¨' : '');
+  });
 
-  const joinRequests = getJoinRequestsSheet(ss);
-  ensureJoinRequestStatuses(joinRequests);
-  report.push(`${JOIN_REQUESTS_SHEET}: ${joinRequests.getMaxColumns()} عمود`);
+  step('ظ…ظƒطھط¨ط§طھ ط§ظ„ط£ط¹ط¶ط§ط،', () => {
+    const myBooks = getMyBooksSheet(ss);
+    return myBooks.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
 
-  SpreadsheetApp.flush();
+  step(PROFILES_SHEET, () => {
+    const profiles = getProfilesSheet(ss);
+    return profiles.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
+
+  step(ENTRIES_SHEET, () => {
+    const entries = getEntriesSheet(ss);
+    return entries.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
+
+  step(CONSULTATIONS_SHEET, () => {
+    const consultations = getConsultationsSheet(ss);
+    return consultations.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
+
+  step(JOIN_REQUESTS_SHEET, () => {
+    const joinRequests = getJoinRequestsSheet(ss);
+    ensureJoinRequestStatuses(joinRequests);
+    return joinRequests.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
+
+  step(READING_TIPS_SHEET, () => {
+    const tips = getReadingTipsSheet(ss);
+    return tips.getMaxColumns() + ' ط¹ظ…ظˆط¯';
+  });
+
+  step('ط§ظ„ط­ظپط¸ ط§ظ„ظ†ظ‡ط§ط¦ظٹ', () => {
+    SpreadsheetApp.flush();
+    return 'طھظ…';
+  });
+
   return report.join(' | ');
+}
+
+/* ط¥طµظ„ط§ط­ ط£ظٹ ط­ط³ط§ط¨ طھط¶ط±ط± ظ„ط£ظ† ظ†ظˆط¹ ط§ظ„ط¹ط¶ظˆظٹط© ظƒظڈطھط¨ ط¨ط§ظ„ط®ط·ط£ ظپظˆظ‚ ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط± */
+function repairMemberPasswordColumn(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  let fixed = 0;
+  rows.forEach((row, index) => {
+    const hash = String(row[3] || '').trim().toLowerCase();
+    if (hash === 'member' || hash === 'friend' || hash === 'consultant' || hash === 'supervisor') {
+      sheet.getRange(index + 2, 4).setValue('');
+      fixed += 1;
+    }
+  });
+  return fixed;
 }
 
 function repaintDeletedRows(sheet, deleteColumn, width) {
@@ -1892,3 +2171,4 @@ function repaintDeletedRows(sheet, deleteColumn, width) {
   const flags = sheet.getRange(2, deleteColumn, lastRow - 1, 1).getValues();
   flags.forEach((row, index) => paintDeletedRow(sheet, index + 2, Boolean(row[0]), width));
 }
+

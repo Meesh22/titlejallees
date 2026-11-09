@@ -69,7 +69,11 @@ const MAIN_API_ACTIONS = new Set([
   'getClubBooks', 'saveClubBook', 'updateClubBook', 'deleteClubBook', 'restoreClubBook',
   'getDeletedItems', 'deleteArticle', 'restoreArticle', 'deleteQuote', 'restoreQuote',
   'deleteLibraryCategory', 'restoreLibraryCategory', 'deleteRecordedMeeting', 'restoreRecordedMeeting',
-  'getConsultations', 'submitConsultation', 'answerConsultation', 'setMemberPhoto', 'getMemberProfile'
+  'getConsultations', 'submitConsultation', 'answerConsultation', 'setMemberPhoto', 'getMemberProfile',
+  'saveProfile', 'getProfile', 'saveEntry', 'getEntries',
+  'getMyBooks', 'saveMyBook', 'deleteMyBook',
+  'getReadingTips', 'saveReadingTip', 'deleteReadingTip',
+  'setConsultantStatus', 'setMemberType'
 ]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
@@ -1504,37 +1508,22 @@ let currentMember = null;
 let state = null;
 let approvedMembersCache = [];
 
-/* أداة قصّ الصورة يدويًا قبل الحفظ: تحديد الزاوية (X/Y) والتكبير، ثم قصّ الصورة فعليًا لتكون أصغر من الأصل وتتناسب مع مقاس العرض */
-function cropImageDataUrl(dataUrl, crop) {
-  return new Promise((resolve, reject) => {
-    if (!dataUrl) { resolve(dataUrl); return; }
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const sx = clamp(Number(crop && crop.x) || 50, 0, 100) / 100;
-        const sy = clamp(Number(crop && crop.y) || 50, 0, 100) / 100;
-        const scaleVal = clamp(Number(crop && crop.scale) || 100, 100, 300) / 100;
-        const cropW = Math.max(1, Math.round(img.width / scaleVal));
-        const cropH = Math.max(1, Math.round(img.height / scaleVal));
-        const x = clamp(Math.round((img.width - cropW) * sx), 0, Math.max(0, img.width - cropW));
-        const y = clamp(Math.round((img.height - cropH) * sy), 0, Math.max(0, img.height - cropH));
-        const canvas = document.createElement('canvas');
-        canvas.width = cropW;
-        canvas.height = cropH;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, cropW, cropH);
-        ctx.drawImage(img, x, y, cropW, cropH, 0, 0, cropW, cropH);
-        resolve(canvas.toDataURL('image/jpeg', 0.76));
-      } catch (e) { resolve(dataUrl); }
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-}
+/* قصّ يدوي كما في الآيفون: صورة كاملة + إطار قابل للسحب وتغيير الحجم + شبكة + أبعاد بكسل */
+function createCropControls(wrap, previewImg) {
+  const stage = document.createElement('div');
+  stage.className = 'drag-crop-stage full-image';
+  if (previewImg && previewImg.parentElement === wrap) {
+    wrap.insertBefore(stage, previewImg);
+    stage.appendChild(previewImg);
+  } else {
+    wrap.appendChild(stage);
+    if (previewImg) stage.appendChild(previewImg);
+  }
+  previewImg.style.display = 'block';
+  previewImg.style.width = '100%';
+  previewImg.style.height = 'auto';
+  previewImg.style.objectFit = 'contain';
 
-/* قصّ الصورة بسحب الأطراف مثل صورة الشجرة — إطار بزوايا وقابل للتحريك، الصورة تُقصّ فعليًا أصغر من الأصلي */
-function createCropControls(wrap, previewImg, initial = { x: 50, y: 50, scale: 100 }) {
   const box = document.createElement('div');
   box.className = 'drag-crop-box';
   box.innerHTML = `
@@ -1545,41 +1534,69 @@ function createCropControls(wrap, previewImg, initial = { x: 50, y: 50, scale: 1
       <span class="drag-crop-handle tm"></span><span class="drag-crop-handle bm"></span>
       <span class="drag-crop-handle lm"></span><span class="drag-crop-handle rm"></span>
     </div>
-    <div class="drag-crop-hint">اسحب الإطار لتحريكه، واسحب الزوايا لتحديد الأطراف</div>
   `;
-  wrap.appendChild(box);
+  stage.appendChild(box);
+
+  const controls = document.createElement('div');
+  controls.className = 'crop-size-controls';
+  controls.innerHTML = `
+    <div class="crop-size-row">
+      <label>العرض (بكسل) <input type="number" class="crop-w" min="80" max="1400" step="10" value="640"></label>
+      <label>الطول (بكسل) <input type="number" class="crop-h" min="80" max="1400" step="10" value="420"></label>
+    </div>
+    <div class="crop-size-presets">
+      <button type="button" data-preset="640x420">٤:٣ إعلان</button>
+      <button type="button" data-preset="1080x1350">٤:٥ بوست</button>
+      <button type="button" data-preset="1200x630">١:٢ بطولي</button>
+      <button type="button" data-preset="800x800">مربع</button>
+    </div>
+    <div class="drag-crop-hint">اسحب الإطار لتحديد الجزء المطلوب — أو اكتب العرض والطول يدويًا</div>
+  `;
+  wrap.appendChild(controls);
+
+  const widthInput = controls.querySelector('.crop-w');
+  const heightInput = controls.querySelector('.crop-h');
   const frame = box.querySelector('.drag-crop-frame');
-  const crop = { x: initial.x, y: initial.y, scale: initial.scale };
-  // Convert initial pos/scale to frame rect (% of wrap)
-  const initW = clamp(10000 / Math.max(1, crop.scale), 20, 95);
-  const initH = clamp(10000 / Math.max(1, crop.scale), 20, 95);
-  let px = clamp((crop.x / 100) * (100 - initW), 0, 100 - initW);
-  let py = clamp((crop.y / 100) * (100 - initH), 0, 100 - initH);
+  const crop = { width: 640, height: 420, x: 0, y: 0, zoom: 1 };
+
+  /* حالة الإطار كنِسَب مئوية من الصورة */
+  let fx = 0, fy = 0, fw = 100, fh = 100;
+  const imageRatio = { w: 1, h: 1 };
+  const updateImageRatio = () => {
+    if (previewImg && previewImg.naturalWidth && previewImg.naturalHeight) {
+      imageRatio.w = previewImg.naturalWidth;
+      imageRatio.h = previewImg.naturalHeight;
+    }
+  };
+  if (previewImg && previewImg.complete) updateImageRatio();
+  if (previewImg) previewImg.addEventListener('load', updateImageRatio);
 
   const paint = () => {
-    frame.style.left = px + '%';
-    frame.style.top = py + '%';
-    frame.style.width = initW + '%';
-    frame.style.height = initH + '%';
-    crop.x = (px + initW / 2) / 100 * 100; crop.y = (py + initH / 2) / 100 * 100;
-    crop.scale = Math.round(10000 / initW);
-    // Apply preview: image clipped to frame roughly via object-position/scale
-    if (previewImg) {
-      previewImg.style.objectFit = 'cover';
-      previewImg.style.objectPosition = `${crop.x}% ${crop.y}%`;
-      previewImg.style.transform = `scale(${(crop.scale / 100).toFixed(2)})`;
-    }
+    frame.style.left = fx + '%';
+    frame.style.top = fy + '%';
+    frame.style.width = fw + '%';
+    frame.style.height = fh + '%';
+    // الأبعاد الفعلية بالمظهر: البكسل = نسبة من الصورة الأصلية
+    crop.x = fx / 100;
+    crop.y = fy / 100;
+    crop.zoom = fw / 100;
+    const pxW = Math.round(imageRatio.w * (fw / 100));
+    const pxH = Math.round(imageRatio.h * (fh / 100));
+    crop.width = clamp(pxW, 80, 1400);
+    crop.height = clamp(pxH, 80, 1400);
+    widthInput.value = crop.width;
+    heightInput.value = crop.height;
   };
 
   const setPointer = (e, onMove) => {
     e.preventDefault();
-    const rect = wrap.getBoundingClientRect();
+    const rect = stage.getBoundingClientRect();
     const startX = e.clientX, startY = e.clientY;
-    const oPx = px, oPy = py, oW = initW, oH = initH;
+    const oX = fx, oY = fy, oW = fw, oH = fh;
     const move = (ev) => {
       const dx = ((ev.clientX - startX) / rect.width) * 100;
       const dy = ((ev.clientY - startY) / rect.height) * 100;
-      onMove(dx, dy, oPx, oPy, oW, oH);
+      onMove(dx, dy, oX, oY, oW, oH);
       paint();
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
@@ -1587,40 +1604,113 @@ function createCropControls(wrap, previewImg, initial = { x: 50, y: 50, scale: 1
     window.addEventListener('pointerup', up);
   };
 
-  frame.querySelector('.tl').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy, oW, oH) => {
-    const nw = clamp(oW - dx, 15, 95); const fromLeft = oPx + oW - nw;
-    const nh = clamp(oH - dy, 15, 95); const fromTop = oPy + oH - nh;
-    px = clamp(fromLeft, 0, 100 - nw); py = clamp(fromTop, 0, 100 - nh);
-    initW = nw; initH = nh;
-    frame.style.left = px + '%'; frame.style.top = py + '%'; frame.style.width = initW + '%'; frame.style.height = initH + '%';
-  }));
-  frame.querySelector('.br').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy) => {
-    const nw = clamp(oW + dx, 15, 95 - oPx); const nh = clamp(oH + dy, 15, 95 - oPy);
-    initW = nw; initH = nh;
-    frame.style.width = initW + '%'; frame.style.height = initH + '%';
-  }));
-  frame.querySelector('.tr').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy, oW, oH) => {
-    const nw = clamp(oW + dx, 15, 95 - oPx); const nh = clamp(oH - dy, 15, 95);
-    const top = clamp(oPy + oH - nh, 0, 100 - nh);
-    initW = nw; initH = nh; py = top;
-    frame.style.top = py + '%'; frame.style.width = initW + '%'; frame.style.height = initH + '%';
-  }));
-  frame.querySelector('.bl').addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oPx, oPy, oW, oH) => {
-    const nw = clamp(oW - dx, 15, 95); const nh = clamp(oH + dy, 15, 95 - oPy);
-    px = clamp(oPx + oW - nw, 0, 100 - nw);
-    initW = nw; initH = nh;
-    frame.style.left = px + '%'; frame.style.width = initW + '%'; frame.style.height = initH + '%';
-  }));
+  /* زوايا الأركان — تعديل الطول والعرض مع الحفاظ على الزاوية المقابلة */
+  const corner = (name, xDir, yDir) => {
+    const el = frame.querySelector(`.drag-crop-handle.${name}`);
+    if (!el) return;
+    el.addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oX, oY, oW, oH) => {
+      const nW = clamp(xDir > 0 ? oW + dx : oW - dx, 12, 100 - (xDir > 0 ? oX : 0));
+      const nH = clamp(yDir > 0 ? oH + dy : oH - dy, 12, 100 - (yDir > 0 ? oY : 0));
+      fw = nW; fh = nH;
+      if (xDir < 0) fx = clamp(oX + oW - nW, 0, 100 - nW);
+      if (yDir < 0) fy = clamp(oY + oH - nH, 0, 100 - nH);
+    }));
+  };
+  corner('tl', -1, -1);
+  corner('tr', 1, -1);
+  corner('bl', -1, 1);
+  corner('br', 1, 1);
+
+  /* المقابض الجانبية */
+  const edge = (name, axis, dir) => {
+    const el = frame.querySelector(`.drag-crop-handle.${name}`);
+    if (!el) return;
+    el.addEventListener('pointerdown', (e) => setPointer(e, (dx, dy, oX, oY, oW, oH) => {
+      if (axis === 'x') {
+        const nW = clamp(dir > 0 ? oW + dx : oW - dx, 12, 100 - (dir > 0 ? oX : 0));
+        fw = nW;
+        if (dir < 0) fx = clamp(oX + oW - nW, 0, 100 - nW);
+      } else {
+        const nH = clamp(dir > 0 ? oH + dy : oH - dy, 12, 100 - (dir > 0 ? oY : 0));
+        fh = nH;
+        if (dir < 0) fy = clamp(oY + oH - nH, 0, 100 - nH);
+      }
+    }));
+  };
+  edge('lm', 'x', -1);
+  edge('rm', 'x', 1);
+  edge('tm', 'y', -1);
+  edge('bm', 'y', 1);
+
+  /* تحريك الإطار نفسه */
   frame.addEventListener('pointerdown', (e) => {
     if (e.target.classList.contains('drag-crop-handle')) return;
-    setPointer(e, (dx, dy, oPx, oPy) => {
-      px = clamp(oPx + dx, 0, 100 - initW); py = clamp(oPy + dy, 0, 100 - initH);
-      frame.style.left = px + '%'; frame.style.top = py + '%';
+    setPointer(e, (dx, dy, oX, oY, oW, oH) => {
+      fx = clamp(oX + dx, 0, 100 - oW);
+      fy = clamp(oY + dy, 0, 100 - oH);
     });
   });
 
+  widthInput.addEventListener('input', () => {
+    const want = clamp(Number(widthInput.value) || 640, 80, 1400);
+    fw = clamp((want / Math.max(1, imageRatio.w)) * 100, 12, 100);
+    paint();
+  });
+  heightInput.addEventListener('input', () => {
+    const want = clamp(Number(heightInput.value) || 420, 80, 1400);
+    fh = clamp((want / Math.max(1, imageRatio.h)) * 100, 12, 100);
+    paint();
+  });
+  controls.querySelectorAll('[data-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const [w, h] = btn.dataset.preset.split('x').map(Number);
+      // اضبط نسبة الإطار على الصورة مع الحفاظ على المركز
+      const targetRatio = w / h;
+      let newW = fw;
+      let newH = newW / targetRatio / (imageRatio.w / imageRatio.h);
+      if (newH > 100) { newH = 100; newW = newH * targetRatio * (imageRatio.w / imageRatio.h); }
+      fw = clamp(newW, 12, 100);
+      fh = clamp(newH, 12, 100);
+      fx = clamp(fx + (fw - newW) / 2, 0, 100 - fw);
+      fy = clamp(fy + (fh - newH) / 2, 0, 100 - fh);
+      paint();
+    });
+  });
   paint();
   return crop;
+}
+
+/* قصّ الصورة فعليًا حسب الجزء المحدد (x/y/zoom) والأبعاد */
+function cropImageDataUrl(dataUrl, size) {
+  return new Promise((resolve) => {
+    if (!dataUrl) { resolve(dataUrl); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const targetW = clamp(Number(size && size.width) || 640, 80, 1400);
+        const targetH = clamp(Number(size && size.height) || 420, 80, 1400);
+        const zoom = clamp(Number(size && size.zoom) || 1, 0.05, 1);
+        const cropW = Math.max(1, Math.round(img.width * zoom));
+        const cropH = Math.max(1, Math.round(img.height * zoom * (targetH / targetW) * (targetW / targetH) * (cropW / cropW)));
+        const hRatio = targetH / targetW;
+        const finalH = Math.max(1, Math.round(cropW * hRatio));
+        const maxX = Math.max(0, img.width - cropW);
+        const maxY = Math.max(0, img.height - finalH);
+        const x = clamp(Math.round((Number(size && size.x) || 0) * maxX), 0, maxX);
+        const y = clamp(Math.round((Number(size && size.y) || 0) * maxY), 0, maxY);
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetW, targetH);
+        ctx.drawImage(img, x, y, cropW, finalH, 0, 0, targetW, targetH);
+        resolve(canvas.toDataURL('image/jpeg', 0.76));
+      } catch (e) { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
 }
 
 function dateYMDField(idPrefix, label) {
@@ -2629,7 +2719,6 @@ function openAddBook() {
     const preview = root.querySelector('#image-preview');
     const status = root.querySelector('#add-book-image-status');
     let imageData = null;
-    let cropState = { x: 50, y: 50, scale: 100 };
 
     imageInput.addEventListener('change', async (event) => {
       const file = event.target.files[0];
@@ -2637,14 +2726,9 @@ function openAddBook() {
       status.textContent = 'جارٍ تجهيز الصورة…';
       try {
         imageData = await compressMeetingImage(file);
-        preview.innerHTML = `<img src="${imageData}" alt="غلاف الكتاب"><button type="button" class="meeting-image-remove" id="add-book-image-remove" aria-label="إزالة الصورة">×</button>`;
+        preview.innerHTML = `<img src="${imageData}" alt="غلاف الكتاب" style="width:100%;max-height:260px;object-fit:contain;border-radius:10px"><button type="button" class="meeting-image-remove" id="add-book-image-remove" aria-label="إزالة الصورة">×</button>`;
         preview.hidden = false;
-        const img = preview.querySelector('img');
-        if (!preview.dataset.cropInit) {
-          preview.dataset.cropInit = '1';
-          cropState = createCropControls(preview, img, cropState);
-        }
-        status.textContent = 'الصورة بحجم العرض — حدّد الزاوية والحجم';
+        status.textContent = 'الصورة جاهزة — تُعرض كاملة تلقائيًا';
         preview.querySelector('#add-book-image-remove')?.addEventListener('click', () => {
           imageData = null;
           imageInput.value = '';
@@ -2672,7 +2756,7 @@ function openAddBook() {
         return;
       }
 
-      const finalCover = imageData ? await cropImageDataUrl(imageData, cropState) : null;
+      const finalCover = imageData || null;
       const newBook = {
         id: `club-${Date.now()}`,
         title,
@@ -2697,7 +2781,19 @@ function openAddBook() {
       renderClubBooks();
       renderHome();
       updateNavBadges();
-      toast(`تمت إضافة «${title}» لمكتبة النادي`, 'book');
+      // حفظ فوري في الشيت حتى لا تضيع السنة
+      try {
+        const result = await saveClubBookToCloud(currentMember, newBook);
+        if (result && result.success === true) {
+          syncState.clubBooks.add(newBook.id);
+          persistSyncState(currentMember.id);
+          toast(`تمت إضافة «${title}» لمكتبة النادي`, 'book');
+        } else {
+          toast('أُضيف على هذا الجهاز، وسيُرفع للشيت عند عودة الاتصال', 'info');
+        }
+      } catch (e) {
+        toast('أُضيف على هذا الجهاز، وسيُرفع للشيت عند عودة الاتصال', 'info');
+      }
       celebrate();
     });
   });
@@ -3135,25 +3231,46 @@ async function openMemberProfileSheet(name) {
         ${isSelf ? `<div><strong>${toAr(finished)}</strong><span>كتاب مكتمل</span></div>` : ''}
       </div>
       <section class="member-contributions">
-        <h4>اقتباساته</h4>
-        ${myQuotes.length ? myQuotes.slice(0, 10).map((q) => `
-          <blockquote class="member-contribution-quote">
-            <p>«${esc(q.text)}»</p>
-            <footer>${esc(q.book || 'من هامش القراءة')}${q.page ? ` · ص ${esc(q.page)}` : ''} · ${esc(q.time || '')}</footer>
-          </blockquote>`).join('') : '<p class="member-contribution-empty">لا اقتباسات بعد</p>'}
-        <h4>مقالاته</h4>
-        ${myArticles.length ? myArticles.slice(0, 10).map((a) => `
-          <article class="member-contribution-article" data-action="open-article" data-id="${esc(a.id)}" role="button" tabindex="0">
-            <span class="chip chip-soft">${esc(a.category || 'قراءة')}</span>
-            <h5>${esc(a.title)}</h5>
-            <p>${esc(a.excerpt || a.body || '').slice(0, 120)}</p>
-            <small>${esc(a.time || '')} · ${toAr(a.read || 3)} دقائق</small>
-          </article>`).join('') : '<p class="member-contribution-empty">لا مقالات بعد</p>'}
+        <div class="member-contrib-tabs" role="tablist">
+          <button class="active" type="button" data-contrib-tab="quotes" role="tab" aria-selected="true">اقتباساته <span>${toAr(quotesCount)}</span></button>
+          <button type="button" data-contrib-tab="articles" role="tab" aria-selected="false">مقالاته <span>${toAr(articlesCount)}</span></button>
+        </div>
+        <div class="member-contrib-panel active" data-contrib-panel="quotes">
+          ${myQuotes.length ? myQuotes.map((q) => `
+            <blockquote class="member-contribution-quote">
+              <p>«${esc(q.text)}»</p>
+              <footer>${esc(q.book || 'من هامش القراءة')}${q.page ? ` · ص ${esc(q.page)}` : ''} · ${esc(q.time || '')}</footer>
+            </blockquote>`).join('') : '<p class="member-contribution-empty">لا اقتباسات بعد</p>'}
+        </div>
+        <div class="member-contrib-panel" data-contrib-panel="articles" hidden>
+          ${myArticles.length ? myArticles.map((a) => `
+            <article class="member-contribution-article" data-action="open-article" data-id="${esc(a.id)}" role="button" tabindex="0">
+              <span class="chip chip-soft">${esc(a.category || 'قراءة')}</span>
+              <h5>${esc(a.title)}</h5>
+              <p>${esc(a.excerpt || a.body || '').slice(0, 120)}</p>
+              <small>${esc(a.time || '')} · ${toAr(a.read || 3)} دقائق</small>
+            </article>`).join('') : '<p class="member-contribution-empty">لا مقالات بعد</p>'}
+        </div>
       </section>
       ${isSelf ? `<button class="btn btn-sm btn-primary" type="button" data-action="open-profile">عرض ملفي الشخصي</button>` : ''}
     </div>`, (root) => {
     const btn = root.querySelector('[data-action="open-profile"]');
     if (btn) btn.addEventListener('click', () => { closeSheet(); go('profile'); });
+    root.querySelectorAll('[data-contrib-tab]').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.dataset.contribTab;
+        root.querySelectorAll('[data-contrib-tab]').forEach((t) => {
+          const on = t === tab;
+          t.classList.toggle('active', on);
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        root.querySelectorAll('[data-contrib-panel]').forEach((panel) => {
+          const on = panel.dataset.contribPanel === key;
+          panel.hidden = !on;
+          panel.classList.toggle('active', on);
+        });
+      });
+    });
   });
 }
 
@@ -4218,7 +4335,7 @@ function openGuideSheet() {
 
       <section class="guide-section">
         <h4>برامج النادي وأنشطته (بشكل مُجمَل)</h4>
-        <p>يمكن تقسيم برامج النادي إلى:</p>
+        <p>يمكن تقسيم أنشطة النادي إلى:</p>
         <div class="guide-sub">
           <strong>أ. أنشطة غير حضورية وتشمل:</strong>
           <ol class="guide-list">
@@ -4235,7 +4352,7 @@ function openGuideSheet() {
           </ol>
         </div>
         <div class="guide-diagram">
-          <div class="guide-diagram-root">برامج النادي</div>
+          <div class="guide-diagram-root">أنشطة النادي</div>
           <div class="guide-diagram-branches">
             <div>
               <div class="guide-diagram-node">البرامج غير الحضورية</div>
@@ -4367,7 +4484,7 @@ function openClubProgramsSheet() {
     }
   ];
   openSheet(`
-    ${sheetHead('برامج النادي', 'الأنشطة الحضورية وغير الحضورية من الدليل التعريفي')}
+    ${sheetHead('الأنشطة', 'الأنشطة الحضورية وغير الحضورية من الدليل التعريفي')}
     <div class="club-programs-list">
       ${groups.map((group) => `
         <div class="club-program-group-label">${esc(group.label)}</div>
@@ -4526,7 +4643,7 @@ function openReadingTipComposer() {
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-plus"/></svg> نشر النصيحة</button>
     </form>`, (root) => {
     let imageData = '';
-    let cropState = { x: 50, y: 50, scale: 100 };
+    let cropState = { width: 640, height: 420 };
     const fileInput = root.querySelector('#tip-image-input');
     const previewWrap = root.querySelector('#tip-image-preview-wrap');
     const preview = root.querySelector('#tip-image-preview');
@@ -4542,9 +4659,9 @@ function openReadingTipComposer() {
         previewWrap.hidden = false;
         if (!previewWrap.dataset.cropInit) {
           previewWrap.dataset.cropInit = '1';
-          cropState = createCropControls(previewWrap, preview, cropState);
+          cropState = createCropControls(previewWrap, preview);
         }
-        status.textContent = 'الصورة جاهزة — حدّد الزاوية والحجم بما يناسب العرض';
+        status.textContent = 'الصورة جاهزة — حدّد العرض والطول يدويًا';
       } catch (error) {
         imageData = '';
         fileInput.value = '';
@@ -4599,12 +4716,7 @@ function openMoreSheet() {
       </button>
       <button class="more-item" type="button" data-action="club-programs">
         <span class="more-icon"><svg class="ic"><use href="#i-sparkles"/></svg></span>
-        <div class="more-body"><strong>برامج النادي</strong><p>البرامج والدورات الثقافية</p></div>
-        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
-      </button>
-      <button class="more-item" type="button" data-action="club-activities">
-        <span class="more-icon"><svg class="ic"><use href="#i-users"/></svg></span>
-        <div class="more-body"><strong>أنشطة النادي</strong><p>الأنشطة والفعاليات</p></div>
+        <div class="more-body"><strong>الأنشطة</strong><p>الأنشطة والدورات الثقافية</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
       ${isSupervisor() ? `
@@ -4624,11 +4736,6 @@ function openMoreSheet() {
     if (programsButton) programsButton.addEventListener('click', () => {
       closeSheet();
       openClubProgramsSheet();
-    });
-    const activitiesButton = root.querySelector('[data-action="club-activities"]');
-    if (activitiesButton) activitiesButton.addEventListener('click', () => {
-      closeSheet();
-      openGuideSheet();
     });
     const readingButton = root.querySelector('[data-action="reading-window"]');
     if (readingButton) readingButton.addEventListener('click', () => {
@@ -4734,6 +4841,7 @@ function renderConsultations(root, consultations, mayAnswer, consultantsConfigur
     list.innerHTML = emptyHTML('info', 'لا توجد استشارات بعد', 'كن أول من يطرح سؤالًا عن كتاب أو قراءة.');
     return;
   }
+  const canAnswerAll = mayAnswer || isSupervisor();
   list.innerHTML = consultations.map((item) => `
     <article class="consultation-card">
       <div class="consultation-meta"><strong>${esc(item.memberName || 'عضو جليس')}</strong><span>${esc(consultationDateLabel(item.askedAt))}</span></div>
@@ -4743,13 +4851,19 @@ function renderConsultations(root, consultations, mayAnswer, consultantsConfigur
           <small>إجابة ${esc(item.answeredBy || 'المستشار')}</small>
           <p>${esc(item.answer)}</p>
           ${item.answeredAt ? `<time>${esc(consultationDateLabel(item.answeredAt))}</time>` : ''}
-        </div>` : mayAnswer ? `
+        </div>` : canAnswerAll ? `
         <form class="consultation-answer-form" data-id="${esc(item.id)}">
-          <label for="consultation-answer-${esc(item.id)}">إجابتك كمستشار</label>
+          <label for="consultation-answer-${esc(item.id)}">${isSupervisor() ? 'إجابتك كمشرف' : 'إجابتك كمستشار'}</label>
           <textarea class="input" id="consultation-answer-${esc(item.id)}" name="answer" rows="3" maxlength="4000" required placeholder="اكتب إجابتك المعرفية…"></textarea>
-          <button class="btn btn-sm btn-primary" type="submit">نشر الإجابة</button>
+          <button class="btn btn-sm btn-primary" type="submit"><svg class="ic"><use href="#i-send"/></svg> نشر الإجابة</button>
         </form>` : `
         <div class="consultation-awaiting"><svg class="ic"><use href="#i-clock"/></svg><span>${consultantsConfigured ? 'بانتظار إجابة أحد المستشارين المعتمدين' : 'سيُتاح الرد بعد اعتماد أسماء المستشارين'}</span></div>`}
+      ${item.answer && canAnswerAll ? `
+        <form class="consultation-answer-form consultation-answer-edit" data-id="${esc(item.id)}">
+          <label for="consultation-reanswer-${esc(item.id)}">تعديل الإجابة أو إضافة ردّ</label>
+          <textarea class="input" id="consultation-reanswer-${esc(item.id)}" name="answer" rows="2" maxlength="4000" placeholder="اكتب ردّك…">${esc(item.answer || '')}</textarea>
+          <button class="btn btn-sm btn-ghost" type="submit">حفظ الرد</button>
+        </form>` : ''}
     </article>`).join('');
 
   list.querySelectorAll('.consultation-answer-form').forEach((form) => {
@@ -4785,7 +4899,18 @@ async function loadConsultations(root) {
     list.innerHTML = emptyHTML('info', 'تعذر تحميل الاستشارات', 'تحقق من نشر Apps Script المحدّث.');
     return;
   }
-  renderConsultations(root, result.data, result.canAnswer === true, result.consultantsConfigured === true);
+  const mayAnswer = result.canAnswer === true || isSupervisor();
+  const banner = root.querySelector('#consultation-role-banner');
+  if (banner) {
+    banner.hidden = !mayAnswer;
+    if (mayAnswer) {
+      banner.querySelector('strong').textContent = isSupervisor() ? 'أنت مشرف النادي' : 'أنت مستشار معتمد';
+      banner.querySelector('span').textContent = 'يمكنك الإجابة على الاستشارات مباشرة من هنا.';
+    }
+  }
+  const headNote = root.querySelector('#consultation-head-note');
+  if (headNote) headNote.textContent = mayAnswer ? 'يمكنك الرد على الاستشارات مباشرة' : 'الإجابة للمستشارين المعتمدين فقط';
+  renderConsultations(root, result.data, mayAnswer, result.consultantsConfigured === true);
 }
 
 function openConsultationsSheet() {
@@ -4801,7 +4926,11 @@ function openConsultationsSheet() {
         <textarea class="input" id="consultation-question" name="question" rows="3" maxlength="2000" required placeholder="اكتب سؤالك عن كتاب أو فكرة قرائية…"></textarea>
         <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> إرسال للمستشارين</button>
       </form>`}
-    <div class="consultations-section-head"><h3>الاستشارات</h3><span>الإجابة للمستشارين المعتمدين فقط</span></div>
+    <div class="consultation-role-banner" id="consultation-role-banner" hidden>
+      <svg class="ic"><use href="#i-check"/></svg>
+      <div><strong>أنت مستشار معتمد</strong><span>يمكنك الإجابة على الاستشارات مباشرة من هنا.</span></div>
+    </div>
+    <div class="consultations-section-head"><h3>الاستشارات</h3><span id="consultation-head-note">الإجابة للمستشارين المعتمدين فقط</span></div>
     <div id="consultations-list" class="consultations-list"><p class="deleted-items-loading">جارٍ التحميل…</p></div>
   `, (root) => {
     const form = root.querySelector('#consultation-question-form');
@@ -4998,7 +5127,7 @@ function openMeetingComposer() {
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-calendar"/></svg> نشر اللقاء للأعضاء</button>
     </form>`, (root) => {
     let imageData = '';
-    let crop = { x: 50, y: 50, scale: 100 };
+    let crop = { width: 640, height: 420 };
     const fileInput = root.querySelector('#meeting-image-input');
     const previewWrap = root.querySelector('#meeting-image-preview-wrap');
     const preview = root.querySelector('#meeting-image-preview');
@@ -5019,9 +5148,9 @@ function openMeetingComposer() {
         previewWrap.hidden = false;
         if (!previewWrap.dataset.cropInit) {
           previewWrap.dataset.cropInit = '1';
-          crop = createCropControls(previewWrap, preview, crop);
+          crop = createCropControls(previewWrap, preview);
         }
-        status.textContent = 'الصورة جاهزة — اسحب الإطار وزواياه لتحديد الأطراف';
+        status.textContent = 'الصورة جاهزة — حدّد العرض والطول يدويًا بما يناسب العرض';
       } catch (error) {
         imageData = '';
         fileInput.value = '';
@@ -5032,7 +5161,7 @@ function openMeetingComposer() {
 
     root.querySelector('#meeting-image-remove').addEventListener('click', () => {
       imageData = '';
-      crop = { x: 50, y: 50, scale: 100 };
+      crop = { width: 640, height: 420 };
       fileInput.value = '';
       preview.removeAttribute('src');
       previewWrap.hidden = true;
@@ -5047,6 +5176,7 @@ function openMeetingComposer() {
       const time = root.querySelector('#meeting-time-input').value;
       if (!title || !date || !time) { toast('أكمل العنوان والتاريخ والوقت', 'info'); return; }
 
+      const finalImage = imageData ? await cropImageDataUrl(imageData, crop) : '';
       const meeting = {
         id: `meeting-${Date.now()}`,
         title,
@@ -5054,10 +5184,10 @@ function openMeetingComposer() {
         date,
         time,
         location: root.querySelector('#meeting-location-input').value.trim(),
-        image: imageData,
-        imagePosX: crop.x,
-        imagePosY: crop.y,
-        imageScale: crop.scale,
+        image: finalImage,
+        imagePosX: 50,
+        imagePosY: 50,
+        imageScale: 100,
         createdAt: Date.now(),
         createdBy: currentMember.name
       };
@@ -5313,6 +5443,20 @@ function updateNavBadges() {
   });
 }
 
+async function showBackendVersion() {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  try {
+    const result = await cloudRequest('getVersion');
+    const version = (result && result.version) ? result.version : 'غير معروف';
+    el.textContent = `· ${version}`;
+    el.title = 'نسخة الخادم المنشورة — تأكد أنها مطابقة لأحدث حزمة';
+  } catch (error) {
+    el.textContent = '· تعذر الاتصال بالخادم';
+    el.title = 'تحقق من نشر Apps Script بإصدار جديد';
+  }
+}
+
 function enterApp(welcome = false) {
   if (!currentMember || !state) return;
   try {
@@ -5354,7 +5498,26 @@ function enterApp(welcome = false) {
       renderHome();
       renderQuotes();
       renderArticles();
+      renderReadings();
     }
+  });
+  /* مزامنة مكتبتي من الشيت حتى لا تضيع الكتب عند تغيير الجهاز */
+  loadMyBooksFromCloud(currentMember ? currentMember.id : null).then((cloudBooks) => {
+    if (!Array.isArray(cloudBooks) || !state || !currentMember) return;
+    const map = new Map();
+    (state.myBooks || []).forEach((b) => { if (b && b.bookId) map.set(String(b.bookId), b); });
+    cloudBooks.forEach((b) => { if (b && b.bookId) map.set(String(b.bookId), b); });
+    const merged = [...map.values()];
+    const changed = merged.length !== (state.myBooks || []).length;
+    if (changed) {
+      state.myBooks = merged;
+      saveState();
+      renderLibrary();
+      renderHome();
+      renderProfile();
+    }
+    merged.forEach((b) => syncState.myBooks.add(myBookSyncKey(b)));
+    persistSyncState(currentMember.id);
   });
   /* جلب آراء الكتب المشتركة وتحديث متوسطات المكتبة */
   refreshBookRatingsFromCloud().then(() => {
@@ -5367,6 +5530,7 @@ function enterApp(welcome = false) {
     const firstName = state.profile.name.trim().split(/\s+/)[0];
     setTimeout(() => toast(`أهلاً ${firstName}… مجلسك جاهز`, 'sparkles'), 550);
   }
+  showBackendVersion();
 }
 
 function toggleRsvp() {
@@ -5784,6 +5948,13 @@ function handleGlobalClick(event) {
           renderLibrary();
           renderHome();
           renderProfile();
+          // Delete from cloud sheet so it does not reappear on another device
+          if (currentMember && currentMember.id !== 'guest') {
+            cloudRequest('deleteMyBook', { memberId: currentMember.id, bookId: id }).catch(() => {});
+            // Also remove from sync cache so it is not re-uploaded
+            syncState.myBooks.forEach((key) => { if (key.includes(String(id))) syncState.myBooks.delete(key); });
+            persistSyncState(currentMember.id);
+          }
           toast('أُزيل الكتاب من مكتبتك', 'trash');
         }
       });
