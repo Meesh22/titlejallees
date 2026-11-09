@@ -313,6 +313,14 @@ function isSupervisor() {
   return SUPERVISORS.some((name) => normalizeName(name) === normalizeName(currentMember.name));
 }
 
+/* المستشار: مشرف أو عضو تمت ترقيته من الشيت (role = consultant) */
+function isConsultant() {
+  if (!currentMember || currentMember.id === 'guest') return false;
+  if (isSupervisor()) return true;
+  const role = String(currentMember.role || '').toLowerCase();
+  return role === 'مستشار' || role === 'consultant';
+}
+
 /* ---- حساب العضو: البريد الإلكتروني + الرمز السري ---- */
 let pendingResetEmail = '';
 let pendingRegister = null;
@@ -339,10 +347,12 @@ function persistAccount(account) {
 
 function accountToMember(account) {
   const name = String((account && account.name) || 'عضو جليس');
+  const rawRole = String((account && account.role) || '').toLowerCase();
+  const role = rawRole === 'supervisor' ? 'مشرف' : (rawRole === 'consultant' ? 'مستشار' : 'عضو');
   return {
     id: String(account.id),
     name,
-    role: account.role === 'supervisor' ? 'مشرف' : 'عضو',
+    role,
     email: String(account.email || ''),
     photo: String(account.photo || ''),
     pages: 0,
@@ -1474,7 +1484,7 @@ function compressMeetingImage(file) {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
     image.onload = () => {
-      let scale = Math.min(1, 640 / image.width, 1000 / image.height);
+      let scale = Math.min(1, 1200 / image.width, 1200 / image.height);
       let dataUrl = '';
       for (let attempt = 0; attempt < 12; attempt++) {
         const canvas = document.createElement('canvas');
@@ -1484,13 +1494,13 @@ function compressMeetingImage(file) {
         context.fillStyle = '#ffffff';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const quality = Math.max(0.38, 0.76 - attempt * 0.035);
+        const quality = Math.max(0.55, 0.85 - attempt * 0.04);
         dataUrl = canvas.toDataURL('image/jpeg', quality);
-        if (dataUrl.length <= 44000) break;
+        if (dataUrl.length <= 480000) break;
         scale *= 0.84;
       }
       URL.revokeObjectURL(objectUrl);
-      if (!dataUrl || dataUrl.length > 48000) {
+      if (!dataUrl || dataUrl.length > 600000) {
         reject(new Error('تعذر ضغط الصورة للحجم المناسب. اختر صورة أصغر.'));
         return;
       }
@@ -2195,7 +2205,52 @@ function renderHome() {
 
   renderMeetingCard();
 
+  renderHomeConsultations();
+  loadHomeConsultations();
+
   updateHeaderAvatar();
+}
+
+/* ---- لوحة المستشار: أحدث الاستشارات التي لم يُجب عليها أحد ---- */
+let homeConsultationsFetchedAt = 0;
+
+function renderHomeConsultations(consultations) {
+  const section = $('#home-consultations');
+  const list = $('#home-consultations-list');
+  if (!section || !list) return;
+  if (!isConsultant()) {
+    section.hidden = true;
+    list.innerHTML = '';
+    return;
+  }
+  section.hidden = false;
+  if (!Array.isArray(consultations)) return;
+  const pending = consultations.filter((item) => item && !item.answer).slice(0, 3);
+  if (!pending.length) {
+    list.innerHTML = emptyHTML('check', 'لا استشارات بانتظار الرد', 'كل الأسئلة الحالية تمت الإجابة عليها.');
+    return;
+  }
+  list.innerHTML = pending.map((item) => `
+    <button class="home-consultation-item" type="button" data-action="open-consultations">
+      <div class="hc-top"><strong>${esc(item.memberName || 'عضو جليس')}</strong><time>${esc(consultationDateLabel(item.askedAt))}</time></div>
+      <p>${esc(item.question || '')}</p>
+      <span class="hc-link">اكتب الإجابة <svg class="ic"><use href="#i-chevron-left"/></svg></span>
+    </button>`).join('');
+}
+
+async function loadHomeConsultations(force = false) {
+  const section = $('#home-consultations');
+  if (!section) return;
+  if (!isConsultant()) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  if (!force && Date.now() - homeConsultationsFetchedAt < 45000) return;
+  homeConsultationsFetchedAt = Date.now();
+  const result = await cloudRequest('getConsultations', null, currentMember.id);
+  if (!result || result.success !== true || !Array.isArray(result.data)) return;
+  renderHomeConsultations(result.data);
 }
 
 /* --------------------------------------------------------------------------
@@ -2371,11 +2426,9 @@ function quoteSerialNumber(quote) {
 }
 
 function quoteCardHTML(quote, options = {}) {
-  const liked = state.likedQuotes.includes(quote.id);
   const saved = state.savedQuotes.includes(quote.id);
   const name = authorNameOf(quote);
   const color = authorColorOf(quote);
-  const likes = Number(quote.likes || 0) + (liked ? 1 : 0);
   const canDelete = isSupervisor();
   const compact = Boolean(options.compact);
   const cardClasses = `quote-card${compact ? ' quote-card-compact' : ' quote-card-numbered'}${options.latest ? ' quote-latest' : ''}`;
@@ -2392,9 +2445,6 @@ function quoteCardHTML(quote, options = {}) {
           </button>
         </div>
         <div class="quote-actions">
-          <button type="button" data-action="like-quote" data-id="${quote.id}" class="${liked ? 'active' : ''}" aria-label="إعجاب">
-            <svg class="ic"><use href="#i-heart"/></svg>${toAr(likes)}
-          </button>
           <button type="button" data-action="save-quote" data-id="${quote.id}" class="${saved ? 'saved' : ''}" aria-label="حفظ الاقتباس">
             <svg class="ic"><use href="#i-bookmark"/></svg>
           </button>
@@ -2410,7 +2460,8 @@ function quoteCardHTML(quote, options = {}) {
 }
 
 function renderQuotes() {
-  const filter = state.quoteFilter;
+  const allowedFilters = ['all', 'mine', 'saved'];
+  const filter = allowedFilters.includes(state.quoteFilter) ? state.quoteFilter : 'all';
   $$('#quote-filters button').forEach((button) => {
     const active = button.dataset.qfilter === filter;
     button.classList.toggle('active', active);
@@ -2420,19 +2471,11 @@ function renderQuotes() {
   let list = state.quotes;
   if (filter === 'mine') list = list.filter((quote) => isMine(quote));
   if (filter === 'saved') list = list.filter((quote) => state.savedQuotes.includes(quote.id));
-  if (filter === 'popular') {
-    list = list.slice().sort((a, b) => {
-      const likesA = Number(a.likes || 0) + (state.likedQuotes.includes(a.id) ? 1 : 0);
-      const likesB = Number(b.likes || 0) + (state.likedQuotes.includes(b.id) ? 1 : 0);
-      return likesB - likesA || (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
-    });
-  }
 
   const labels = {
     all: ['فنجان قهوة وهامش', 'شارك أول اقتباس يوقفك عند كتاب.'],
     mine: ['لم تنشر اقتباساً بعد', 'اضغط «اقتبس» وشارك جملة من كتابك.'],
-    saved: ['لا اقتباسات محفوظة', 'احفظ ما يلامسك لتعود إليه لاحقاً.'],
-    popular: ['لا توجد اقتباسات بعد', 'ستظهر هنا الاقتباسات الأكثر إعجابًا.']
+    saved: ['لا اقتباسات محفوظة', 'احفظ ما يلامسك لتعود إليه لاحقاً.']
   };
 
   $('#quotes-feed').innerHTML = list.length
@@ -3812,11 +3855,17 @@ function openArticleSheet(id) {
 
   openSheet(`
     <div class="article-reader article-reader-full">
-      <div class="sheet-head">
+      <div class="sheet-head reader-head">
         <span class="chip chip-soft">${esc(article.category)}</span>
-        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
-          <svg class="ic"><use href="#i-close"/></svg>
-        </button>
+        <div class="reader-head-actions">
+          <button class="reader-home-btn" type="button" data-action="reader-home">
+            <svg class="ic"><use href="#i-home"/></svg>
+            <span>القائمة الرئيسية</span>
+          </button>
+          <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+            <svg class="ic"><use href="#i-close"/></svg>
+          </button>
+        </div>
       </div>
       <h2 class="reader-title">${esc(article.title)}</h2>
       <div class="reader-meta">
@@ -4841,7 +4890,7 @@ function renderConsultations(root, consultations, mayAnswer, consultantsConfigur
     list.innerHTML = emptyHTML('info', 'لا توجد استشارات بعد', 'كن أول من يطرح سؤالًا عن كتاب أو قراءة.');
     return;
   }
-  const canAnswerAll = mayAnswer || isSupervisor();
+  const canAnswerAll = mayAnswer || isConsultant();
   list.innerHTML = consultations.map((item) => `
     <article class="consultation-card">
       <div class="consultation-meta"><strong>${esc(item.memberName || 'عضو جليس')}</strong><span>${esc(consultationDateLabel(item.askedAt))}</span></div>
@@ -4915,7 +4964,7 @@ async function loadConsultations(root) {
 
 function openConsultationsSheet() {
   openSheet(`
-    ${sheetHead('استشارة رأي', 'أسئلة الأعضاء وإجابات المستشارين في الكتب والقراءة')}
+    ${sheetHead('استشارة قرائية', 'أسئلة الأعضاء وإجابات المستشارين في الكتب والقراءة')}
     ${isGuest() ? `
       <div class="consultation-signin">
         <p>يمكن للأعضاء طرح الأسئلة. سجّل الدخول لإرسال استشارتك.</p>
@@ -5446,14 +5495,13 @@ function updateNavBadges() {
 async function showBackendVersion() {
   const el = document.getElementById('app-version');
   if (!el) return;
+  el.textContent = '· 2024';
+  el.title = 'نادي جليس القرائي — 2024';
   try {
     const result = await cloudRequest('getVersion');
-    const version = (result && result.version) ? result.version : 'غير معروف';
-    el.textContent = `· ${version}`;
-    el.title = 'نسخة الخادم المنشورة — تأكد أنها مطابقة لأحدث حزمة';
+    if (result && result.version) el.title = `نادي جليس القرائي — 2024 (نسخة الخادم: ${result.version})`;
   } catch (error) {
-    el.textContent = '· تعذر الاتصال بالخادم';
-    el.title = 'تحقق من نشر Apps Script بإصدار جديد';
+    /* لا نعرض أي خطأ في التذييل */
   }
 }
 
@@ -5689,6 +5737,10 @@ function handleGlobalClick(event) {
     }
     case 'go-home':
       go('home');
+      break;
+    case 'reader-home':
+      closeSheet();
+      setTimeout(() => go('home'), 180);
       break;
     case 'notifications':
       openNotificationsSheet();
@@ -6461,13 +6513,14 @@ async function init() {
           toast(cleanServerError(result, 'تعذر حفظ الصورة الشخصية'), 'info');
           return;
         }
-        currentMember.photo = photo;
-        state.profile.photo = photo;
+        const storedPhoto = result.photo || photo;
+        currentMember.photo = storedPhoto;
+        state.profile.photo = storedPhoto;
         const cached = approvedMembersCache.find((m) => normalizeName(m.name) === normalizeName(currentMember.name));
-        if (cached) cached.photo = photo;
+        if (cached) cached.photo = storedPhoto;
         const account = readAccount();
         if (account && String(account.id) === String(currentMember.id)) {
-          persistAccount({ ...account, photo });
+          persistAccount({ ...account, photo: storedPhoto });
         }
         await saveState();
         renderProfile();

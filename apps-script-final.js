@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-09-r8';
+const CODE_VERSION = 'jalees-2026-11-10-r10';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -17,6 +17,75 @@ const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
 function resolveSpreadsheet(ss) {
   if (ss && typeof ss.getSheetByName === 'function') return ss;
   return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
+/* ---- الصور: تُرفع إلى Drive ويُخزَّن رابط قصير في الشيت بدل النص الطويل ---- */
+const IMAGE_FOLDER_NAME = 'جليس - صور الموقع';
+
+function imageFolderId() {
+  const props = PropertiesService.getScriptProperties();
+  const saved = String(props.getProperty('JALEES_IMAGE_FOLDER_ID') || '');
+  if (saved) {
+    try { DriveApp.getFolderById(saved); return saved; } catch (error) { /* أُنشئ مجلدًا جديدًا */ }
+  }
+  const existing = DriveApp.getFoldersByName(IMAGE_FOLDER_NAME);
+  const folder = existing.hasNext() ? existing.next() : DriveApp.createFolder(IMAGE_FOLDER_NAME);
+  props.setProperty('JALEES_IMAGE_FOLDER_ID', folder.getId());
+  return folder.getId();
+}
+
+function storeImage(value, prefix) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const match = raw.match(/^data:image\/(jpeg|jpg|png|webp);base64,([\s\S]+)$/i);
+  if (!match) return '';
+  const type = match[1].toLowerCase() === 'jpg' ? 'jpeg' : match[1].toLowerCase();
+  const blob = Utilities.newBlob(
+    Utilities.base64Decode(match[2]),
+    `image/${type}`,
+    `${prefix || 'image'}-${Date.now()}.${type === 'jpeg' ? 'jpg' : type}`
+  );
+  const file = DriveApp.getFolderById(imageFolderId()).createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
+  return `https://lh3.googleusercontent.com/d/${file.getId()}=w1400`;
+}
+
+/* ترحيل الصور القديمة المخزّنة كنص طويل (base64) إلى Drive — تُشغَّل يدويًا مرة واحدة */
+function migrateImagesToDrive() {
+  const ss = resolveSpreadsheet();
+  const report = { members: 0, books: 0, meetings: 0, recordings: 0, tips: 0, errors: 0 };
+  const jobs = [
+    { sheet: getMembersSheet(ss), column: 13, prefix: 'member', key: 'members' },
+    { sheet: ss.getSheetByName(BOOKS_SHEET), column: 11, prefix: 'book', key: 'books' },
+    { sheet: getMeetingsSheet(ss), column: 7, prefix: 'meeting', key: 'meetings' },
+    { sheet: getRecordedMeetingsSheet(ss), column: 9, prefix: 'recording', key: 'recordings' },
+    { sheet: getReadingTipsSheet(ss), column: 4, prefix: 'tip', key: 'tips' }
+  ];
+  jobs.forEach((job) => {
+    const sheet = job.sheet;
+    if (!sheet) return;
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    for (let row = 2; row <= lastRow; row++) {
+      const cell = sheet.getRange(row, job.column);
+      const value = String(cell.getValue() || '');
+      if (!/^data:image\//i.test(value)) continue;
+      try {
+        const url = storeImage(value, job.prefix);
+        if (url) {
+          cell.setValue(url);
+          report[job.key] += 1;
+        }
+      } catch (error) {
+        report.errors += 1;
+      }
+    }
+  });
+  Logger.log(`migrateImagesToDrive: ${JSON.stringify(report)}`);
+  return report;
 }
 
 function getProfilesSheet(ss) {
@@ -574,20 +643,48 @@ const MAIL_NAME = 'نادي جليس القرائي';
 const MAIL_REPLY = 'jjalees.com@gmail.com';
 
 function sendCodeEmail(email, name, code, subject, intro) {
-  MailApp.sendEmail({
-    to: email,
-    subject: subject,
-    from: MAIL_FROM,
-    name: MAIL_NAME,
-    replyTo: MAIL_REPLY,
-    htmlBody: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
+  const htmlBody = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
       <h2 style="margin:0 0 12px">نادي جليس القرائي</h2>
       <p>مرحباً ${name}،</p>
       <p>${intro}</p>
       <p style="font-size:32px;letter-spacing:10px;font-weight:bold;color:#8C532D">${code}</p>
       <p>هذا الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلب هذا الرمز، تجاهله.</p>
-    </div>`
-  });
+    </div>`;
+  const base = {
+    to: email,
+    subject: subject,
+    name: MAIL_NAME,
+    replyTo: MAIL_REPLY,
+    htmlBody: htmlBody
+  };
+
+  /* نرسل باسم إيميل النادي فقط إذا كان هو الحساب المالك للسكربت
+     (وإلا رفض Gmail الإرسال). وفي حال أي رفض نعيد الإرسال بدون from. */
+  let owner = '';
+  try { owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (error) { owner = ''; }
+  const from = String(MAIL_FROM || '').toLowerCase();
+  const canUseFrom = Boolean(from) && Boolean(owner) && owner === from;
+
+  try {
+    MailApp.sendEmail(canUseFrom ? { ...base, from: MAIL_FROM } : base);
+  } catch (error) {
+    MailApp.sendEmail({ to: email, subject: subject, htmlBody: htmlBody });
+  }
+}
+
+/* تشخيص الإرسال: من الحساب المالك؟ وهل الاسم مطابق؟ */
+function getMailStatus() {
+  let owner = '';
+  try { owner = String(Session.getEffectiveUser().getEmail() || ''); } catch (error) { owner = ''; }
+  let quota = 0;
+  try { quota = MailApp.getRemainingDailyQuota(); } catch (error) { quota = 0; }
+  return {
+    success: true,
+    owner: owner,
+    configuredFrom: MAIL_FROM,
+    canSendAsClub: owner.toLowerCase() === String(MAIL_FROM).toLowerCase(),
+    remainingQuota: quota
+  };
 }
 
 function getBookRatingsSheet(ss) {
@@ -710,7 +807,7 @@ function doPost(e) {
         data.id || '', data.memberId || '', data.memberName || '',
         data.title || '', data.author || '', data.category || '',
         data.coverColor || '', data.report || '', data.pages || 0,
-        data.createdAt || Date.now(), data.coverImage || '',
+        data.createdAt || Date.now(), storeImage(data.coverImage, 'book'),
         '', '', data.year || ''
       ]);
       return output({ success: true, message: 'تم حفظ الكتاب' });
@@ -719,9 +816,7 @@ function doPost(e) {
     if (action === 'updateClubBook') {
       const bookId = String(data.id || '');
       if (!bookId) throw new Error('معرّف الكتاب مطلوب');
-      if (String(data.coverImage || '').length > 48000) {
-        throw new Error('حجم صورة الغلاف أكبر من الحد المسموح');
-      }
+      const coverImage = storeImage(data.coverImage, 'book');
 
       const oldSheet = ss.getSheetById(OLD_BOOKS_SHEET_ID);
       const sources = [ss.getSheetByName(BOOKS_SHEET), oldSheet]
@@ -740,7 +835,7 @@ function doPost(e) {
           data.title || '', data.author || '', data.category || '',
           data.coverColor || '', data.report || '', Number(data.pages) || 0
         ]]);
-        source.getRange(row, 11).setValue(data.coverImage || '');
+        source.getRange(row, 11).setValue(coverImage);
         source.getRange(row, 14).setValue(data.year || '');
         return output({ success: true, message: 'تم تحديث بيانات الكتاب' });
       }
@@ -968,9 +1063,8 @@ function doPost(e) {
     if (action === 'saveReadingTip') {
       const sheet = getReadingTipsSheet(ss);
       const tipId = String(data.id || `tip-${Date.now()}`);
-      if (String(data.image || '').length > 48000) throw new Error('حجم الصورة أكبر من الحد المسموح');
       const rowData = [
-        tipId, data.title || '', data.body || '', data.image || '',
+        tipId, data.title || '', data.body || '', storeImage(data.image, 'tip'),
         data.createdAt || Date.now(), data.createdBy || '', '', ''
       ];
       const lastRow = sheet.getLastRow();
@@ -1020,17 +1114,18 @@ function doPost(e) {
     if (action === 'setMemberPhoto') {
       const memberId = String(data.memberId || '').trim();
       const photo = String(data.photo || '');
-      if (!/^data:image\/(?:jpeg|png|webp);base64,/i.test(photo)) {
+      if (!/^(?:data:image\/(?:jpeg|png|webp);base64,|https?:\/\/)/i.test(photo)) {
         throw new Error('اختر صورة بصيغة JPG أو PNG أو WebP');
       }
-      if (photo.length > 48000) throw new Error('الصورة أكبر من الحد المسموح؛ اختر صورة أصغر');
+      const stored = storeImage(photo, `member-${memberId || 'photo'}`);
+      if (!stored) throw new Error('تعذر حفظ الصورة، حاول مرة أخرى');
       const sheet = getMembersSheet(ss);
       const row = findMemberRowById(sheet, memberId);
       if (row < 2) throw new Error('لم أجد حساب العضو');
       const member = sheet.getRange(row, 1, 1, 13).getValues()[0];
       if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
-      sheet.getRange(row, 13).setValue(photo);
-      return output({ success: true, photo: photo, message: 'تم تحديث الصورة الشخصية' });
+      sheet.getRange(row, 13).setValue(stored);
+      return output({ success: true, photo: stored, message: 'تم تحديث الصورة الشخصية' });
     }
 
     if (action === 'getApprovedMembers') {
@@ -1468,13 +1563,11 @@ function doPost(e) {
       const sheet = getMeetingsSheet(ss);
       const meetingId = String(data.id || '');
       if (!meetingId) throw new Error('معرّف اللقاء مطلوب');
-      if (String(data.image || '').length > 48000) {
-        throw new Error('حجم صورة اللقاء أكبر من الحد المسموح');
-      }
+      const meetingImage = storeImage(data.image, 'meeting');
 
       const rowData = [
         meetingId, data.title || '', data.description || '', String(data.date || ''),
-        String(data.time || ''), data.location || '', data.image || '',
+        String(data.time || ''), data.location || '', meetingImage,
         data.createdAt || Date.now(), data.createdBy || '',
         (data.imagePosX === '' || data.imagePosX === undefined || data.imagePosX === null ? 50 : Number(data.imagePosX) || 50),
         (data.imagePosY === '' || data.imagePosY === undefined || data.imagePosY === null ? 50 : Number(data.imagePosY) || 50),
@@ -1498,12 +1591,11 @@ function doPost(e) {
       const sheet = getRecordedMeetingsSheet(ss);
       const recordId = String(data.id || '');
       if (!recordId) throw new Error('معرّف التسجيل مطلوب');
-      if (String(data.image || '').length > 48000) throw new Error('حجم صورة اللقاء أكبر من الحد المسموح');
 
       const rowData = [
         recordId, data.title || '', data.description || '', data.recordedAt || '',
         data.speaker || '', Number(data.views) || 0, data.duration || '',
-        data.videoUrl || '', data.image || '', data.createdAt || Date.now(), data.createdBy || ''
+        data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || ''
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -1669,6 +1761,10 @@ function doGet(e) {
 
     if (action === 'getVersion') {
       return output({ success: true, version: CODE_VERSION, deployed: true });
+    }
+
+    if (action === 'getMailStatus') {
+      return output(getMailStatus());
     }
 
     if (action === 'getProfile') {

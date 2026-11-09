@@ -359,7 +359,7 @@
                 <div class="greeting-title-row">
                   <h1>أهلاً بك، <span id="home-first-name">مشعل</span></h1>
                   <button class="consultation-header-btn" type="button" data-action="open-consultations">
-                    <svg class="ic"><use href="#i-info"/></svg><span>استشارة رأي</span>
+                    <svg class="ic"><use href="#i-info"/></svg><span>استشارة قرائية</span>
                   </button>
                 </div>
                 <p class="greeting-sub">أي كتاب تقرأ اليوم؟</p>
@@ -373,6 +373,14 @@
                   <svg class="ic"><use href="#i-quote"/></svg> اقتبس
                 </button>
               </div>
+
+              <section class="home-consultations" id="home-consultations" hidden>
+                <div class="sec-head">
+                  <div><h3>استشارات بانتظار الرد</h3><p>أحدث الأسئلة التي لم يُجب عليها أحد</p></div>
+                  <button class="link-btn" type="button" data-action="open-consultations">كل الاستشارات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+                </div>
+                <div class="home-consultations-list" id="home-consultations-list"></div>
+              </section>
 
               <div class="sec-head home-quotes-head">
                 <div><h3>آخر اقتباس</h3><p>أحدث ما شاركه أعضاء جليس</p></div>
@@ -418,7 +426,6 @@
                 <button class="chip-filter active" type="button" data-qfilter="all">الكل</button>
                 <button class="chip-filter" type="button" data-qfilter="mine">اقتباساتي</button>
                 <button class="chip-filter" type="button" data-qfilter="saved">المحفوظة</button>
-                <button class="chip-filter" type="button" data-qfilter="popular">الأكثر إعجابًا</button>
               </div>
 
               <div class="quotes-feed" id="quotes-feed"></div>
