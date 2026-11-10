@@ -36,7 +36,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=r12-20261110">
+  <link rel="stylesheet" href="app.css?v=r16-20261110">
 </head>
 <body>
 
@@ -426,6 +426,7 @@
                 <button class="chip-filter active" type="button" data-qfilter="all">الكل</button>
                 <button class="chip-filter" type="button" data-qfilter="mine">اقتباساتي</button>
                 <button class="chip-filter" type="button" data-qfilter="saved">المحفوظة</button>
+                <button class="chip-filter" type="button" data-qfilter="popular">الأكثر إعجابًا</button>
               </div>
 
               <div class="quotes-feed" id="quotes-feed"></div>
@@ -493,9 +494,15 @@
                 <span>مساحة مفتوحة لأفكار الأعضاء وتجاربهم مع القراءة.</span>
               </div>
 
+              <div class="quotes-stats-bar">
+                <button class="btn btn-gold btn-member-stats" type="button" data-action="member-stats"><svg class="ic"><use href="#i-chart"/></svg> إحصائيات الأعضاء</button>
+              </div>
+
               <div class="chips-row" id="article-filters">
                 <button class="chip-filter active" type="button" data-afilter="all">الكل</button>
+                <button class="chip-filter" type="button" data-afilter="mine">مقالاتي</button>
                 <button class="chip-filter" type="button" data-afilter="saved">محفوظاتك</button>
+                <button class="chip-filter" type="button" data-afilter="popular">الأكثر إعجابًا</button>
               </div>
 
               <div class="sec-head">
@@ -636,6 +643,6 @@
     <div class="noscript">هذه المساحة تحتاج تفعيل جافاسكريبت في المتصفح.</div>
   </noscript>
 
-  <script src="app.js?v=r12-20261110"></script>
+  <script src="app.js?v=r16-20261110"></script>
 </body>
 </html>

@@ -1087,7 +1087,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-  font-size: 13px;
+  font-size: calc(var(--quote-font, 19px) * .7);
   line-height: 1.65;
   letter-spacing: 0;
 }
@@ -2342,7 +2342,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .quote-card .quote-text {
   position: relative;
   font-family: var(--serif);
-  font-size: 19px;
+  font-size: var(--quote-font, 19px);
   line-height: 1.9;
   color: var(--green-700);
 }
@@ -2356,6 +2356,15 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 }
 .quote-source::before { content: ''; width: 12px; height: 1px; background: var(--gold); }
 .quote-source span { color: var(--muted-2); }
+.quote-source .quote-font-controls {
+  margin-inline-start: auto; display: inline-flex; align-items: center; gap: 3px;
+}
+.quote-source .quote-font-controls .font-size-btn {
+  width: 24px; height: 22px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--paper-2); color: var(--green-700); font-size: 9.5px; font-weight: 800;
+  line-height: 1; cursor: pointer; font-family: inherit;
+}
+.quote-source .quote-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .55); color: var(--gold-700); }
 
 .quote-foot {
   display: flex;
@@ -2780,6 +2789,212 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .articles-note .ic { flex:none; width:14px; height:14px; color:var(--gold-700); }
 .article-font-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; }
 .article-font-row label { margin:0; }
+/* ---------- مختارات النادي: الأقسام والقوائم القرائية ---------- */
+.selections { display: grid; gap: 13px; }
+.selections-tabs { position: sticky; top: 0; z-index: 2; }
+.selections-panel { display: grid; gap: 12px; }
+.selections-head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.selections-head-row p { font-size: 8.5px; color: var(--muted); margin-top: 2px; }
+.selections-quotes { display: grid; gap: 9px; }
+
+.reading-list-card {
+  padding: 13px 14px; border-radius: 16px; background: var(--white);
+  border: 1px solid rgba(197, 155, 99, .28);
+  box-shadow: 0 8px 18px rgba(30, 58, 43, .07);
+  display: grid; gap: 9px;
+}
+.reading-list-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.reading-list-head h4 { font-size: 12px; font-weight: 800; color: var(--green-700); }
+.reading-list-head p { font-size: 8.5px; line-height: 1.8; color: var(--muted); margin-top: 3px; }
+.reading-list-books { display: flex; flex-wrap: wrap; gap: 6px; }
+.reading-list-book {
+  display: grid; gap: 1px; padding: 6px 10px; border-radius: 11px;
+  background: var(--paper-2); border: 1px solid var(--line);
+}
+.reading-list-book b { font-size: 8.5px; font-weight: 800; color: var(--green-700); }
+.reading-list-book small { font-size: 7.5px; color: var(--muted-2); }
+.reading-list-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 7.5px; color: var(--muted-2); }
+.reading-list-picker {
+  max-height: 260px; overflow-y: auto; display: grid; gap: 6px;
+  padding: 9px; border-radius: 13px; background: var(--paper-2); border: 1px solid var(--line);
+}
+.reading-list-option { display: flex; align-items: center; gap: 8px; padding: 6px 7px; border-radius: 9px; background: var(--white); cursor: pointer; }
+.reading-list-option input { accent-color: #1E3A2B; }
+.reading-list-option span { display: grid; gap: 1px; }
+.reading-list-option b { font-size: 9px; font-weight: 800; color: var(--green-700); }
+.reading-list-option small { font-size: 7.5px; color: var(--muted-2); }
+
+/* ---------- إسقاط صورة في نموذج الاقتباس ---------- */
+.quote-dropzone {
+  display: grid; gap: 5px; justify-items: center; text-align: center;
+  padding: 16px 14px; margin-bottom: 12px;
+  border: 1.5px dashed rgba(30, 58, 43, .3); border-radius: 15px;
+  background: var(--paper-2); transition: border-color .2s, background .2s;
+}
+.quote-dropzone.is-over { border-color: var(--gold); background: rgba(197, 155, 99, .12); }
+.quote-dropzone .ic { width: 22px; height: 22px; color: var(--gold-700); }
+.quote-dropzone strong { font-size: 10px; font-weight: 800; color: var(--green-700); }
+.quote-dropzone > span { font-size: 8.5px; color: var(--muted); }
+
+/* ---------- الاقتباسات الطويلة ---------- */
+.quote-text.is-long {
+  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden;
+}
+.quote-text.is-long.is-open { display: block; -webkit-line-clamp: unset; }
+.quote-more {
+  justify-self: start; margin-top: 6px; padding: 4px 11px; border-radius: 999px;
+  border: 1px solid rgba(197, 155, 99, .5); background: rgba(197, 155, 99, .12);
+  color: var(--gold-700); font-size: 8px; font-weight: 800; font-family: inherit; cursor: pointer;
+}
+.quote-more:hover { background: rgba(197, 155, 99, .22); }
+
+/* ---------- تحكم الخط داخل كل مقال ---------- */
+.ar-font-controls { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 3px; }
+.ar-font-controls .font-size-btn {
+  width: 24px; height: 22px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--paper-2); color: var(--green-700); font-size: 9.5px; font-weight: 800; line-height: 1;
+  cursor: pointer; font-family: inherit;
+}
+.ar-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .55); color: var(--gold-700); }
+
+/* ---------- ملخصات الكتب ---------- */
+.book-summaries-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 11px 13px; margin-bottom: 11px; border-radius: 14px;
+  background: linear-gradient(150deg, #1E3A2B, #2A5240); color: #F8F5EE;
+}
+.book-summaries-toolbar p { font-size: 8.5px; line-height: 1.7; color: rgba(248, 245, 238, .82); }
+.book-summaries-list { display: grid; gap: 11px; }
+.book-summary-card {
+  display: grid; gap: 7px; padding: 13px 14px; border-radius: 16px; background: var(--white);
+  border: 1px solid rgba(197, 155, 99, .28); box-shadow: 0 8px 18px rgba(30, 58, 43, .07);
+}
+.book-summary-head { display: flex; align-items: center; gap: 9px; }
+.book-summary-head > div { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.book-summary-head strong { font-size: 10px; font-weight: 800; color: var(--green-700); }
+.book-summary-head small { font-size: 7.5px; color: var(--muted-2); }
+.book-summary-delete {
+  padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(163, 80, 59, .35);
+  background: rgba(163, 80, 59, .1); color: var(--clay);
+  font-size: 7.5px; font-weight: 800; font-family: inherit; cursor: pointer;
+}
+.book-summary-body { display: grid; gap: 5px; justify-items: start; }
+.book-summary-body h4, .book-summary-card h4 { font-size: 12px; font-weight: 800; color: var(--green-700); }
+.book-summary-author { font-size: 8.5px; color: var(--muted-2); }
+.book-summary-text {
+  font-size: 9.5px; line-height: 1.95; color: var(--text); white-space: pre-line;
+  padding: 10px 12px; border-radius: 12px; background: var(--paper-2); border: 1px solid var(--line);
+}
+.book-summary-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+
+/* ---------- التقرير الأسبوعي ---------- */
+.weekly-report { display: grid; gap: 13px; }
+.weekly-report-hero {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+.weekly-report-hero > div {
+  padding: 13px 8px; border-radius: 15px; text-align: center;
+  background: linear-gradient(150deg, #1E3A2B, #2A5240); color: #F8F5EE;
+}
+.weekly-report-hero strong { display: block; font-size: 20px; font-weight: 850; color: #E3C393; line-height: 1.1; }
+.weekly-report-hero span { font-size: 7.5px; color: rgba(248, 245, 238, .78); }
+.weekly-report-block { display: grid; gap: 9px; }
+.weekly-report-bars {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end;
+  padding: 13px 11px; border-radius: 15px; background: var(--white); border: 1px solid var(--line);
+}
+.weekly-report-bar { display: grid; gap: 4px; justify-items: center; align-content: end; }
+.weekly-report-bar i {
+  display: block; width: 100%; max-width: 22px; border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(180deg, #C59B63, #9A7440);
+}
+.weekly-report-bar b { font-size: 8.5px; font-weight: 800; color: var(--green-700); }
+.weekly-report-bar small { font-size: 7px; color: var(--muted-2); }
+.weekly-report-members { display: grid; gap: 7px; }
+.weekly-report-member {
+  display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-radius: 13px;
+  background: var(--white); border: 1px solid var(--line);
+}
+.weekly-report-rank {
+  flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 8px;
+  background: var(--paper-2); color: var(--gold-700); font-size: 9px; font-weight: 800;
+}
+.weekly-report-member > div { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.weekly-report-member strong { font-size: 9.5px; font-weight: 800; color: var(--green-700); }
+.weekly-report-member small { font-size: 7.5px; color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weekly-report-member > b { font-size: 9px; font-weight: 800; color: var(--gold-700); white-space: nowrap; }
+
+/* ---------- زر اختيار الاقتباس في مختارات النادي ---------- */
+.quote-actions button.quote-select { color: var(--muted-2); }
+.quote-actions button.quote-select .ic { fill: none; stroke: currentColor; }
+.quote-actions button.quote-select.active { color: var(--gold-700); }
+.quote-actions button.quote-select.active .ic { fill: rgba(197, 155, 99, .28); }
+
+/* ---------- تحكم الخط داخل قارئ المقال ---------- */
+.reader-font-controls {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 3px; border-radius: 11px; background: var(--paper-2); border: 1px solid var(--line);
+}
+.reader-font-controls .font-size-btn {
+  width: 28px; height: 26px; border-radius: 8px; border: 1px solid transparent;
+  background: var(--white); color: var(--green-700); font-size: 11px; font-weight: 800;
+  line-height: 1; cursor: pointer; font-family: inherit;
+}
+.reader-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .5); color: var(--gold-700); }
+
+/* ---------- أدوات قراءة جديدة: حجم الخط والإعجاب والوسوم ---------- */
+.screen-head-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.screen-head .font-size-controls {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 3px; border-radius: 11px;
+  background: var(--paper-2); border: 1px solid var(--line);
+}
+.screen-head .font-size-btn {
+  width: 28px; height: 26px; border-radius: 8px; border: 1px solid transparent;
+  background: var(--white); color: var(--green-700);
+  font-size: 11px; font-weight: 800; line-height: 1; cursor: pointer; font-family: inherit;
+}
+.screen-head .font-size-btn:hover { border-color: rgba(197,155,99,.5); color: var(--gold-700); }
+.screen-head .font-size-btn:active { background: var(--green-50); }
+
+.quote-actions button.quote-like { gap: 3px; }
+.quote-actions button.quote-like .ic { fill: none; stroke: currentColor; }
+.quote-actions button.quote-like.active { color: var(--clay); }
+.quote-actions button.quote-like.active .ic { fill: rgba(163, 80, 59, .22); }
+.quote-actions button.quote-like span { font-size: 8.5px; font-weight: 800; }
+
+.ar-save.ar-like { display: inline-flex; align-items: center; gap: 3px; width: auto; padding: 0 7px; }
+.ar-save.ar-like .ic { width: 14px; height: 14px; fill: none; stroke: currentColor; }
+.ar-save.ar-like span { font-size: 8px; font-weight: 800; }
+.ar-save.ar-like.liked { color: var(--clay); }
+.ar-save.ar-like.liked .ic { fill: rgba(163, 80, 59, .22); }
+
+.recorded-meeting-type {
+  position: absolute; inset-block-start: 8px; inset-inline-start: 8px;
+  padding: 4px 9px; border-radius: 999px;
+  background: rgba(12, 24, 18, .66); border: 1px solid rgba(197, 155, 99, .45);
+  color: #F3E4C6; font-size: 7.5px; font-weight: 800;
+}
+.recorded-meeting-card.has-type .recorded-meeting-media { position: relative; }
+
+.book-pdf-badge {
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(163, 80, 59, .12); border: 1px solid rgba(163, 80, 59, .3);
+  color: var(--clay); font-size: 7px; font-weight: 800; letter-spacing: .4px;
+}
+.my-book-pdf, .book-pdf-open { text-decoration: none; }
+
+.shared-quote {
+  margin: 18px 0 0; padding: 22px 20px;
+  border-radius: 20px; background: linear-gradient(160deg, #F8F5EE, #EFE7D6);
+  border: 1px solid rgba(197, 155, 99, .35);
+}
+.shared-quote p {
+  margin: 0; font-family: var(--serif); font-size: var(--reader-font, 16px);
+  line-height: 2.1; color: var(--green-700);
+}
+.shared-quote footer { margin-top: 12px; font-size: 9.5px; color: var(--gold-700); }
+
 .article-font-controls { display:flex; align-items:center; gap:4px; }
 .font-size-btn { width:30px; height:28px; border-radius:8px; border:1px solid var(--line); background:var(--paper-2); color:var(--green-700); font-size:11px; font-weight:800; line-height:1; }
 .font-size-btn:active { background:var(--green-50); }
@@ -2800,7 +3015,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .ar-reading-time { display:inline-flex; align-items:center; gap:4px; color:var(--muted-2); font-size:8px; }
 .ar-reading-time .ic { width:12px; height:12px; color:var(--gold-700); }
 .ar-title { margin:9px 0 5px; color:var(--green-800); font:700 16px/1.55 var(--serif); }
-.ar-excerpt { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3; color:var(--muted); font-size:10px; line-height:1.9; }
+.ar-excerpt { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3; color:var(--muted); font-size: var(--article-font, 10px); line-height:1.9; }
 .ar-bottomline { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid rgba(30,58,43,.08); }
 .ar-meta { display:flex; align-items:center; flex-wrap:wrap; gap:5px; min-width:0; margin:0; color:var(--muted-2); font-size:8px; }
 .ar-meta b { color:var(--green-700); font-weight:800; }
@@ -3272,6 +3487,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .reader-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 14px; }
 .reader-meta span { display: inline-flex; align-items: center; gap: 3px; font-size: 8.5px; color: var(--muted-2); }
 .reader-meta .ic { width: 11px; height: 11px; }
+.reader-meta .reader-font-controls { margin-inline-start: auto; }
 .reader-title { font-family: var(--serif); font-size: 25px; line-height: 1.55; color: var(--green-700); margin-bottom: 12px; }
 .reader-author { display: flex; align-items: center; gap: 9px; padding: 9px 0 13px; margin-bottom: 13px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .reader-author .avatar-mini { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--paper); font-size: 11px; font-weight: 700; }
@@ -3395,7 +3611,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .ymd-group label { flex: 1; display: grid; gap: 4px; font-size: 8px; font-weight: 700; color: var(--muted); }
 .ymd-group select { width: 100%; }
 .reader-author small { display: block; font-size: 8px; color: var(--muted-2); }
-.reader-body p { font-size: 12px; line-height: 2.05; color: #39453F; margin-bottom: 12px; }
+.reader-body p { font-size: var(--reader-font, 12px); line-height: 2.05; color: #39453F; margin-bottom: 12px; }
 .reader-actions { display: flex; gap: 7px; margin-top: 8px; padding-top: 13px; border-top: 1px solid var(--line); }
 
 .notif-list { display: grid; gap: 7px; }

@@ -606,6 +606,8 @@ function createInitialState(member) {
     quotes: QUOTE_SEED.map((q) => ({ ...q })),
     savedQuotes: [],
     likedQuotes: [],
+    likedArticles: [],
+    likeCounts: { quotes: {}, articles: {} },
     quoteFilter: 'all',
     articles: ARTICLE_SEED.map((a) => ({ ...a })),
     savedArticles: [],
@@ -625,6 +627,10 @@ function createInitialState(member) {
     articleCategory: 'all',
     articleCategories: [],
     articleFontSize: 16,
+    articleReadFontSize: 12,
+    articleFontSizes: {},
+    quoteFontSizes: {},
+    quoteFontSize: 19,
     clubBooks: [],
     personalBooks: []
   };
@@ -681,7 +687,7 @@ async function cloudRequest(action, data = null, memberId = null) {
    السبب: إعادة رفع كل السجلات في كل حفظ كانت تُغرق الموقع بمئات الطلبات. */
 const SYNC_KEY_PREFIX = 'jalees-sync-v2:';
 const syncKey = (id) => `${SYNC_KEY_PREFIX}${id}`;
-let syncState = { profile: false, entries: new Set(), myBooks: new Set(), clubBooks: new Set(), articles: new Set() };
+let syncState = { profile: false, entries: new Set(), myBooks: new Set(), clubBooks: new Set(), articles: new Set(), personalBooks: new Set() };
 let syncTimer = null;
 let syncRunning = false;
 let syncAgain = false;
@@ -689,7 +695,7 @@ let syncBlockedUntil = 0;
 let loadedFromCloud = false;
 
 function emptySyncState() {
-  return { profile: false, entries: new Set(), myBooks: new Set(), clubBooks: new Set(), articles: new Set() };
+  return { profile: false, entries: new Set(), myBooks: new Set(), clubBooks: new Set(), articles: new Set(), personalBooks: new Set() };
 }
 
 function loadSyncState(memberId) {
@@ -702,7 +708,8 @@ function loadSyncState(memberId) {
       entries: new Set(parsed.entries || []),
       myBooks: new Set(parsed.myBooks || []),
       clubBooks: new Set(parsed.clubBooks || []),
-      articles: new Set(parsed.articles || [])
+      articles: new Set(parsed.articles || []),
+      personalBooks: new Set(parsed.personalBooks || [])
     };
   } catch (error) {
     return emptySyncState();
@@ -716,7 +723,8 @@ function persistSyncState(memberId) {
       entries: [...syncState.entries],
       myBooks: [...syncState.myBooks],
       clubBooks: [...syncState.clubBooks],
-      articles: [...syncState.articles]
+      articles: [...syncState.articles],
+      personalBooks: [...syncState.personalBooks]
     }));
   } catch (error) { /* التخزين غير متاح */ }
 }
@@ -783,6 +791,7 @@ async function saveClubBookToCloud(member, book) {
     category: book.category,
     coverColor: book.coverColor,
     coverImage: book.coverImage || '',
+    pdfUrl: book.pdfUrl || '',
     report: book.report || '',
     pages: book.pages || 0,
     year: book.year || '',
@@ -815,6 +824,7 @@ async function updateClubBookToCloud(book) {
     pages: book.pages || 0,
     year: book.year || '',
     coverImage: book.coverImage || '',
+    pdfUrl: book.pdfUrl || '',
     updatedAt: Date.now()
   });
 }
@@ -891,6 +901,17 @@ async function runCloudSync() {
       persistSyncState(memberId);
     }
 
+    /* مكتبتي الخاصة — تُرفع للسحابة لتظهر على كل الأجهزة */
+    for (const book of (state.personalBooks || [])) {
+      if (currentMember !== member) return;
+      const bookId = String(book.id || book.bookId || '');
+      if (!bookId || syncState.personalBooks.has(bookId)) continue;
+      const result = await savePersonalBookToCloud(book);
+      if (!result || result.success === false) { syncBlockedUntil = Date.now() + 60000; break; }
+      syncState.personalBooks.add(bookId);
+      persistSyncState(memberId);
+    }
+
   } catch (error) {
     console.error('Cloud sync error:', error);
   } finally {
@@ -953,6 +974,105 @@ async function loadMyBooksFromCloud(memberId) {
   return result.success ? result.data : [];
 }
 
+/* ---- مكتبتي الخاصة: تُحفظ في السحابة لتنتقل بين الأجهزة ---- */
+async function loadPersonalBooksFromCloud(memberId) {
+  const result = await cloudRequest('getPersonalBooks', null, memberId);
+  return result && result.success === true && Array.isArray(result.data) ? result.data : [];
+}
+
+async function savePersonalBookToCloud(book) {
+  if (!currentMember || !book) return { success: false };
+  return cloudRequest('savePersonalBook', {
+    memberId: currentMember.id,
+    memberName: state.profile.name,
+    bookId: book.id || book.bookId,
+    title: book.title || '',
+    author: book.author || '',
+    pages: Number(book.pages) || 0,
+    coverColor: book.coverColor || '',
+    pdfUrl: book.pdfUrl || '',
+    createdAt: book.createdAt || Date.now()
+  });
+}
+
+async function deletePersonalBookFromCloud(bookId) {
+  if (!currentMember) return { success: false };
+  return cloudRequest('deletePersonalBook', { memberId: currentMember.id, bookId: String(bookId || '') });
+}
+
+/* ---- الإعجابات: حقيقية ومحفوظة في الشيت لكل الأعضاء ---- */
+async function refreshLikesFromCloud() {
+  const member = currentMember;
+  if (!member || !state) return;
+  const result = await cloudRequest('getLikes', null, member.id);
+  if (!result || result.success !== true || currentMember !== member) return;
+  state.likeCounts = {
+    quotes: result.quotes || {},
+    articles: result.articles || {}
+  };
+  const mine = result.mine || {};
+  state.likedQuotes = Array.isArray(mine.quotes) ? mine.quotes : [];
+  state.likedArticles = Array.isArray(mine.articles) ? mine.articles : [];
+  saveState();
+  renderQuotes();
+  renderArticles();
+  renderHome();
+}
+
+async function toggleCloudLike(type, id) {
+  if (!currentMember || currentMember.id === 'guest') {
+    showGate('login');
+    toast('سجّل دخولك بالبريد والرمز للإعجاب', 'user');
+    return;
+  }
+  const result = await cloudRequest('toggleLike', {
+    type: type === 'article' ? 'article' : 'quote',
+    id: String(id || ''),
+    memberId: currentMember.id,
+    memberName: currentMember.name
+  });
+  if (!result || result.success !== true) {
+    toast(cleanServerError(result, 'تعذر حفظ الإعجاب'), 'info');
+    return;
+  }
+  const isArticle = type === 'article';
+  const bucket = isArticle ? state.likedArticles : state.likedQuotes;
+  const counts = isArticle ? state.likeCounts.articles : state.likeCounts.quotes;
+  const index = bucket.indexOf(String(id));
+  if (result.liked) {
+    if (index < 0) bucket.push(String(id));
+    counts[String(id)] = Number(result.likes) || 0;
+  } else {
+    if (index >= 0) bucket.splice(index, 1);
+    delete counts[String(id)];
+  }
+  saveState();
+  renderQuotes();
+  renderArticles();
+  renderHome();
+}
+
+/* ---- رفع ملف (PDF) إلى Drive عبر الخادم ---- */
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('تعذر قراءة الملف'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadFileToCloud(file) {
+  if (!file) return '';
+  if (file.size > 6 * 1024 * 1024) throw new Error('حجم الملف كبير — الحد ٦ ميجابايت');
+  const data = await readFileAsDataUrl(file);
+  const result = await cloudRequest('uploadFile', { data, name: file.name || '', mime: file.type || '' });
+  if (!result || result.success !== true || !result.url) {
+    throw new Error(cleanServerError(result, 'تعذر رفع الملف'));
+  }
+  return result.url;
+}
+
 async function saveJoinRequestToSheet(data) {
   if (!CLUB_BOOKS_URL) return;
   try {
@@ -975,7 +1095,8 @@ async function saveQuoteToSheet(quoteData) {
       author_name: (state && state.profile && state.profile.name) || quoteData.authorName || 'عضو جليس',
       page_number: quoteData.page || '',
       book_title: quoteData.book || '',
-      quote_text: quoteData.text || ''
+      quote_text: quoteData.text || '',
+      book_author: quoteData.bookAuthor || ''
     };
 
     await fetch(QUOTES_SHEET_URL, {
@@ -1005,6 +1126,7 @@ async function loadQuotesFromSheet() {
           id: q.id || `sheet-${idx}`,
           text: q.quote_text,
           book: q.book_title || 'من هامش القراءة',
+          bookAuthor: q.book_author || '',
           bookId: q.book_id || (matchingBook && matchingBook.id) || '',
           page: q.page_number ? String(q.page_number) : '',
           authorId: mem ? mem.id : 'cloud',
@@ -1210,15 +1332,52 @@ function recordedMeetingTimestamp(meeting) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/* أقسام أرشيف لقاءات النادي */
+const MEETING_ARCHIVE_TYPES = ['مناقشات الكتب', 'الزيارات', 'الاستضافات', 'اللقاءات الإثرائية'];
+
+function meetingArchiveTypeOf(item) {
+  const value = String((item && item.type) || '').replace(/\s+/g, ' ').trim();
+  if (!value) return '';
+  const found = MEETING_ARCHIVE_TYPES.find((type) => type === value);
+  return found || value;
+}
+
 function renderRecordedMeetings(root, meetings) {
   const list = root.querySelector('#recorded-meetings-list');
   if (!list) return;
-  if (!meetings.length) {
-    list.innerHTML = emptyHTML('calendar', 'لا توجد لقاءات مسجلة بعد', 'ستظهر هنا تسجيلات لقاءات جليس السابقة.');
+  const filter = root.dataset ? (root.dataset.meetingFilter || 'all') : 'all';
+  const visible = filter === 'all'
+    ? meetings
+    : meetings.filter((item) => meetingArchiveTypeOf(item) === filter);
+
+  /* شريط الأقسام مع العدّادات */
+  const bar = root.querySelector('#recorded-meetings-filters');
+  if (bar) {
+    const counts = {};
+    MEETING_ARCHIVE_TYPES.forEach((type) => { counts[type] = 0; });
+    meetings.forEach((item) => {
+      const type = meetingArchiveTypeOf(item);
+      if (type) counts[type] = (counts[type] || 0) + 1;
+    });
+    bar.innerHTML = ['all', ...MEETING_ARCHIVE_TYPES].map((key) => {
+      const label = key === 'all' ? 'الكل' : key;
+      const count = key === 'all' ? meetings.length : (counts[key] || 0);
+      return `<button class="chip-filter ${filter === key ? 'active' : ''}" type="button" data-archive-filter="${esc(key)}">${esc(label)} <span class="cat-count">${toAr(count)}</span></button>`;
+    }).join('');
+    bar.querySelectorAll('[data-archive-filter]').forEach((button) => {
+      button.addEventListener('click', () => {
+        root.dataset.meetingFilter = button.dataset.archiveFilter;
+        renderRecordedMeetings(root, meetings);
+      });
+    });
+  }
+
+  if (!visible.length) {
+    list.innerHTML = emptyHTML('calendar', 'لا توجد لقاءات في هذا القسم', 'ستظهر هنا تسجيلات لقاءات جليس السابقة.');
     return;
   }
 
-  list.innerHTML = meetings.map((item) => {
+  list.innerHTML = visible.map((item) => {
     const videoUrl = /^https?:\/\//i.test(String(item.videoUrl || '').trim()) ? String(item.videoUrl).trim() : '';
     const image = item.image
       ? `<img src="${esc(item.image)}" alt="صورة لقاء ${esc(item.title)}" loading="lazy">`
@@ -1227,13 +1386,15 @@ function renderRecordedMeetings(root, meetings) {
     const play = videoUrl
       ? `<a class="recorded-meeting-play" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer" aria-label="مشاهدة ${esc(item.title)}"><svg class="ic"><use href="#i-play"/></svg></a>`
       : '';
+    const type = meetingArchiveTypeOf(item);
 
     return `
-      <article class="recorded-meeting-card">
+      <article class="recorded-meeting-card${type ? ' has-type' : ''}">
         <div class="recorded-meeting-media">
           ${image}
           ${play}
           ${item.duration ? `<span class="recorded-meeting-duration">${esc(item.duration)}</span>` : ''}
+          ${type ? `<span class="recorded-meeting-type">${esc(type)}</span>` : ''}
         </div>
         <div class="recorded-meeting-content">
           <div class="recorded-meeting-meta">
@@ -1255,11 +1416,12 @@ function renderRecordedMeetings(root, meetings) {
 function openMeetingArchiveSheet() {
   const localMeetings = (state.recordedMeetings || []).slice().sort((a, b) => recordedMeetingTimestamp(b) - recordedMeetingTimestamp(a));
   openSheet(`
-    ${sheetHead('اللقاءات المسجلة', 'أرشيف لقاءات جليس السابقة')}
+    ${sheetHead('أرشيف النادي', 'لقاءات جليس السابقة مصنّفة حسب نوعها')}
     <div class="recorded-meetings-toolbar">
       <p>شاهد واستعد لحظات من لقاءاتنا السابقة.</p>
       ${isSupervisor() ? `<button class="btn btn-sm btn-primary" type="button" data-action="add-recorded-meeting"><svg class="ic"><use href="#i-plus"/></svg> إضافة تسجيل</button>` : ''}
     </div>
+    <div class="chips-row" id="recorded-meetings-filters"></div>
     <div id="recorded-meetings-list" class="recorded-meetings-list"><div class="recorded-meetings-loading">جارٍ تحميل اللقاءات…</div></div>`, (root) => {
     renderRecordedMeetings(root, localMeetings);
     loadRecordedMeetingsFromCloud().then(async (cloudMeetings) => {
@@ -1292,6 +1454,12 @@ function openRecordedMeetingComposer() {
         <div class="field"><label for="recorded-duration">مدة التسجيل</label><input class="input" id="recorded-duration" maxlength="20" placeholder="مثال: 1:35:55"></div>
       </div>
       <div class="field"><label for="recorded-video-url">رابط التسجيل</label><input class="input" id="recorded-video-url" type="url" required placeholder="https://…"></div>
+      <div class="field">
+        <label for="recorded-type">قسم الأرشيف</label>
+        <select class="input" id="recorded-type">
+          ${MEETING_ARCHIVE_TYPES.map((type) => `<option value="${esc(type)}">${esc(type)}</option>`).join('')}
+        </select>
+      </div>
       <div class="field">
         <label for="recorded-image-input">صورة مصغرة للقاء</label>
         <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>تظهر كغلاف للتسجيل</small></label>
@@ -1353,6 +1521,7 @@ function openRecordedMeetingComposer() {
         duration: root.querySelector('#recorded-duration').value.trim(),
         videoUrl,
         image: imageData,
+        type: root.querySelector('#recorded-type').value,
         createdAt: Date.now(),
         createdBy: currentMember.name
       };
@@ -2222,6 +2391,32 @@ function visibleMemberArticles() {
     : [];
 }
 
+const AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+/* تاريخ طويل بصيغة: 7 نوفمبر 2026 */
+function formatLongDate(value) {
+  const raw = value instanceof Date ? value : new Date(Number(value) || Date.parse(String(value || '')));
+  if (!Number.isFinite(raw.getTime()) || raw.getTime() <= 0) return '';
+  return `${raw.getDate()} ${AR_MONTHS[raw.getMonth()]} ${raw.getFullYear()}`;
+}
+
+function articleDateLabel(article) {
+  const stamp = articleTimestamp(article);
+  if (stamp) return formatLongDate(stamp);
+  return article && article.time ? String(article.time) : '';
+}
+
+/* وقت الاقتباس: إن كان نصًا تاريخيًا نعرضه بالصيغة الطويلة، وإلا نُبقيه كما هو */
+function quoteDateLabel(quote) {
+  const value = String((quote && quote.time) || '').trim();
+  if (!value) return '';
+  if (/[\\/]|،|,/.test(value)) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return formatLongDate(parsed);
+  }
+  return value;
+}
+
 function articleTimestamp(article) {
   const value = article && article.createdAt;
   if (value instanceof Date) return value.getTime();
@@ -2493,30 +2688,48 @@ function quoteSerialNumber(quote) {
 
 function quoteCardHTML(quote, options = {}) {
   const saved = state.savedQuotes.includes(quote.id);
+  const liked = state.likedQuotes.includes(quote.id);
+  const likes = Number((state.likeCounts && state.likeCounts.quotes && state.likeCounts.quotes[quote.id]) || 0);
+  const selected = (selectionQuotesCache || []).some((item) => String(item.id) === String(quote.id));
   const name = authorNameOf(quote);
   const color = authorColorOf(quote);
   const canDelete = isSupervisor();
+  const ownSize = Number((state.quoteFontSizes || {})[quote.id] || 0);
+  const textSize = ownSize || clamp(Number(state.quoteFontSize) || 19, 14, 28);
+  const textStyle = ownSize ? ` style="font-size:${textSize}px"` : '';
   const compact = Boolean(options.compact);
   const cardClasses = `quote-card${compact ? ' quote-card-compact' : ' quote-card-numbered'}${options.latest ? ' quote-latest' : ''}`;
   return `
     <article class="${cardClasses}">
       ${compact ? `<div class="home-quote-eyebrow"><span class="quote-number-stamp"><b class="quote-number-badge">${toAr(options.number || quoteSerialNumber(quote))}</b><img class="quote-number-image" src="quote-marks.svg" alt="" aria-hidden="true"></span>${options.latest ? '<span class="quote-new-badge">جديد</span>' : ''}</div>` : `<div class="quote-serial"><span class="quote-number-stamp"><b class="quote-number-badge">${toAr(options.number || quoteSerialNumber(quote))}</b><img class="quote-number-image" src="quote-marks.svg" alt="" aria-hidden="true"></span></div>`}
-      <p class="quote-text">${esc(quote.text)}</p>
-      <div class="quote-source">${esc(quote.book || 'من هامش القراءة')}${quote.page ? `<span> · ص ${esc(quote.page)}</span>` : ''}</div>
+      <p class="quote-text${quote.text && quote.text.length > 240 ? ' is-long' : ''}" data-quote-body="${esc(quote.id)}"${textStyle}>${esc(quote.text)}</p>
+      ${quote.text && quote.text.length > 240 ? `<button class="quote-more" type="button" data-action="expand-quote" data-id="${esc(quote.id)}">قراءة المزيد</button>` : ''}
+      <div class="quote-source">${esc(quote.book || 'من هامش القراءة')}${quote.bookAuthor ? `<span> · ${esc(quote.bookAuthor)}</span>` : ''}${quote.page ? `<span> · ص ${esc(quote.page)}</span>` : ''}
+        <span class="quote-font-controls" role="group" aria-label="حجم خط الاقتباس">
+          <button type="button" class="font-size-btn" data-font-quote="${esc(quote.id)}" data-font-step="-1" aria-label="تصغير خط الاقتباس">أ−</button>
+          <button type="button" class="font-size-btn" data-font-quote="${esc(quote.id)}" data-font-step="1" aria-label="تكبير خط الاقتباس">أ+</button>
+        </span>
+      </div>
       <div class="quote-foot">
         <div class="quote-author">
           <button class="quote-author-link" type="button" data-action="open-member-profile" data-name="${esc(name)}">
             ${avatarHTML(name, color)}
-            <div><strong>${esc(name)}${isMine(quote) ? ' · أنت' : ''}</strong><small>${esc(quote.time || '')}</small></div>
+            <div><strong>${esc(name)}${isMine(quote) ? ' · أنت' : ''}</strong><small>${esc(quoteDateLabel(quote))}</small></div>
           </button>
         </div>
         <div class="quote-actions">
+          <button type="button" data-action="like-quote" data-id="${quote.id}" class="quote-like${liked ? ' active' : ''}" aria-label="إعجاب بالاقتباس" aria-pressed="${liked ? 'true' : 'false'}">
+            <svg class="ic"><use href="#i-heart"/></svg>${likes ? `<span>${toAr(likes)}</span>` : ''}
+          </button>
           <button type="button" data-action="save-quote" data-id="${quote.id}" class="${saved ? 'saved' : ''}" aria-label="حفظ الاقتباس">
             <svg class="ic"><use href="#i-bookmark"/></svg>
           </button>
           <button type="button" data-action="share-quote" data-id="${quote.id}" aria-label="مشاركة الاقتباس">
             <svg class="ic"><use href="#i-share"/></svg>
           </button>
+          ${canDelete ? `<button type="button" data-action="toggle-selection-quote" data-id="${quote.id}" class="quote-select${selected ? ' active' : ''}" aria-label="إضافة إلى مختارات النادي" aria-pressed="${selected ? 'true' : 'false'}">
+            <svg class="ic"><use href="#i-star"/></svg>
+          </button>` : ''}
           ${canDelete ? `<button type="button" data-action="delete-quote" data-id="${quote.id}" class="danger" aria-label="حذف الاقتباس">
             <svg class="ic"><use href="#i-trash"/></svg>
           </button>` : ''}
@@ -2526,7 +2739,7 @@ function quoteCardHTML(quote, options = {}) {
 }
 
 function renderQuotes() {
-  const allowedFilters = ['all', 'mine', 'saved'];
+  const allowedFilters = ['all', 'mine', 'saved', 'popular'];
   const filter = allowedFilters.includes(state.quoteFilter) ? state.quoteFilter : 'all';
   $$('#quote-filters button').forEach((button) => {
     const active = button.dataset.qfilter === filter;
@@ -2537,11 +2750,20 @@ function renderQuotes() {
   let list = state.quotes;
   if (filter === 'mine') list = list.filter((quote) => isMine(quote));
   if (filter === 'saved') list = list.filter((quote) => state.savedQuotes.includes(quote.id));
+  if (filter === 'popular') {
+    const counts = (state.likeCounts && state.likeCounts.quotes) || {};
+    list = list.slice().sort((a, b) => {
+      const likesA = Number(counts[a.id] || 0);
+      const likesB = Number(counts[b.id] || 0);
+      return likesB - likesA || (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+    });
+  }
 
   const labels = {
     all: ['فنجان قهوة وهامش', 'شارك أول اقتباس يوقفك عند كتاب.'],
     mine: ['لم تنشر اقتباساً بعد', 'اضغط «اقتبس» وشارك جملة من كتابك.'],
-    saved: ['لا اقتباسات محفوظة', 'احفظ ما يلامسك لتعود إليه لاحقاً.']
+    saved: ['لا اقتباسات محفوظة', 'احفظ ما يلامسك لتعود إليه لاحقاً.'],
+    popular: ['لا توجد إعجابات بعد', 'ستظهر هنا أكثر الاقتباسات إعجابًا من الأعضاء.']
   };
 
   $('#quotes-feed').innerHTML = list.length
@@ -2719,6 +2941,7 @@ function libraryBookCardHTML(book) {
           <svg class="ic"><use href="#i-star"/></svg>${toAr(getAverageRating(book.id, book.rating))}<span>(${toAr(getBookRatings(book.id).length)})</span>
         </button>
         ${inLibrary ? '<span class="book-in-my-library">في مكتبتي</span>' : ''}
+        ${book.pdfUrl ? '<span class="book-pdf-badge">PDF</span>' : ''}
       </div>
       ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
         ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
@@ -2776,11 +2999,54 @@ function renderClubBooks() {
     </section>`).join('');
 }
 
+/* قراءة بيانات الكتاب من نص مستخرج (صورة) وتوزيعها على حقولها */
+function parseBookDataFromText(text) {
+  const raw = String(text || '').replace(/\r/g, '');
+  const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
+  const data = { title: '', author: '', pages: 0, year: '', report: '' };
+  if (!lines.length) return data;
+
+  const pagesMatch = raw.match(/(\d{1,4})\s*(?:صفحة|صفحات|ص\b|pages?)/i)
+    || raw.match(/(?:صفحة|صفحات|pages?)\s*[:\-]?\s*(\d{1,4})/i);
+  if (pagesMatch) data.pages = Number(pagesMatch[1]) || 0;
+
+  const yearMatch = raw.match(/\b(19\d{2}|20\d{2}|21\d{2})\b/);
+  if (yearMatch) data.year = Number(yearMatch[1]);
+
+  const authorMatch = raw.match(/(?:تأليف|اعداد|إعداد|تصدير|ترجمه|ترجمة|by|author)\s*[:\-–—]?\s*([^\n]{2,60})/i);
+  const skip = new Set();
+  if (authorMatch) {
+    data.author = authorMatch[1].split(/[،,]/)[0].trim().replace(/[.،,؛;]+$/, '');
+    lines.forEach((line) => { if (data.author && line.indexOf(data.author) >= 0) skip.add(line); });
+  }
+
+  const candidates = lines.filter((line) => !skip.has(line) && !/^[\d\s.,٠-٩]+$/.test(line));
+  const titleIndex = candidates.findIndex((line) => line.length >= 4);
+  if (titleIndex >= 0) {
+    data.title = candidates[titleIndex].slice(0, 120);
+    candidates.splice(titleIndex, 1);
+  }
+  const report = candidates.join('\n').trim();
+  data.report = report ? report.slice(0, 900) : '';
+  return data;
+}
+
 function openAddBook() {
   const bookCategories = getLibraryCategoryOptions();
   openSheet(`
     ${sheetHead('إضافة كتاب لمكتبة النادي', 'أضف كتاباً تود مشاركته مع أعضاء جليس.')}
     <form id="add-book-form" novalidate>
+      <div class="field">
+        <label>بيانات الكتاب من صورة</label>
+        <div class="quote-dropzone" id="book-data-dropzone">
+          <svg class="ic"><use href="#i-article"/></svg>
+          <strong>أسقط صورة الكتاب هنا</strong>
+          <span>نعبّئ العنوان والمؤلف وعدد الصفحات وسنة النشر والتقرير تلقائيًا</span>
+          <button type="button" class="btn btn-sm btn-ghost" id="book-data-pick">أو اختر صورة</button>
+          <input type="file" id="book-data-image" accept="image/*" hidden>
+          <small id="book-data-status" class="meeting-image-status"></small>
+        </div>
+      </div>
       <div class="field">
         <label for="add-book-title">عنوان الكتاب <span class="label-opt">مطلوب</span></label>
         <input class="input" id="add-book-title" maxlength="120" placeholder="مثال: حياة في الإدارة" required>
@@ -2820,6 +3086,11 @@ function openAddBook() {
         <div class="image-preview crop-preview-wrap" id="image-preview" hidden></div>
         <small id="add-book-image-status" class="meeting-image-status"></small>
       </div>
+      <div class="field">
+        <label for="add-book-pdf">ملف الكتاب PDF (اختياري)</label>
+        <input class="input" id="add-book-pdf" type="file" accept="application/pdf,.pdf">
+        <small id="add-book-pdf-status" class="meeting-image-status">يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.</small>
+      </div>
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> إضافة الكتاب
       </button>
@@ -2828,6 +3099,55 @@ function openAddBook() {
     const preview = root.querySelector('#image-preview');
     const status = root.querySelector('#add-book-image-status');
     let imageData = null;
+
+    /* ---- اسقاط صورة لقراءة بيانات الكتاب وتوزيعها على حقولها ---- */
+    const bookDropzone = root.querySelector('#book-data-dropzone');
+    const bookImageInput = root.querySelector('#book-data-image');
+    const bookStatus = root.querySelector('#book-data-status');
+    const handleBookImage = async (file) => {
+      if (!file) return;
+      if (!file.type || !file.type.startsWith('image/')) { toast('اختر ملف صورة صالحًا', 'info'); return; }
+      bookStatus.textContent = 'جارٍ قراءة بيانات الكتاب من الصورة…';
+      try {
+        const text = await extractTextFromImage(file, (message) => { bookStatus.textContent = message; });
+        if (!text) { bookStatus.textContent = 'لم أتعرّف على نص في الصورة.'; return; }
+        const parsed = parseBookDataFromText(text);
+        const filled = [];
+        if (parsed.title) { root.querySelector('#add-book-title').value = parsed.title; filled.push('العنوان'); }
+        if (parsed.author) { root.querySelector('#add-book-author').value = parsed.author; filled.push('المؤلف'); }
+        if (parsed.pages) { root.querySelector('#add-book-pages').value = parsed.pages; filled.push('عدد الصفحات'); }
+        if (parsed.year) { root.querySelector('#add-book-year').value = parsed.year; filled.push('سنة النشر'); }
+        if (parsed.report) { root.querySelector('#add-book-report').value = parsed.report; filled.push('التقرير'); }
+        bookStatus.textContent = filled.length
+          ? `تم التعرّف على: ${filled.join('، ')} — راجعها وعدّل ما تشاء.`
+          : 'تعذّر التعرّف على بيانات الكتاب — أدخلها يدويًا.';
+        if (filled.length) toast('تم استخراج بيانات الكتاب من الصورة', 'check');
+      } catch (error) {
+        bookStatus.textContent = (error && error.message) || 'تعذر قراءة الصورة — أدخل البيانات يدويًا.';
+      }
+    };
+    if (bookDropzone) {
+      ['dragenter', 'dragover'].forEach((type) => bookDropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        bookDropzone.classList.add('is-over');
+      }));
+      ['dragleave', 'drop'].forEach((type) => bookDropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        bookDropzone.classList.remove('is-over');
+      }));
+      bookDropzone.addEventListener('drop', (event) => {
+        const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        handleBookImage(file);
+      });
+    }
+    const bookPick = root.querySelector('#book-data-pick');
+    if (bookPick && bookImageInput) bookPick.addEventListener('click', () => bookImageInput.click());
+    if (bookImageInput) bookImageInput.addEventListener('change', () => {
+      const file = bookImageInput.files && bookImageInput.files[0];
+      handleBookImage(file);
+    });
 
     imageInput.addEventListener('change', async (event) => {
       const file = event.target.files[0];
@@ -2866,6 +3186,18 @@ function openAddBook() {
       }
 
       const finalCover = imageData || null;
+      let pdfUrl = '';
+      const pdfFile = root.querySelector('#add-book-pdf').files && root.querySelector('#add-book-pdf').files[0];
+      if (pdfFile) {
+        const pdfStatus = root.querySelector('#add-book-pdf-status');
+        pdfStatus.textContent = 'جارٍ رفع ملف PDF…';
+        try {
+          pdfUrl = await uploadFileToCloud(pdfFile);
+          pdfStatus.textContent = 'تم رفع الملف بنجاح.';
+        } catch (error) {
+          pdfStatus.textContent = error.message || 'تعذر رفع الملف';
+        }
+      }
       const newBook = {
         id: `club-${Date.now()}`,
         title,
@@ -2877,6 +3209,7 @@ function openAddBook() {
         coverColor: color,
         coverImage: finalCover,
         coverColor2: '#14291D',
+        pdfUrl,
         createdAt: Date.now(),
         memberId: currentMember.id,
         memberName: state.profile.name,
@@ -2937,6 +3270,11 @@ function openEditClubBook(bookId) {
         <div id="edit-club-book-image-preview-wrap" class="meeting-image-preview-wrap" ${book.coverImage ? '' : 'hidden'}>${book.coverImage ? `<img id="edit-club-book-image-preview" src="${esc(book.coverImage)}" alt="غلاف ${esc(book.title)}">` : '<img id="edit-club-book-image-preview" alt="معاينة الغلاف">'}<button type="button" class="meeting-image-remove" id="edit-club-book-image-remove" aria-label="إزالة الصورة">×</button></div>
         <small id="edit-club-book-image-status" class="meeting-image-status"></small>
       </div>
+      <div class="field">
+        <label for="edit-club-book-pdf">ملف الكتاب PDF</label>
+        <input class="input" id="edit-club-book-pdf" type="file" accept="application/pdf,.pdf">
+        <small id="edit-club-book-pdf-status" class="meeting-image-status">${book.pdfUrl ? 'يوجد ملف PDF مرفوع — ارفع ملفًا جديدًا لاستبداله.' : 'يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.'}</small>
+      </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> حفظ التعديلات</button>
     </form>`, (root) => {
     let imageData = book.coverImage || '';
@@ -2979,6 +3317,19 @@ function openEditClubBook(bookId) {
       const title = root.querySelector('#edit-club-book-title').value.trim();
       if (!title) { toast('أدخل عنوان الكتاب', 'info'); return; }
 
+      let pdfUrl = book.pdfUrl || '';
+      const pdfFile = root.querySelector('#edit-club-book-pdf').files && root.querySelector('#edit-club-book-pdf').files[0];
+      if (pdfFile) {
+        const pdfStatus = root.querySelector('#edit-club-book-pdf-status');
+        pdfStatus.textContent = 'جارٍ رفع ملف PDF…';
+        try {
+          pdfUrl = await uploadFileToCloud(pdfFile);
+          pdfStatus.textContent = 'تم رفع الملف بنجاح.';
+        } catch (error) {
+          pdfStatus.textContent = error.message || 'تعذر رفع الملف';
+        }
+      }
+
       const updatedBook = {
         ...book,
         title,
@@ -2989,6 +3340,7 @@ function openEditClubBook(bookId) {
         year: Number(root.querySelector('#edit-club-book-year').value) || '',
         coverColor: root.querySelector('#edit-club-book-color').value,
         coverImage: imageData,
+        pdfUrl,
         updatedAt: Date.now()
       };
 
@@ -3042,11 +3394,16 @@ function openAddMyBook() {
         <label for="my-book-color">لون الغلاف</label>
         <input class="input" id="my-book-color" type="color" value="#1E3A2B">
       </div>
+      <div class="field">
+        <label for="my-book-pdf">ملف الكتاب PDF (اختياري)</label>
+        <input class="input" id="my-book-pdf" type="file" accept="application/pdf,.pdf">
+        <small id="my-book-pdf-status" class="meeting-image-status">يمكنك فتح الكتاب مباشرة من مكتبتك.</small>
+      </div>
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> أضف إلى مكتبتي
       </button>
     </form>`, (root) => {
-    root.querySelector('#add-my-book-form').addEventListener('submit', (event) => {
+    root.querySelector('#add-my-book-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const title = root.querySelector('#my-book-title').value.trim();
       const author = root.querySelector('#my-book-author').value.trim() || 'مؤلف غير محدد';
@@ -3064,8 +3421,21 @@ function openAddMyBook() {
         return;
       }
 
+      let pdfUrl = '';
+      const pdfFile = root.querySelector('#my-book-pdf').files && root.querySelector('#my-book-pdf').files[0];
+      if (pdfFile) {
+        const pdfStatus = root.querySelector('#my-book-pdf-status');
+        pdfStatus.textContent = 'جارٍ رفع ملف PDF…';
+        try {
+          pdfUrl = await uploadFileToCloud(pdfFile);
+          pdfStatus.textContent = 'تم رفع الملف بنجاح.';
+        } catch (error) {
+          pdfStatus.textContent = error.message || 'تعذر رفع الملف';
+        }
+      }
+
       const id = `my-${Date.now()}`;
-      state.personalBooks.unshift({
+      const personalBook = {
         id,
         title,
         author,
@@ -3074,9 +3444,12 @@ function openAddMyBook() {
         c1: color,
         c2: '#14291D',
         coverColor: color,
+        pdfUrl,
         rating: 0,
-        available: 0
-      });
+        available: 0,
+        createdAt: Date.now()
+      };
+      state.personalBooks.unshift(personalBook);
       state.myBooks.push({
         bookId: id,
         status,
@@ -3091,6 +3464,13 @@ function openAddMyBook() {
       renderProfile();
       toast(`أُضيف «${title}» إلى مكتبتك`, 'book');
       celebrate();
+      /* حفظ في السحابة حتى تظهر في جهازك الجديد */
+      savePersonalBookToCloud(personalBook).then((result) => {
+        if (result && result.success === true) {
+          syncState.personalBooks.add(String(id));
+          persistSyncState(currentMember.id);
+        }
+      });
     });
   });
 }
@@ -3148,6 +3528,9 @@ function renderMyBooks() {
     const want = item.status === 'want'
       ? `<button class="btn btn-sm btn-ghost" type="button" data-action="start-book" data-id="${book.id}" style="margin-top:8px">ابدأ القراءة</button>`
       : '';
+    const pdf = book.pdfUrl
+      ? `<a class="btn btn-sm btn-ghost my-book-pdf" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer" style="margin-top:8px"><svg class="ic"><use href="#i-article"/></svg> فتح ملف PDF</a>`
+      : '';
     return `
       <article class="my-book">
         <div class="my-book-cover" style="background:linear-gradient(150deg, ${book.c1}, ${book.c2})">${esc(book.title)}</div>
@@ -3157,7 +3540,7 @@ function renderMyBooks() {
             <span>${esc(book.author)}</span>
           </div>
           <span class="my-status ${item.status}">${STATUS_LABEL[item.status]}</span>
-          ${progress}${finished}${want}
+          ${progress}${finished}${want}${pdf}
         </div>
       </article>`;
   }).join('');
@@ -3168,28 +3551,51 @@ function renderMyBooks() {
    -------------------------------------------------------------------------- */
 function renderArticles() {
   const visibleArticles = visibleMemberArticles();
-  const filtered = visibleArticles.filter((article) => {
+  const counts = (state.likeCounts && state.likeCounts.articles) || {};
+  let filtered = visibleArticles.filter((article) => {
     if (state.articleFilter === 'saved' && !state.savedArticles.includes(article.id)) return false;
+    if (state.articleFilter === 'mine' && !isMine(article)) return false;
     const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
     if (cat !== ARTICLE_CATEGORIES[0] && cat !== 'all' && article.category !== cat) return false;
     return true;
   });
+  if (state.articleFilter === 'popular') {
+    filtered = filtered.slice().sort((a, b) => {
+      const likesA = Number(counts[a.id] || 0);
+      const likesB = Number(counts[b.id] || 0);
+      return likesB - likesA || (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+    });
+  }
 
   $('#articles-list').innerHTML = filtered.length ? filtered.map((article) => {
     const saved = state.savedArticles.includes(article.id);
+    const liked = state.likedArticles.includes(article.id);
+    const likes = Number(counts[article.id] || 0);
+    const ownSize = Number((state.articleFontSizes || {})[article.id] || 0);
+    const excerptStyle = ownSize ? ` style="font-size:${Math.min(16, Math.max(9, ownSize - 2))}px"` : '';
     return `
       <article class="article-row" data-action="open-article" data-id="${article.id}">
         <div class="ar-topline">
           <span class="chip chip-soft">${esc(article.category)}</span>
           <span class="ar-reading-time"><svg class="ic"><use href="#i-clock"/></svg>${toAr(article.read || 3)} دقائق</span>
+          <span class="ar-font-controls" role="group" aria-label="حجم خط هذا المقال">
+            <button type="button" class="font-size-btn" data-font-article="${esc(article.id)}" data-font-step="-1" aria-label="تصغير خط هذا المقال">أ−</button>
+            <button type="button" class="font-size-btn" data-font-article="${esc(article.id)}" data-font-step="1" aria-label="تكبير خط هذا المقال">أ+</button>
+          </span>
         </div>
         <h3 class="ar-title">${esc(article.title)}</h3>
-        <p class="ar-excerpt">${esc(article.excerpt || article.body || '')}</p>
+        <p class="ar-excerpt"${excerptStyle}>${esc(article.excerpt || article.body || '')}</p>
         <div class="ar-bottomline">
-          <div class="ar-meta"><button class="ar-author" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">${esc(authorNameOf(article))}</button><span>·</span><span>${esc(article.time || '')}</span></div>
+          <div class="ar-meta"><button class="ar-author" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">${esc(authorNameOf(article))}</button><span>·</span><span>${esc(articleDateLabel(article))}</span></div>
           <div class="ar-actions">
-            <button class="ar-save ${saved ? 'saved' : ''}" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
+            <button class="ar-save ar-like${liked ? ' liked' : ''}" type="button" data-action="like-article" data-id="${article.id}" aria-label="إعجاب بالمقال" aria-pressed="${liked ? 'true' : 'false'}">
+              <svg class="ic"><use href="#i-heart"/></svg>${likes ? `<span>${toAr(likes)}</span>` : ''}
+            </button>
+            <button class="ar-save" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
               <svg class="ic"><use href="#i-bookmark"/></svg>
+            </button>
+            <button class="ar-save" type="button" data-action="share-article" data-id="${article.id}" aria-label="مشاركة المقال">
+              <svg class="ic"><use href="#i-share"/></svg>
             </button>
             ${isSupervisor() ? `<button class="ar-save" type="button" data-action="delete-article" data-id="${article.id}" aria-label="حذف المقال">
               <svg class="ic"><use href="#i-trash"/></svg>
@@ -3348,7 +3754,7 @@ async function openMemberProfileSheet(name) {
           ${myQuotes.length ? myQuotes.map((q) => `
             <blockquote class="member-contribution-quote">
               <p>«${esc(q.text)}»</p>
-              <footer>${esc(q.book || 'من هامش القراءة')}${q.page ? ` · ص ${esc(q.page)}` : ''} · ${esc(q.time || '')}</footer>
+              <footer>${esc(q.book || 'من هامش القراءة')}${q.bookAuthor ? ` — ${esc(q.bookAuthor)}` : ''}${q.page ? ` · ص ${esc(q.page)}` : ''} · ${esc(quoteDateLabel(q))}</footer>
             </blockquote>`).join('') : '<p class="member-contribution-empty">لا اقتباسات بعد</p>'}
         </div>
         <div class="member-contrib-panel" data-contrib-panel="articles" hidden>
@@ -3357,7 +3763,7 @@ async function openMemberProfileSheet(name) {
               <span class="chip chip-soft">${esc(a.category || 'قراءة')}</span>
               <h5>${esc(a.title)}</h5>
               <p>${esc(a.excerpt || a.body || '').slice(0, 120)}</p>
-              <small>${esc(a.time || '')} · ${toAr(a.read || 3)} دقائق</small>
+              <small>${esc(articleDateLabel(a))} · ${toAr(a.read || 3)} دقائق</small>
             </article>`).join('') : '<p class="member-contribution-empty">لا مقالات بعد</p>'}
         </div>
       </section>
@@ -3417,6 +3823,18 @@ function setAvatarContent(element, name, photo) {
    -------------------------------------------------------------------------- */
 let toastTimer = null;
 
+/* --------------------------------------------------------------------------
+   حجم خط القراءة — ظاهر في شاشة الاقتباسات وشاشة المقالات ويؤثر فعليًا
+   -------------------------------------------------------------------------- */
+function applyReadingFontSizes() {
+  const quoteSize = clamp(Math.round(Number(state && state.quoteFontSize) || 19), 14, 28);
+  const articleSize = clamp(Math.round(Number(state && state.articleReadFontSize) || 12), 10, 20);
+  const root = document.documentElement;
+  root.style.setProperty('--quote-font', `${quoteSize}px`);
+  root.style.setProperty('--article-font', `${Math.max(9, articleSize - 2)}px`);
+  root.style.setProperty('--reader-font', `${articleSize}px`);
+}
+
 function toast(message, icon = 'sparkles') {
   const el = $('#toast');
   el.innerHTML = `<svg class="ic"><use href="#i-${icon}"/></svg><span>${esc(message)}</span>`;
@@ -3456,9 +3874,12 @@ function sheetHead(title, subtitle = '') {
     </div>`;
 }
 
+let sheetGeneration = 0;
+
 function openSheet(html, onOpen, options = {}) {
   const root = $('#sheet-root');
   const fullscreen = Boolean(options.fullscreen);
+  sheetGeneration += 1;
   root.innerHTML = `
     <div class="sheet-backdrop" data-close-sheet></div>
     <div class="sheet ${fullscreen ? 'sheet-full' : ''}" role="dialog" aria-modal="true">
@@ -3476,9 +3897,11 @@ function openSheet(html, onOpen, options = {}) {
 
 function closeSheet() {
   const root = $('#sheet-root');
+  const generation = sheetGeneration;
   root.classList.remove('open');
   setTimeout(() => {
-    if (!root.classList.contains('open')) {
+    /* لا نمسح لوحة جديدة فُتحت بعد هذا الإغلاق */
+    if (!root.classList.contains('open') && sheetGeneration === generation) {
       root.hidden = true;
       root.innerHTML = '';
     }
@@ -3573,7 +3996,7 @@ function openBookSheet(id) {
       </div>
     </section>
     ${progress}
-    <div class="book-detail-actions">${mainAction}${secondaryAction}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}</div>
+    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}</div>
     <div class="book-detail-tabs" role="tablist" aria-label="تفاصيل الكتاب">
       <button class="active" type="button" data-book-panel="details" role="tab" aria-selected="true">تفاصيل الكتاب</button>
       <button type="button" data-book-panel="reviews" role="tab" aria-selected="false">تقييمات ومراجعات <span>${toAr(ratings.length)}</span></button>
@@ -3622,6 +4045,76 @@ function openBookSheet(id) {
   });
 }
 
+/* ---- استخراج النص من صورة (Tesseract.js) ---- */
+let tesseractLoader = null;
+function loadTesseractEngine() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractLoader) return tesseractLoader;
+  tesseractLoader = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    script.async = true;
+    script.onload = () => (window.Tesseract ? resolve(window.Tesseract) : reject(new Error('تعذر تحميل محرك استخراج النص')));
+    script.onerror = () => reject(new Error('تعذر تحميل محرك استخراج النص — تأكد من وجود إنترنت'));
+    document.head.appendChild(script);
+  });
+  return tesseractLoader;
+}
+
+/* تهيئة الصورة قبل القراءة: تدرّج رمادي + تباين أعلى (يحسّن دقة العربي) */
+async function preprocessImageForOcr(file) {
+  if (typeof createImageBitmap !== 'function') return file;
+  let bitmap = null;
+  try { bitmap = await createImageBitmap(file); } catch (error) { return file; }
+  if (!bitmap || !bitmap.width) return file;
+  const scale = Math.min(1, 1600 / bitmap.width);
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return file;
+  context.drawImage(bitmap, 0, 0, width, height);
+  try { bitmap.close(); } catch (error) { /* تجاهل */ }
+  try {
+    const image = context.getImageData(0, 0, width, height);
+    const pixels = image.data;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const gray = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+      const value = gray > 145 ? 255 : 0;
+      pixels[i] = value;
+      pixels[i + 1] = value;
+      pixels[i + 2] = value;
+    }
+    context.putImageData(image, 0, 0);
+  } catch (error) { /* تجاهل */ }
+  return canvas;
+}
+
+async function extractTextFromImage(file, onProgress) {
+  const engine = await loadTesseractEngine();
+  const options = {
+    logger: (message) => {
+      if (!onProgress || !message) return;
+      if (message.status === 'recognizing text' && typeof message.progress === 'number') {
+        onProgress(`جارٍ قراءة النص… ${toAr(Math.round(message.progress * 100))}٪`);
+      } else if (message.status && message.status !== 'recognizing text') {
+        onProgress('جارٍ تجهيز المحرك…');
+      }
+    }
+  };
+  let prepared = file;
+  try { prepared = await preprocessImageForOcr(file); } catch (error) { prepared = file; }
+  let result = await engine.recognize(prepared, 'ara+eng', options);
+  let text = String((result && result.data && result.data.text) || '').trim();
+  if (!text) {
+    result = await engine.recognize(file, 'ara+eng', options);
+    text = String((result && result.data && result.data.text) || '').trim();
+  }
+  return text.replace(/\n{3,}/g, '\n\n');
+}
+
 function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
   const presetBook = presetBookId ? (getBook(presetBookId) || (state.clubBooks || []).find((b) => String(b.id) === String(presetBookId))) : null;
   const initialBook = presetBook ? presetBook.title : (presetBookTitle || '');
@@ -3639,7 +4132,15 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
     <form id="quote-form" novalidate>
       <div class="field">
         <label for="quote-text">نص الاقتباس</label>
-        <textarea class="input" id="quote-text" rows="4" maxlength="400" placeholder="اكتب الجملة التي توقفت عندها…" required></textarea>
+        <textarea class="input" id="quote-text" rows="5" maxlength="1500" placeholder="اكتب الجملة التي توقفت عندها…" required></textarea>
+      </div>
+      <div class="quote-dropzone" id="quote-dropzone">
+        <svg class="ic"><use href="#i-article"/></svg>
+        <strong>أسقط صورة هنا</strong>
+        <span>نستخرج نص الاقتباس من الصورة تلقائيًا (عربي أو إنجليزي)</span>
+        <button type="button" class="btn btn-sm btn-ghost" id="quote-image-pick">أو اختر صورة</button>
+        <input type="file" id="quote-image-input" accept="image/*" hidden>
+        <small id="quote-image-status" class="meeting-image-status"></small>
       </div>
       <div class="field-grid">
         <div class="field">
@@ -3648,9 +4149,13 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
           <datalist id="quote-books">${quoteBookOptions.map((title) => `<option value="${esc(title)}"></option>`).join('')}</datalist>
         </div>
         <div class="field">
-          <label for="quote-page">الصفحة</label>
-          <input class="input" id="quote-page" inputmode="numeric" maxlength="8" placeholder="اختياري">
+          <label for="quote-book-author">اسم مؤلف الكتاب</label>
+          <input class="input" id="quote-book-author" maxlength="80" placeholder="مثال: غازي القصيبي" value="${esc(presetBook ? (presetBook.author || '') : '')}">
         </div>
+      </div>
+      <div class="field">
+        <label for="quote-page">الصفحة</label>
+        <input class="input" id="quote-page" inputmode="numeric" maxlength="8" placeholder="اختياري">
       </div>
       <div class="quote-preview-label"><svg class="ic"><use href="#i-quote"/></svg> معاينة الاقتباس</div>
       <div class="quote-preview">
@@ -3663,25 +4168,77 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
     </form>`, (root) => {
     const text = root.querySelector('#quote-text');
     const book = root.querySelector('#quote-book');
+    const bookAuthor = root.querySelector('#quote-book-author');
     const page = root.querySelector('#quote-page');
     const preview = root.querySelector('#quote-preview-text');
     const source = root.querySelector('#quote-preview-source');
     const form = root.querySelector('#quote-form');
+    const dropzone = root.querySelector('#quote-dropzone');
+    const imageInput = root.querySelector('#quote-image-input');
+    const imageStatus = root.querySelector('#quote-image-status');
     let presetId = initialBookId;
 
     const update = () => {
       const value = text.value.trim();
       preview.textContent = value || 'سيظهر اقتباسك هنا…';
       preview.classList.toggle('is-empty', !value);
-      source.textContent = [book.value.trim() || 'هامش الكتاب', page.value.trim() ? `ص ${page.value.trim()}` : '', state.profile.name]
-        .filter(Boolean).join(' · ');
+      source.textContent = [
+        book.value.trim() || 'هامش الكتاب',
+        bookAuthor.value.trim() ? `تأليف: ${bookAuthor.value.trim()}` : '',
+        page.value.trim() ? `ص ${page.value.trim()}` : '',
+        state.profile.name
+      ].filter(Boolean).join(' · ');
     };
-    [text, book, page].forEach((field) => field.addEventListener('input', () => {
+    [text, book, bookAuthor, page].forEach((field) => field.addEventListener('input', () => {
       // إذا غيّر العضو اسم الكتاب يدويًا نعيد البحث عن المعرف، وإلا نحتفظ بالمعرّف المضبوط من صفحة الكتاب
       if (presetId && normalizeBookTitle(book.value.trim()) !== normalizeBookTitle(initialBook)) presetId = '';
       update();
     }));
     update();
+
+    /* ---- استخراج نص الاقتباس من صورة ---- */
+    const handleQuoteImage = async (file) => {
+      if (!file) return;
+      if (!file.type || !file.type.startsWith('image/')) { toast('اختر ملف صورة صالحًا', 'info'); return; }
+      imageStatus.textContent = 'جارٍ تحليل الصورة…';
+      try {
+        const extracted = await extractTextFromImage(file, (message) => { imageStatus.textContent = message; });
+        if (!extracted) {
+          imageStatus.textContent = 'لم أتعرّف على نص في الصورة — اكتب الاقتباس يدويًا.';
+          return;
+        }
+        text.value = extracted.slice(0, 1500);
+        update();
+        imageStatus.textContent = 'تم استخراج النص — راجعه وعدّل ما تشاء قبل النشر.';
+        toast('تم استخراج نص الاقتباس من الصورة', 'check');
+      } catch (error) {
+        imageStatus.textContent = (error && error.message) || 'تعذر استخراج النص — اكتبه يدويًا.';
+      }
+    };
+
+    if (dropzone) {
+      ['dragenter', 'dragover'].forEach((type) => dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.add('is-over');
+      }));
+      ['dragleave', 'drop'].forEach((type) => dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.remove('is-over');
+      }));
+      dropzone.addEventListener('drop', (event) => {
+        const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        handleQuoteImage(file);
+      });
+    }
+    const pickButton = root.querySelector('#quote-image-pick');
+    if (pickButton && imageInput) pickButton.addEventListener('click', () => imageInput.click());
+    if (imageInput) imageInput.addEventListener('change', () => {
+      const file = imageInput.files && imageInput.files[0];
+      handleQuoteImage(file);
+    });
+
     if (form) form.addEventListener('submit', (event) => {
       event.preventDefault();
       const value = text.value.trim();
@@ -3694,6 +4251,7 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
         id: `q-${Date.now()}`,
         text: value,
         book: book.value.trim() || 'من هامش القراءة',
+        bookAuthor: bookAuthor.value.trim(),
         bookId: presetId || (() => {
           const match = [...BOOKS, ...((state && state.clubBooks) || [])]
             .find((item) => normalizeBookTitle(item.title) === normalizeBookTitle(book.value.trim()));
@@ -3889,8 +4447,197 @@ async function shareArticle(article) {
   }
 }
 
-async function openSharedArticlePage(articleId) {
-  if (!articleId) return;
+/* ---- مشاركة الاقتباس: بطاقة صورة + رابط، مثل المقالات ---- */
+function quoteShareUrl(quote) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('quote', String(quote.id));
+  return url.toString();
+}
+
+async function createQuoteShareCard(quote) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('تعذر تجهيز بطاقة المشاركة');
+
+  const backdrop = context.createLinearGradient(0, 0, 1080, 1350);
+  backdrop.addColorStop(0, '#FBF8F1');
+  backdrop.addColorStop(1, '#EEE4D0');
+  context.fillStyle = backdrop;
+  context.fillRect(0, 0, 1080, 1350);
+
+  /* الشريط العلوي */
+  context.fillStyle = '#14281E';
+  context.fillRect(0, 0, 1080, 152);
+  context.fillStyle = '#C59B63';
+  context.fillRect(0, 148, 1080, 4);
+  context.direction = 'rtl';
+  context.textAlign = 'right';
+  context.fillStyle = '#F8F5EE';
+  context.font = '700 32px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('اقتباس من نادي جليس القرائي', 1020, 66);
+  context.fillStyle = '#C59B63';
+  context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('من هامش الكتب', 1020, 112);
+
+  /* علامة الاقتباس */
+  context.fillStyle = 'rgba(197,155,99,.32)';
+  context.font = '700 230px "Amiri", "IBM Plex Sans Arabic", serif';
+  context.fillText('”', 1000, 400);
+
+  /* نص الاقتباس */
+  context.fillStyle = '#1E3A2B';
+  context.font = '700 54px "Amiri", "IBM Plex Sans Arabic", serif';
+  const lines = wrapCanvasText(context, quote.text || '', 880, 9);
+  let y = 430;
+  lines.forEach((line) => { context.fillText(line, 1000, y); y += 80; });
+
+  /* المصدر */
+  const source = `${quote.book || 'من هامش القراءة'}${quote.page ? ` — ص ${quote.page}` : ''}`;
+  context.fillStyle = '#9A7440';
+  context.font = '600 28px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText(source.slice(0, 60), 1000, Math.max(y + 10, 980));
+
+  /* الفاصل */
+  context.strokeStyle = 'rgba(30,58,43,.18)';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(140, 1080);
+  context.lineTo(940, 1080);
+  context.stroke();
+
+  /* صاحب الاقتباس */
+  const author = authorNameOf(quote);
+  const avatarSize = 96;
+  const avatarX = 880;
+  const avatarY = 1110;
+  context.save();
+  context.beginPath();
+  context.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+  context.clip();
+  const authorImage = await loadShareImage(photoByName(author) || memberPhoto(author, ''));
+  if (authorImage) {
+    drawCoverImage(context, authorImage, avatarX, avatarY, avatarSize);
+  } else {
+    context.fillStyle = authorColorOf(quote);
+    context.fillRect(avatarX, avatarY, avatarSize, avatarSize);
+    context.direction = 'rtl';
+    context.textAlign = 'center';
+    context.fillStyle = '#F8F5EE';
+    context.font = '800 34px "IBM Plex Sans Arabic", sans-serif';
+    context.fillText(initials(author), avatarX + avatarSize / 2, avatarY + 58);
+  }
+  context.restore();
+
+  context.direction = 'rtl';
+  context.textAlign = 'right';
+  context.fillStyle = '#9A7440';
+  context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('بقلم', 840, 1146);
+  context.fillStyle = '#1E3A2B';
+  context.font = '800 30px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText(String(author).slice(0, 40), 840, 1188);
+
+  context.textAlign = 'left';
+  context.fillStyle = '#667269';
+  context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
+  context.fillText('نادي جليس القرائي · لأن القراءة تجمعنا', 140, 1160);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('تعذر إنشاء بطاقة الاقتباس')), 'image/png');
+  });
+}
+
+function downloadQuoteShareCard(blob, quote) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `jalees-quote-${String(quote.id || 'share').replace(/[^a-zA-Z0-9-_]/g, '-')}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function shareQuote(quote) {
+  const shareUrl = quoteShareUrl(quote);
+  const author = authorNameOf(quote);
+  const shareText = `«${quote.text}»\n${quote.book || ''}${quote.page ? ` — ص ${quote.page}` : ''}\n— ${author}\n#جليس_القرائي`;
+  try {
+    const blob = await createQuoteShareCard(quote);
+    const file = new File([blob], 'اقتباس-جليس.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ title: 'اقتباس من جليس', text: shareText, url: shareUrl, files: [file] });
+      return;
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'اقتباس من جليس', text: shareText, url: shareUrl });
+        downloadQuoteShareCard(blob, quote);
+        toast('تمت مشاركة الاقتباس، وحُمّلت بطاقته لإرفاقها', 'share');
+        return;
+      } catch (shareError) {
+        if (shareError && shareError.name === 'AbortError') return;
+      }
+    }
+    const copied = await copyText(`${shareText}\n${shareUrl}`);
+    downloadQuoteShareCard(blob, quote);
+    toast(copied ? 'نُسخ الاقتباس وحُمّلت بطاقة المشاركة' : 'حُمّلت بطاقة الاقتباس للمشاركة', 'share');
+  } catch (error) {
+    const copied = await copyText(shareText);
+    toast(copied ? 'نُسخ الاقتباس للمشاركة' : 'تعذرت المشاركة', copied ? 'share' : 'info');
+  }
+}
+
+async function openSharedQuotePage(quoteId) {
+  if (!quoteId) return;
+  await syncQuotesFromSheet();
+  const quote = (state && state.quotes || []).find((item) => String(item.id) === String(quoteId));
+  if (!quote) {
+    go('quotes');
+    toast('لم أجد الاقتباس المطلوب', 'info');
+    return;
+  }
+  const shareTitle = `اقتباس من جليس | ${authorNameOf(quote)}`;
+  const shareDescription = quote.text || '';
+  document.title = shareTitle;
+  const titleMeta = document.querySelector('meta[property="og:title"]');
+  const descriptionMeta = document.querySelector('meta[property="og:description"]');
+  const twitterTitleMeta = document.querySelector('meta[name="twitter:title"]');
+  if (titleMeta) titleMeta.content = shareTitle;
+  if (descriptionMeta) descriptionMeta.content = shareDescription;
+  if (twitterTitleMeta) twitterTitleMeta.content = shareTitle;
+  go('quotes');
+  openSheet(`
+    <div class="article-reader article-reader-full">
+      <div class="sheet-head reader-head">
+        <span class="chip chip-soft">اقتباس</span>
+        <div class="reader-head-actions">
+          <button class="reader-home-btn" type="button" data-action="reader-home">
+            <svg class="ic"><use href="#i-home"/></svg>
+            <span>القائمة الرئيسية</span>
+          </button>
+          <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+            <svg class="ic"><use href="#i-close"/></svg>
+          </button>
+        </div>
+      </div>
+      <blockquote class="shared-quote">
+        <p>«${esc(quote.text)}»</p>
+        <footer>${esc(quote.book || 'من هامش القراءة')}${quote.page ? ` · ص ${esc(quote.page)}` : ''} — ${esc(authorNameOf(quote))}</footer>
+      </blockquote>
+      <div class="reader-actions">
+        <button class="btn btn-ghost btn-sm" type="button" data-action="share-quote" data-id="${esc(quote.id)}">
+          <svg class="ic"><use href="#i-share"/></svg> مشاركة
+        </button>
+      </div>
+    </div>`, null, { fullscreen: true });
+}
+
+async function openSharedArticlePage(articleId) {  if (!articleId) return;
   await refreshArticlesFromCloud();
   const article = (state && state.articles || []).find(item => String(item.id) === String(articleId));
   if (!article) {
@@ -3918,6 +4665,7 @@ function openArticleSheet(id) {
   if (!article) return;
   const saved = state.savedArticles.includes(article.id);
   const body = article.body.split(/\n{2,}/).map((paragraph) => `<p>${esc(paragraph).replace(/\n/g, '<br>')}</p>`).join('');
+  const readerSize = clamp(Number((state.articleFontSizes || {})[article.id] || state.articleReadFontSize || 16), 12, 30);
 
   openSheet(`
     <div class="article-reader article-reader-full">
@@ -3937,7 +4685,11 @@ function openArticleSheet(id) {
       <div class="reader-meta">
         <span><svg class="ic"><use href="#i-clock"/></svg> ${toAr(article.read || 3)} دقائق قراءة</span>
         <span><svg class="ic"><use href="#i-article"/></svg> ${esc(article.category)}</span>
-        <span><svg class="ic"><use href="#i-calendar"/></svg> ${esc(article.time || '')}</span>
+        <span><svg class="ic"><use href="#i-calendar"/></svg> ${esc(articleDateLabel(article))}</span>
+        <span class="font-size-controls reader-font-controls" role="group" aria-label="حجم خط المقال">
+          <button type="button" class="font-size-btn" data-font-article="${esc(article.id)}" data-font-step="-1" aria-label="تصغير خط المقال">أ−</button>
+          <button type="button" class="font-size-btn" data-font-article="${esc(article.id)}" data-font-step="1" aria-label="تكبير خط المقال">أ+</button>
+        </span>
       </div>
       <div class="reader-author">
         ${avatarHTML(authorNameOf(article), authorColorOf(article), 'avatar-mini reader-author-avatar', articleAuthorPhoto(article))}
@@ -3948,7 +4700,7 @@ function openArticleSheet(id) {
           <small>عضو في نادي جليس القرائي</small>
         </div>
       </div>
-      <div class="reader-body">${body}</div>
+      <div class="reader-body" data-reader-article="${esc(article.id)}" style="font-size:${readerSize}px">${body}</div>
       <div class="reader-actions">
         <button class="btn btn-ghost btn-sm" type="button" data-action="save-article" data-id="${article.id}">
           <svg class="ic"><use href="#i-bookmark"/></svg> ${saved ? 'محفوظ' : 'حفظ المقال'}
@@ -4632,32 +5384,384 @@ const READING_WINDOW_HEIGHT = 1115;
 let readingTipsCache = [];
 
 function readingWindowDate(value) {
+  const long = formatLongDate(value);
+  if (long) return long;
   const date = value instanceof Date ? value : new Date(Number(value) || 0);
   if (!Number.isFinite(date.getTime()) || date.getTime() <= 0) return '';
   return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(date);
 }
 
-function openReadingWindowSheet() {
+/* ===== ملخصات الكتب — قائمة مستقلة ينشر فيها الأعضاء ملخصاتهم ===== */
+function openBookSummariesSheet() {
   openSheet(`
-    ${sheetHead('نوافذ قرائية', 'مكتبة صور ونصائح يضيفها المشرف — اضغط أي نافذة لعرضها بالحجم الكامل')}
-    <div class="reading-window">
-      <header class="reading-window-head">
-        <div class="reading-window-head-text">
-          <span class="chip chip-soft">النوافذ القرائية</span>
-          <h3>مكتبة نوافذ جليس</h3>
-          <p>كل نافذة بمقاس ${toAr(READING_WINDOW_WIDTH)}×${toAr(READING_WINDOW_HEIGHT)} بكسل، وتظهر للأعضاء تمامًا كما صممها المشرف.</p>
-        </div>
-        <div class="reading-window-counter"><b id="reading-window-count">٠</b><span>نافذة</span></div>
-      </header>
-      <div class="reading-window-tips reading-windows-gallery" id="reading-window-tips"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>
-      ${isSupervisor() ? `<button class="btn btn-gold btn-block" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة قرائية (للمشرف)</button>` : ''}
-    </div>`, (root) => {
-    const tipsContainer = root.querySelector('#reading-window-tips');
-    loadReadingTips(tipsContainer);
-    const addBtn = root.querySelector('[data-action="add-reading-tip"]');
+    ${sheetHead('ملخصات الكتب', 'قائمة مستقلة ينشر فيها الأعضاء ملخصاتهم للكتب التي قرؤوها')}
+    <div class="book-summaries-toolbar">
+      <p>قرأت كتابًا؟ شارك ملخصك مع أعضاء النادي.</p>
+      <button class="btn btn-sm btn-primary" type="button" data-action="add-book-summary"><svg class="ic"><use href="#i-plus"/></svg> نشر ملخص</button>
+    </div>
+    <div id="book-summaries-list" class="book-summaries-list"><div class="recorded-meetings-loading">جارٍ تحميل الملخصات…</div></div>`, (root) => {
+    const list = root.querySelector('#book-summaries-list');
+    loadBookSummaries(list);
+    const addBtn = root.querySelector('[data-action="add-book-summary"]');
     if (addBtn) addBtn.addEventListener('click', () => {
       closeSheet();
-      openReadingTipComposer();
+      openBookSummaryComposer();
+    });
+  });
+}
+
+async function loadBookSummaries(container) {
+  if (!container) return;
+  try {
+    const result = await cloudRequest('getBookSummaries');
+    const summaries = (result && result.success === true && Array.isArray(result.data)) ? result.data : [];
+    if (!summaries.length) {
+      container.innerHTML = emptyHTML('book', 'لا توجد ملخصات بعد', 'كن أول من يشارك ملخص كتاب قرأه مع النادي.');
+      return;
+    }
+    container.innerHTML = summaries.map((item) => {
+      const known = MEMBERS.find((mem) => normalizeName(mem.name) === normalizeName(item.memberName));
+      const color = known ? known.color : '#C59B63';
+      const photo = memberPhoto(item.memberName, '');
+      return `
+        <article class="book-summary-card">
+          <div class="book-summary-head">
+            ${avatarHTML(item.memberName || 'عضو جليس', color, 'avatar-mini', photo)}
+            <div>
+              <strong>${esc(item.memberName || 'عضو جليس')}</strong>
+              <small>${esc(formatLongDate(item.createdAt) || '')}</small>
+            </div>
+            ${isSupervisor() ? `<button class="book-summary-delete" type="button" data-action="delete-book-summary" data-id="${esc(item.id)}" aria-label="حذف الملخص">حذف</button>` : ''}
+          </div>
+          <h4>${esc(item.bookTitle || 'كتاب')}</h4>
+          ${item.bookAuthor ? `<p class="book-summary-author">${esc(item.bookAuthor)}</p>` : ''}
+          <div class="book-summary-text">${esc(item.summary)}</div>
+        </article>`;
+    }).join('');
+    container.querySelectorAll('[data-action="delete-book-summary"]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const result = await cloudRequest('deleteBookSummary', { id: button.dataset.id, by: (currentMember && currentMember.name) || 'مشرف' });
+        if (result && result.success === true) {
+          toast('تم حذف الملخص', 'trash');
+          loadBookSummaries(container);
+        } else {
+          toast('تعذر حذف الملخص', 'info');
+        }
+      });
+    });
+  } catch (error) {
+    container.innerHTML = '<div class="reading-tip-empty">تعذر تحميل الملخصات</div>';
+  }
+}
+
+function openBookSummaryComposer() {
+  if (isGuest()) { showGate('login'); toast('سجّل دخولك لنشر ملخص', 'user'); return; }
+  const bookTitles = [...new Map(
+    [...BOOKS, ...((state && state.clubBooks) || [])]
+      .filter((book) => book && book.title)
+      .map((book) => [normalizeBookTitle(book.title), book.title])
+  ).values()];
+  openSheet(`
+    ${sheetHead('نشر ملخص كتاب', 'شارك ملخصك للكتاب الذي قرأته مع أعضاء النادي')}
+    <form id="book-summary-form" novalidate>
+      <div class="field">
+        <label for="summary-book-title">اسم الكتاب</label>
+        <input class="input" id="summary-book-title" list="summary-books" maxlength="120" placeholder="مثال: الخيميائي" required>
+        <datalist id="summary-books">${bookTitles.map((title) => `<option value="${esc(title)}"></option>`).join('')}</datalist>
+      </div>
+      <div class="field">
+        <label for="summary-book-author">المؤلف</label>
+        <input class="input" id="summary-book-author" maxlength="100" placeholder="اختياري">
+      </div>
+      <div class="field">
+        <label for="summary-text">الملخص</label>
+        <textarea class="input" id="summary-text" rows="6" maxlength="1500" placeholder="اكتب ملخصك للكتاب: الفكرة الأساسية وما أعجبك فيه…" required></textarea>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> نشر الملخص</button>
+    </form>`, (root) => {
+    root.querySelector('#book-summary-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const bookTitle = root.querySelector('#summary-book-title').value.trim();
+      const summary = root.querySelector('#summary-text').value.trim();
+      if (!bookTitle || summary.length < 10) { toast('اكتب اسم الكتاب والملخص', 'info'); return; }
+      const result = await cloudRequest('saveBookSummary', {
+        memberId: currentMember.id,
+        memberName: (currentMember && currentMember.name) || 'عضو جليس',
+        bookTitle,
+        bookAuthor: root.querySelector('#summary-book-author').value.trim(),
+        summary,
+        createdAt: Date.now()
+      });
+      if (!result || result.success !== true) { toast('تعذر نشر الملخص', 'info'); return; }
+      toast('تم نشر ملخصك في قائمة الملخصات', 'check');
+      closeSheet();
+      setTimeout(() => openBookSummariesSheet(), 340);
+    });
+  });
+}
+
+/* ===== التقرير الأسبوعي ===== */
+async function openWeeklyReportSheet() {
+  openSheet(`
+    ${sheetHead('التقرير الأسبوعي', 'كم قرأ الأعضاء من صفحات خلال الأسبوع')}
+    <div id="weekly-report" class="weekly-report"><div class="recorded-meetings-loading">جارٍ إعداد التقرير…</div></div>`);
+  const root = document.getElementById('sheet-root');
+  const box = root.querySelector('#weekly-report');
+  if (!box) return;
+
+  const localStats = weekStats();
+  let report = null;
+  try {
+    const result = await cloudRequest('getWeeklyReport');
+    if (result && result.success === true) report = result;
+  } catch (error) { report = null; }
+  if (!box.isConnected) return;
+
+  const days = (report && Array.isArray(report.days) && report.days.length)
+    ? report.days
+    : localStats.days.map((day) => ({ date: day.date, pages: day.pages }));
+  const maxDay = days.reduce((max, day) => Math.max(max, Number(day.pages || 0)), 0) || 1;
+  const totalPages = report ? Number(report.pages || 0) : localStats.pages;
+  const sessions = report ? Number(report.sessions || 0) : localStats.sessions;
+  const readers = report ? Number(report.readers || 0) : 0;
+  const members = (report && Array.isArray(report.members)) ? report.members : [];
+  const labels = ['أحد', 'إثن', 'ثلا', 'أرب', 'خمي', 'جمع', 'سبت'];
+
+  box.innerHTML = `
+    <div class="weekly-report-hero">
+      <div><strong>${toAr(totalPages)}</strong><span>صفحة هذا الأسبوع</span></div>
+      <div><strong>${toAr(sessions)}</strong><span>جلسات قراءة</span></div>
+      <div><strong>${toAr(readers)}</strong><span>قارئ نشط</span></div>
+    </div>
+    <div class="weekly-report-block">
+      <span class="eyebrow">القراءة اليومية</span>
+      <div class="weekly-report-bars">
+        ${days.map((day, index) => `
+          <div class="weekly-report-bar">
+            <i style="height:${Math.max(6, Math.round((Number(day.pages || 0) / maxDay) * 100))}%"></i>
+            <b>${toAr(Number(day.pages || 0))}</b>
+            <small>${esc(labels[index] || '')}</small>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="weekly-report-block">
+      <span class="eyebrow">أكثر القرّاء</span>
+      <div class="weekly-report-members">
+        ${members.length ? members.slice(0, 12).map((member, index) => {
+          const known = MEMBERS.find((mem) => normalizeName(mem.name) === normalizeName(member.memberName));
+          const color = known ? known.color : '#C59B63';
+          return `<div class="weekly-report-member">
+            <span class="weekly-report-rank">${toAr(index + 1)}</span>
+            ${avatarHTML(member.memberName || 'عضو جليس', color, 'avatar-mini', memberPhoto(member.memberName, ''))}
+            <div><strong>${esc(member.memberName || 'عضو جليس')}</strong><small>${esc((member.books || []).slice(0, 2).map((b) => b.title).join(' · '))}</small></div>
+            <b>${toAr(member.pages)} صفحة</b>
+          </div>`;
+        }).join('') : '<div class="reading-tip-empty">لا توجد قراءات مسجلة هذا الأسبوع بعد.</div>'}
+      </div>
+    </div>`;
+}
+
+/* ===== اقتباسات مختارات النادي ===== */
+/* ===== مختارات النادي: اقتباسات + نوافذ قرائية + قوائم قرائية مختارة ===== */
+const SELECTIONS_TABS = [
+  { key: 'quotes', label: 'اقتباسات' },
+  { key: 'windows', label: 'نوافذ قرائية' },
+  { key: 'lists', label: 'قوائم قرائية مختارة' }
+];
+let readingListsCache = [];
+let selectionQuotesCache = [];
+
+/* اقتباسات اختارها المشرف (مختارات النادي) */
+async function refreshSelectionQuotes() {
+  const result = await cloudRequest('getSelectionQuotes');
+  selectionQuotesCache = (result && result.success === true && Array.isArray(result.data)) ? result.data : [];
+  renderQuotes();
+  return selectionQuotesCache;
+}
+
+function openReadingWindowSheet() {
+  openClubSelectionsSheet('windows');
+}
+
+function openClubSelectionsSheet(activeTab = 'quotes') {
+  openSheet(`
+    ${sheetHead('مختارات النادي', 'اقتباسات مختارة ونوافذ قرائية وقوائم قراءة يختارها المشرف')}
+    <div class="selections">
+      <div class="chips-row selections-tabs" id="selections-tabs" role="tablist">
+        ${SELECTIONS_TABS.map((tab) => `<button class="chip-filter${tab.key === activeTab ? ' active' : ''}" type="button" data-selection-tab="${tab.key}" role="tab" aria-selected="${tab.key === activeTab}">${esc(tab.label)}</button>`).join('')}
+      </div>
+      <div class="selections-panel" id="selections-panel"><p class="deleted-items-loading">جارٍ التحميل…</p></div>
+    </div>`, (root) => {
+    const panel = root.querySelector('#selections-panel');
+    const render = (tab) => {
+      root.querySelectorAll('[data-selection-tab]').forEach((button) => {
+        const active = button.dataset.selectionTab === tab;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      if (tab === 'windows') renderSelectionsWindows(panel);
+      else if (tab === 'lists') renderSelectionsLists(panel);
+      else {
+        panel.innerHTML = '<p class="deleted-items-loading">جارٍ تحميل الاقتباسات المختارة…</p>';
+        refreshSelectionQuotes().then(() => renderSelectionsQuotes(panel));
+      }
+    };
+    root.querySelectorAll('[data-selection-tab]').forEach((button) => {
+      button.addEventListener('click', () => render(button.dataset.selectionTab));
+    });
+    render(activeTab);
+  });
+}
+
+function renderSelectionsQuotes(panel) {
+  const curated = (selectionQuotesCache || []).map((item) => ({
+    id: item.id,
+    text: item.text,
+    book: item.book,
+    bookAuthor: item.bookAuthor,
+    authorName: item.authorName,
+    createdAt: item.createdAt
+  }));
+  panel.innerHTML = `
+    <div class="selections-head-row">
+      <div><span class="eyebrow">اقتباسات مختارة</span><p>اختارات المشرفين من اقتباسات الأعضاء</p></div>
+      <button class="link-btn" type="button" data-action="go-quotes">كل الاقتباسات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+    </div>
+    <div class="selections-quotes">
+      ${curated.length
+        ? curated.map((quote, index) => quoteCardHTML(quote, { compact: true, number: index + 1 })).join('')
+        : emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'أضف الاقتباسات المميزة من زر النجمة في قائمة الاقتباسات.')}
+    </div>`;
+}
+
+async function renderSelectionsWindows(panel) {
+  panel.innerHTML = `
+    <div class="selections-head-row">
+      <div><span class="eyebrow">نوافذ قرائية</span><p>صور ونصائح يضيفها المشرف</p></div>
+      ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button>` : ''}
+    </div>
+    <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>`;
+  const box = panel.querySelector('#selections-windows');
+  await loadReadingTips(box);
+  const addBtn = panel.querySelector('[data-action="add-reading-tip"]');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    closeSheet();
+    openReadingTipComposer();
+  });
+}
+
+async function renderSelectionsLists(panel) {
+  panel.innerHTML = `
+    <div class="selections-head-row">
+      <div><span class="eyebrow">قوائم قرائية مختارة</span><p>قوائم يختارها المشرف من مكتبة النادي</p></div>
+      ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-reading-list"><svg class="ic"><use href="#i-plus"/></svg> قائمة جديدة</button>` : ''}
+    </div>
+    <div id="selections-lists"><p class="deleted-items-loading">جارٍ تحميل القوائم…</p></div>`;
+  const box = panel.querySelector('#selections-lists');
+  const result = await cloudRequest('getReadingLists');
+  const lists = (result && result.success === true && Array.isArray(result.data)) ? result.data : [];
+  readingListsCache = lists;
+  if (!lists.length) {
+    box.innerHTML = '<div class="reading-tip-empty">لا توجد قوائم قرائية بعد.</div>';
+  } else {
+    box.innerHTML = lists.map((list) => `
+      <article class="reading-list-card">
+        <div class="reading-list-head">
+          <div>
+            <h4>${esc(list.title || 'قائمة قرائية')}</h4>
+            ${list.description ? `<p>${esc(list.description)}</p>` : ''}
+          </div>
+          ${isSupervisor() ? `<button class="reading-window-card-delete" type="button" data-action="delete-reading-list" data-id="${esc(list.id)}" aria-label="حذف القائمة">حذف</button>` : ''}
+        </div>
+        <div class="reading-list-books">
+          ${(list.books || []).map((book) => `<span class="reading-list-book"><b>${esc(book.title || '')}</b>${book.author ? `<small>${esc(book.author)}</small>` : ''}</span>`).join('')}
+        </div>
+        <div class="reading-list-meta">
+          <span>${toAr((list.books || []).length)} كتاب</span>
+          ${list.createdBy ? `<span>${esc(list.createdBy)}</span>` : ''}
+          ${list.createdAt ? `<span>${esc(readingWindowDate(list.createdAt))}</span>` : ''}
+        </div>
+      </article>`).join('');
+    box.querySelectorAll('[data-action="delete-reading-list"]').forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const result = await cloudRequest('deleteReadingList', { id: button.dataset.id, by: (currentMember && currentMember.name) || 'مشرف' });
+        if (result && result.success === true) {
+          toast('تم حذف القائمة القرائية', 'trash');
+          renderSelectionsLists(panel);
+        } else {
+          toast('تعذر حذف القائمة', 'info');
+        }
+      });
+    });
+  }
+  const addBtn = panel.querySelector('[data-action="add-reading-list"]');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    closeSheet();
+    openReadingListComposer();
+  });
+}
+
+function openReadingListComposer() {
+  if (!isSupervisor()) { toast('إضافة القوائم القرائية للمشرفين فقط', 'info'); return; }
+  const books = [...new Map(
+    [...BOOKS, ...((state && state.clubBooks) || [])]
+      .filter((book) => book && book.title)
+      .map((book) => [String(book.id), book])
+  ).values()];
+  openSheet(`
+    ${sheetHead('قائمة قرائية مختارة', 'اختر عناوين الكتب التي تريد ضمّها للقائمة')}
+    <form id="reading-list-form" novalidate>
+      <div class="field">
+        <label for="reading-list-title">عنوان القائمة</label>
+        <input class="input" id="reading-list-title" maxlength="80" placeholder="مثال: البداية في القراءة" required>
+      </div>
+      <div class="field">
+        <label for="reading-list-description">نبذة قصيرة</label>
+        <textarea class="input" id="reading-list-description" rows="2" maxlength="300" placeholder="لماذا اخترت هذه الكتب؟"></textarea>
+      </div>
+      <div class="field">
+        <label>الكتب في القائمة (<span id="reading-list-count">٠</span>)</label>
+        <div class="reading-list-picker">
+          ${books.map((book) => `
+            <label class="reading-list-option">
+              <input type="checkbox" value="${esc(String(book.id))}" data-title="${esc(book.title)}" data-author="${esc(book.author || '')}">
+              <span><b>${esc(book.title)}</b>${book.author ? `<small>${esc(book.author)}</small>` : ''}</span>
+            </label>`).join('')}
+        </div>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-plus"/></svg> حفظ القائمة</button>
+    </form>`, (root) => {
+    const countLabel = root.querySelector('#reading-list-count');
+    const updateCount = () => {
+      const count = root.querySelectorAll('.reading-list-option input:checked').length;
+      if (countLabel) countLabel.textContent = toAr(count);
+    };
+    root.querySelectorAll('.reading-list-option input').forEach((input) => {
+      input.addEventListener('change', updateCount);
+    });
+    updateCount();
+    root.querySelector('#reading-list-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#reading-list-title').value.trim();
+      if (!title) { toast('اكتب عنوان القائمة', 'info'); return; }
+      const selected = [...root.querySelectorAll('.reading-list-option input:checked')].map((input) => ({
+        id: input.value,
+        title: input.dataset.title || '',
+        author: input.dataset.author || ''
+      }));
+      if (!selected.length) { toast('اختر كتابًا واحدًا على الأقل', 'info'); return; }
+      const result = await cloudRequest('saveReadingList', {
+        title,
+        description: root.querySelector('#reading-list-description').value.trim(),
+        books: selected,
+        createdAt: Date.now(),
+        createdBy: (currentMember && currentMember.name) || 'مشرف'
+      });
+      if (!result || result.success !== true) { toast('تعذر حفظ القائمة', 'info'); return; }
+      toast('تم حفظ القائمة القرائية', 'check');
+      closeSheet();
+      setTimeout(() => openClubSelectionsSheet('lists'), 340);
     });
   });
 }
@@ -4877,7 +5981,7 @@ function openMoreSheet() {
     <div class="more-list">
       <button class="more-item" type="button" data-action="meeting-archive">
         <span class="more-icon"><svg class="ic"><use href="#i-calendar"/></svg></span>
-        <div class="more-body"><strong>اللقاءات المسجلة</strong><p>أرشيف لقاءات جليس السابقة</p></div>
+        <div class="more-body"><strong>أرشيف النادي</strong><p>لقاءات جليس السابقة: مناقشات كتب، زيارات، واستضافات</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
       <button class="more-item" type="button" data-action="view-members">
@@ -4887,7 +5991,17 @@ function openMoreSheet() {
       </button>
       <button class="more-item" type="button" data-action="reading-window">
         <span class="more-icon"><svg class="ic"><use href="#i-book"/></svg></span>
-        <div class="more-body"><strong>نوافذ قرائية</strong><p>صور ونصائح عن القراءة وفوائدها — بإضافة المشرف</p></div>
+        <div class="more-body"><strong>مختارات النادي</strong><p>صور ونصائح عن القراءة وفوائدها — بإضافة المشرف</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
+      <button class="more-item" type="button" data-action="weekly-report">
+        <span class="more-icon"><svg class="ic"><use href="#i-chart"/></svg></span>
+        <div class="more-body"><strong>التقرير الأسبوعي</strong><p>كم قرأ الأعضاء من صفحات خلال الأسبوع</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>
+      <button class="more-item" type="button" data-action="book-summaries">
+        <span class="more-icon"><svg class="ic"><use href="#i-article"/></svg></span>
+        <div class="more-body"><strong>ملخصات الكتب</strong><p>ملخصات وتقارير كتب مكتبة النادي</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>
       <button class="more-item" type="button" data-action="club-programs">
@@ -5481,6 +6595,7 @@ function go(name) {
 }
 
 function renderAll() {
+  applyReadingFontSizes();
   renderHome();
   renderQuotes();
   renderLibrary();
@@ -5551,7 +6666,7 @@ function showGate(view = 'register') {
 
 function applyGuestVisibility() {
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article', 'manage-library-categories']);
+  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article', 'manage-library-categories']);
   document.querySelectorAll('[data-action]').forEach((el) => {
     if (blocked.has(el.dataset.action)) el.style.display = isGuest ? 'none' : '';
   });
@@ -5688,6 +6803,39 @@ function enterApp(welcome = false) {
     merged.forEach((b) => syncState.myBooks.add(myBookSyncKey(b)));
     persistSyncState(currentMember.id);
   });
+  /* جلب «مكتبتي الخاصة» من السحابة حتى لا تضيع عند تغيير الجهاز */
+  if (currentMember && currentMember.id !== 'guest') {
+    loadPersonalBooksFromCloud(currentMember.id).then(async (cloudPersonal) => {
+      if (!Array.isArray(cloudPersonal) || !state || !currentMember) return;
+      const map = new Map();
+      (state.personalBooks || []).forEach((book) => { if (book && book.id) map.set(String(book.id), book); });
+      cloudPersonal.forEach((book) => {
+        if (!book || !book.id) return;
+        const local = map.get(String(book.id)) || {};
+        map.set(String(book.id), {
+          ...local,
+          ...book,
+          coverColor: book.coverColor || local.coverColor || '',
+          pdfUrl: book.pdfUrl || local.pdfUrl || ''
+        });
+        syncState.personalBooks.add(String(book.id));
+      });
+      const merged = [...map.values()];
+      const changed = merged.length !== (state.personalBooks || []).length;
+      state.personalBooks = merged;
+      if (changed) await saveState();
+      persistSyncState(currentMember.id);
+      if (changed) {
+        renderLibrary();
+        renderHome();
+        renderProfile();
+      }
+    });
+    /* الإعجابات الحقيقية المحفوظة في الشيت */
+    refreshLikesFromCloud();
+    /* اقتباسات مختارات النادي (للمشرفين) */
+    refreshSelectionQuotes();
+  }
   /* جلب آراء الكتب المشتركة وتحديث متوسطات المكتبة */
   refreshBookRatingsFromCloud().then(() => {
     if (state && currentMember) {
@@ -5719,7 +6867,7 @@ function toggleRsvp() {
 /* --------------------------------------------------------------------------
    15. معالجة الأحداث
    -------------------------------------------------------------------------- */
-function handleGlobalClick(event) {
+async function handleGlobalClick(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
 
@@ -5775,13 +6923,57 @@ function handleGlobalClick(event) {
 
   if (target.closest('#meeting-rsvp')) { toggleRsvp(); return; }
 
+  /* التحكم بحجم الخط في شاشة الاقتباسات والمقالات */
+  const fontBtn = target.closest('[data-font-target]');
+  if (fontBtn) {
+    const step = Number(fontBtn.dataset.fontStep) || 0;
+    if (fontBtn.dataset.fontTarget === 'quote') {
+      state.quoteFontSize = clamp((Number(state.quoteFontSize) || 19) + step, 14, 28);
+    } else {
+      state.articleReadFontSize = clamp((Number(state.articleReadFontSize) || 12) + step, 10, 20);
+    }
+    applyReadingFontSizes();
+    saveState();
+    return;
+  }
+
+  /* التحكم بحجم خط اقتباس بعينه (داخل كل اقتباس) */
+  const fontQuote = target.closest('[data-font-quote]');
+  if (fontQuote) {
+    const quoteId = fontQuote.dataset.fontQuote;
+    const step = Number(fontQuote.dataset.fontStep) || 0;
+    const sizes = state.quoteFontSizes || {};
+    const base = Number(sizes[quoteId] || state.quoteFontSize || 19);
+    state.quoteFontSizes = { ...sizes, [quoteId]: clamp(base + step, 14, 28) };
+    saveState();
+    renderQuotes();
+    renderHome();
+    return;
+  }
+
+  /* التحكم بحجم خط مقال بعينه (داخل كل مقال وداخل القارئ) */
+  const fontArticle = target.closest('[data-font-article]');
+  if (fontArticle) {
+    const articleId = fontArticle.dataset.fontArticle;
+    const step = Number(fontArticle.dataset.fontStep) || 0;
+    const sizes = state.articleFontSizes || {};
+    const base = Number(sizes[articleId] || state.articleReadFontSize || 12);
+    const next = clamp(base + step, 12, 30);
+    state.articleFontSizes = { ...sizes, [articleId]: next };
+    saveState();
+    renderArticles();
+    const reader = document.querySelector(`[data-reader-article="${CSS.escape(String(articleId))}"]`);
+    if (reader) reader.style.fontSize = `${next}px`;
+    return;
+  }
+
   const actionEl = target.closest('[data-action]');
   if (!actionEl) return;
   const action = actionEl.dataset.action;
   const id = actionEl.dataset.id;
 
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'save-quote', 'save-article']);
+  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article']);
   if (isGuest && guestBlocked.has(action)) {
     showGate();
     toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user');
@@ -5811,6 +7003,14 @@ function handleGlobalClick(event) {
     case 'reading-window':
       closeSheet();
       openReadingWindowSheet();
+      break;
+    case 'book-summaries':
+      closeSheet();
+      openBookSummariesSheet();
+      break;
+    case 'weekly-report':
+      closeSheet();
+      openWeeklyReportSheet();
       break;
     case 'open-reading-window':
       openReadingWindowViewer(id);
@@ -6006,16 +7206,40 @@ function handleGlobalClick(event) {
         }
       });
       break;
-    case 'like-quote': {
-      if (state.likedQuotes.includes(id)) {
-        state.likedQuotes = state.likedQuotes.filter((quoteId) => quoteId !== id);
-        toast('أُزيلت من الاقتباسات المفضلة', 'bookmark');
-      } else {
-        state.likedQuotes.push(id);
-        toast('أُضيف إلى الاقتباسات المفضلة', 'bookmark');
+    case 'expand-quote': {
+      const body = document.querySelector(`[data-quote-body="${CSS.escape(String(id))}"]`);
+      if (!body) break;
+      const open = body.classList.toggle('is-open');
+      const button = document.querySelector(`.quote-more[data-id="${CSS.escape(String(id))}"]`);
+      if (button) button.textContent = open ? 'طيّ الاقتباس' : 'قراءة المزيد';
+      break;
+    }
+    case 'toggle-selection-quote': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const quote = state.quotes.find((item) => String(item.id) === String(id));
+      if (!quote) break;
+      const result = await cloudRequest('toggleSelectionQuote', {
+        id: quote.id,
+        text: quote.text,
+        book: quote.book || '',
+        bookAuthor: quote.bookAuthor || '',
+        authorName: authorNameOf(quote),
+        by: (currentMember && currentMember.name) || 'مشرف'
+      });
+      if (!result || result.success !== true) {
+        toast(cleanServerError(result, 'تعذر تحديث مختارات النادي'), 'info');
+        break;
       }
-      saveState();
-      renderQuotes();
+      toast(result.selected ? 'أُضيف الاقتباس إلى مختارات النادي' : 'أُزيل الاقتباس من مختارات النادي', result.selected ? 'check' : 'info');
+      await refreshSelectionQuotes();
+      break;
+    }
+    case 'like-quote': {
+      toggleCloudLike('quote', id);
+      break;
+    }
+    case 'like-article': {
+      toggleCloudLike('article', id);
       break;
     }
     case 'save-quote': {
@@ -6034,8 +7258,7 @@ function handleGlobalClick(event) {
     case 'share-quote': {
       const quote = state.quotes.find((item) => item.id === id);
       if (!quote) break;
-      const text = `«${quote.text}»\n${quote.book || ''}${quote.page ? ` — ص ${quote.page}` : ''}\n— ${authorNameOf(quote)}\n#جليس_القرائي`;
-      copyText(text).then((ok) => toast(ok ? 'نُسخ الاقتباس للمشاركة' : 'تعذّر النسخ من المتصفح', ok ? 'share' : 'info'));
+      shareQuote(quote);
       break;
     }
     case 'delete-quote': {
@@ -6120,6 +7343,13 @@ function handleGlobalClick(event) {
         confirmLabel: 'إزالة',
         onConfirm: () => {
           state.myBooks = state.myBooks.filter((item) => item.bookId !== id);
+          /* إذا كان كتابًا خاصًا بمكتبتي، نحذفه من السحابة أيضًا */
+          const personal = (state.personalBooks || []).some((item) => String(item.id) === String(id));
+          if (personal) {
+            state.personalBooks = state.personalBooks.filter((item) => String(item.id) !== String(id));
+            deletePersonalBookFromCloud(id).catch(() => {});
+            syncState.personalBooks.delete(String(id));
+          }
           saveState();
           renderLibrary();
           renderHome();
@@ -6743,6 +7973,7 @@ async function init() {
     enterApp(false);
     const requested = params.get('screen');
     if (params.get('article')) await openSharedArticlePage(params.get('article'));
+    else if (params.get('quote')) await openSharedQuotePage(params.get('quote'));
     else if (requested) go(requested);
   } else {
     /* وضع زائر: تصفح عام بدون تسجيل */
@@ -6761,6 +7992,7 @@ async function init() {
     enterApp(false);
     const requested = params.get('screen');
     if (params.get('article')) await openSharedArticlePage(params.get('article'));
+    else if (params.get('quote')) await openSharedQuotePage(params.get('quote'));
     else if (requested) go(requested);
   }
   setTimeout(hideSplash, 4000);

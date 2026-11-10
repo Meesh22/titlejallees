@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r11';
+const CODE_VERSION = 'jalees-2026-11-10-r15';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -10,6 +10,11 @@ const RECORDED_MEETINGS_SHEET = 'اللقاءات المسجلة';
 const READING_TIPS_SHEET = 'نافذة قرائية';
 const PROFILES_SHEET = 'الملفات الشخصية';
 const ENTRIES_SHEET = 'سجلات القراءة';
+const LIKES_SHEET = 'الإعجابات';
+const PERSONAL_BOOKS_SHEET = 'كتبي الخاصة';
+const READING_LISTS_SHEET = 'القوائم القرائية';
+const SELECTION_QUOTES_SHEET = 'مختارات الاقتباسات';
+const BOOK_SUMMARIES_SHEET = 'ملخصات الأعضاء';
 
 const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
 
@@ -51,6 +56,80 @@ function storeImage(value, prefix) {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
   return `https://lh3.googleusercontent.com/d/${file.getId()}=w1400`;
+}
+
+/* ---- ملفات عامة (صور وملفات PDF): تُرفع إلى Drive ويُخزَّن رابط ---- */
+function storeFile(value, prefix, mimeType, extension) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const match = raw.match(/^data:([\w.+-]+)\/([\w.+-]+);base64,([\s\S]+)$/i);
+  if (!match) return '';
+  const type = String(mimeType || match[1] || 'application/octet-stream').toLowerCase();
+  const ext = String(extension || match[2] || 'bin').toLowerCase() === 'jpeg' ? 'jpg' : String(extension || match[2] || 'bin').toLowerCase();
+  const blob = Utilities.newBlob(
+    Utilities.base64Decode(match[3]),
+    type,
+    `${prefix || 'file'}-${Date.now()}.${ext}`
+  );
+  const file = DriveApp.getFolderById(imageFolderId()).createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
+  return file.getId();
+}
+
+/* رفع ملف PDF إلى Drive وإرجاع رابط العرض */
+function storePdf(value, prefix) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const match = raw.match(/^data:application\/pdf;base64,([\s\S]+)$/i);
+  if (!match) return '';
+  const blob = Utilities.newBlob(
+    Utilities.base64Decode(match[1]),
+    'application/pdf',
+    `${prefix || 'pdf'}-${Date.now()}.pdf`
+  );
+  const file = DriveApp.getFolderById(imageFolderId()).createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) { /* تجاهل */ }
+  return `https://drive.google.com/file/d/${file.getId()}/view`;
+}
+
+/* ---- ملخصات الأعضاء للكتب التي قرؤوها ---- */
+function getBookSummariesSheet(ss) {
+  return getDataSheet(ss, BOOK_SUMMARIES_SHEET, [
+    'id', 'memberId', 'memberName', 'bookTitle', 'bookAuthor', 'summary', 'createdAt', 'deletedAt', 'deletedBy'
+  ]);
+}
+
+/* ---- اقتباسات اختارها المشرف لتظهر في «مختارات النادي» ---- */
+function getSelectionQuotesSheet(ss) {
+  return getDataSheet(ss, SELECTION_QUOTES_SHEET, [
+    'quoteId', 'quoteText', 'book', 'bookAuthor', 'authorName', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy'
+  ]);
+}
+
+/* ---- قوائم قرائية مختارة (مختارات النادي) ---- */
+function getReadingListsSheet(ss) {
+  return getDataSheet(ss, READING_LISTS_SHEET, [
+    'id', 'title', 'description', 'books', 'cover', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy'
+  ]);
+}
+
+/* ---- الإعجابات: جدول مشترك بين الاقتباسات والمقالات ---- */
+function getLikesSheet(ss) {
+  return getDataSheet(ss, LIKES_SHEET, ['type', 'targetId', 'memberId', 'memberName', 'createdAt']);
+}
+
+/* ---- كتب العضو الخاصة (تنتقل بين الأجهزة) ---- */
+function getPersonalBooksSheet(ss) {
+  return getDataSheet(ss, PERSONAL_BOOKS_SHEET, [
+    'memberId', 'memberName', 'bookId', 'title', 'author', 'pages',
+    'coverColor', 'pdfUrl', 'createdAt'
+  ]);
 }
 
 /* ترحيل الصور القديمة المخزّنة كنص طويل (base64) إلى Drive — تُشغَّل يدويًا مرة واحدة */
@@ -169,25 +248,29 @@ function getRecordedMeetingsSheet(ss) {
   let sheet = target.getSheetByName(RECORDED_MEETINGS_SHEET);
   if (!sheet) sheet = target.insertSheet(RECORDED_MEETINGS_SHEET);
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy']);
+    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy', '', '', 'type']);
   }
   ensureRecordedMeetingDeleteColumns(sheet);
+  if (sheet.getMaxColumns() < 14) sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
+  if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('type');
   return sheet;
 }
 
 function ensureQuoteDeleteColumns(sheet) {
-  if (sheet.getMaxColumns() < 8) sheet.insertColumnsAfter(sheet.getMaxColumns(), 8 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 9) sheet.insertColumnsAfter(sheet.getMaxColumns(), 9 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 6).getValue()) sheet.getRange(1, 6).setValue('id');
   if (!sheet.getRange(1, 7).getValue()) sheet.getRange(1, 7).setValue('deletedAt');
   if (!sheet.getRange(1, 8).getValue()) sheet.getRange(1, 8).setValue('deletedBy');
+  if (!sheet.getRange(1, 9).getValue()) sheet.getRange(1, 9).setValue('bookAuthor');
 }
 
 function ensureBookDeleteColumns(sheet) {
-  if (sheet.getMaxColumns() < 14) sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('coverImage');
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('deletedAt');
   if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('deletedBy');
   if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('year');
+  if (!sheet.getRange(1, 15).getValue()) sheet.getRange(1, 15).setValue('pdfUrl');
 }
 
 function ensureArticleDeleteColumns(sheet) {
@@ -808,7 +891,7 @@ function doPost(e) {
         data.title || '', data.author || '', data.category || '',
         data.coverColor || '', data.report || '', data.pages || 0,
         data.createdAt || Date.now(), storeImage(data.coverImage, 'book'),
-        '', '', data.year || ''
+        '', '', data.year || '', data.pdfUrl || ''
       ]);
       return output({ success: true, message: 'تم حفظ الكتاب' });
     }
@@ -837,6 +920,7 @@ function doPost(e) {
         ]]);
         source.getRange(row, 11).setValue(coverImage);
         source.getRange(row, 14).setValue(data.year || '');
+        source.getRange(row, 15).setValue(data.pdfUrl || '');
         return output({ success: true, message: 'تم تحديث بيانات الكتاب' });
       }
 
@@ -1058,6 +1142,178 @@ function doPost(e) {
         addedAt: row[5] || null
       })).filter((item) => item.bookId);
       return output({ success: true, data: mine });
+    }
+
+    if (action === 'saveBookSummary') {
+      const sheet = getBookSummariesSheet(ss);
+      const memberId = String(data.memberId || '').trim();
+      if (!memberId) throw new Error('سجّل الدخول لنشر الملخص');
+      const summaryId = String(data.id || `sum-${Date.now()}`);
+      sheet.appendRow([
+        summaryId, memberId, data.memberName || '', data.bookTitle || '',
+        data.bookAuthor || '', data.summary || '', data.createdAt || Date.now(), '', ''
+      ]);
+      return output({ success: true, id: summaryId, message: 'تم نشر الملخص' });
+    }
+
+    if (action === 'deleteBookSummary') {
+      const sheet = getBookSummariesSheet(ss);
+      const summaryId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === summaryId) {
+            sheet.getRange(i + 2, 8, 1, 2).setValues([[Date.now(), data.by || 'مشرف']]);
+            return output({ success: true, message: 'تم حذف الملخص' });
+          }
+        }
+      }
+      return output({ success: true, message: 'الملخص غير موجود' });
+    }
+
+    if (action === 'toggleSelectionQuote') {
+      const sheet = getSelectionQuotesSheet(ss);
+      const quoteId = String(data.id || '').trim();
+      if (!quoteId) throw new Error('معرّف الاقتباس مطلوب');
+      const lastRow = sheet.getLastRow();
+      let rowNumber = 0;
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === quoteId) { rowNumber = i + 2; break; }
+        }
+      }
+      if (rowNumber) {
+        sheet.getRange(rowNumber, 8, 1, 2).setValues([[Date.now(), data.by || 'مشرف']]);
+        return output({ success: true, selected: false, message: 'أُزيل الاقتباس من مختارات النادي' });
+      }
+      sheet.appendRow([
+        quoteId, data.text || '', data.book || '', data.bookAuthor || '',
+        data.authorName || '', Date.now(), data.by || 'مشرف', '', ''
+      ]);
+      return output({ success: true, selected: true, message: 'أُضيف الاقتباس إلى مختارات النادي' });
+    }
+
+    if (action === 'saveReadingList') {
+      const sheet = getReadingListsSheet(ss);
+      const listId = String(data.id || `list-${Date.now()}`);
+      const books = Array.isArray(data.books) ? data.books : [];
+      const rowData = [
+        listId, data.title || '', data.description || '', JSON.stringify(books),
+        storeImage(data.cover, 'list'), data.createdAt || Date.now(), data.createdBy || '', '', ''
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === listId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, id: listId, message: 'تم تحديث القائمة القرائية' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, id: listId, message: 'تم حفظ القائمة القرائية' });
+    }
+
+    if (action === 'deleteReadingList') {
+      const sheet = getReadingListsSheet(ss);
+      const listId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === listId) {
+            sheet.getRange(i + 2, 8, 1, 2).setValues([[Date.now(), data.by || 'مشرف']]);
+            return output({ success: true, message: 'تم حذف القائمة القرائية' });
+          }
+        }
+      }
+      return output({ success: true, message: 'القائمة غير موجودة' });
+    }
+
+    if (action === 'toggleLike') {
+      const sheet = getLikesSheet(ss);
+      const type = String(data.type || 'quote').trim() === 'article' ? 'article' : 'quote';
+      const targetId = String(data.id || '').trim();
+      const memberId = String(data.memberId || '').trim();
+      if (!targetId) throw new Error('معرّف العنصر مطلوب');
+      if (!memberId) throw new Error('سجّل الدخول للإعجاب');
+      const lastRow = sheet.getLastRow();
+      let rowNumber = 0;
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][0] || '') === type && String(rows[i][1] || '') === targetId && String(rows[i][2] || '') === memberId) {
+            rowNumber = i + 2;
+            break;
+          }
+        }
+      }
+      let liked = true;
+      if (rowNumber) {
+        sheet.deleteRow(rowNumber);
+        liked = false;
+      } else {
+        sheet.appendRow([type, targetId, memberId, data.memberName || '', Date.now()]);
+      }
+      let count = 0;
+      if (sheet.getLastRow() >= 2) {
+        const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+        count = rows.filter(row => String(row[0] || '') === type && String(row[1] || '') === targetId).length;
+      }
+      return output({ success: true, liked: liked, likes: count });
+    }
+
+    if (action === 'savePersonalBook') {
+      const sheet = getPersonalBooksSheet(ss);
+      const memberId = String(data.memberId || '').trim();
+      const bookId = String(data.bookId || '').trim();
+      if (!memberId || !bookId) throw new Error('بيانات الكتاب ناقصة');
+      const rowData = [
+        memberId, data.memberName || '', bookId, data.title || '', data.author || '',
+        Number(data.pages) || 0, data.coverColor || '', data.pdfUrl || '', data.createdAt || Date.now()
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const keys = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+        for (let i = 0; i < keys.length; i++) {
+          if (String(keys[i][0] || '') === memberId && String(keys[i][2] || '') === bookId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, message: 'تم تحديث الكتاب في مكتبتي' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, message: 'تم حفظ الكتاب في مكتبتي' });
+    }
+
+    if (action === 'deletePersonalBook') {
+      const sheet = getPersonalBooksSheet(ss);
+      const memberId = String(data.memberId || '').trim();
+      const bookId = String(data.bookId || '').trim();
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const keys = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+        for (let i = keys.length - 1; i >= 0; i--) {
+          if (String(keys[i][0] || '') === memberId && String(keys[i][2] || '') === bookId) {
+            sheet.deleteRow(i + 2);
+            return output({ success: true, message: 'تمت الإزالة من مكتبتي' });
+          }
+        }
+      }
+      return output({ success: true, message: 'الكتاب غير موجود في مكتبتي' });
+    }
+
+    if (action === 'uploadFile') {
+      const raw = String(data.data || '');
+      if (!raw) throw new Error('لم يصل أي ملف');
+      const isPdf = /pdf/i.test(String(data.name || '')) || /application\/pdf/i.test(raw.slice(0, 40));
+      if (raw.length > 9000000) throw new Error('الملف كبير جدًا — الحد ٦ ميجابايت');
+      const url = isPdf ? storePdf(raw, 'pdf') : storeFile(raw, 'upload', 'image/jpeg', 'jpg');
+      if (!url) throw new Error('تعذر رفع الملف');
+      return output({ success: true, url: url, isPdf: isPdf });
     }
 
     if (action === 'saveReadingTip') {
@@ -1608,7 +1864,8 @@ function doPost(e) {
       const rowData = [
         recordId, data.title || '', data.description || '', data.recordedAt || '',
         data.speaker || '', Number(data.views) || 0, data.duration || '',
-        data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || ''
+        data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || '',
+        '', '', data.type || ''
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -1746,7 +2003,7 @@ function doPost(e) {
       data.book_title || '',
       data.quote_text || '',
       data.id || `q-${Date.now()}`,
-      '', ''
+      '', '', data.book_author || ''
     ]);
     return output({ status: 'success', message: 'تم حفظ الاقتباس' });
   } catch (error) {
@@ -1834,6 +2091,153 @@ function doGet(e) {
         addedAt: row[5] || null
       })).filter((item) => item.bookId);
       return output({ success: true, data: mine });
+    }
+
+    if (action === 'getPersonalBooks') {
+      const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      const sheet = getPersonalBooksSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2 || !memberId) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const mine = rows.filter(row => String(row[0] || '') === memberId).map(row => ({
+        id: String(row[2] || ''),
+        bookId: String(row[2] || ''),
+        title: String(row[3] || ''),
+        author: String(row[4] || ''),
+        pages: Number(row[5]) || 0,
+        coverColor: String(row[6] || ''),
+        pdfUrl: String(row[7] || ''),
+        createdAt: row[8] || null
+      })).filter(item => item.id);
+      return output({ success: true, data: mine });
+    }
+
+    if (action === 'getBookSummaries') {
+      const sheet = getBookSummariesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const summaries = rows.filter(row => row[0] && !row[7]).map(row => ({
+        id: String(row[0] || ''), memberId: String(row[1] || ''), memberName: String(row[2] || ''),
+        bookTitle: String(row[3] || ''), bookAuthor: String(row[4] || ''),
+        summary: String(row[5] || ''), createdAt: row[6]
+      }));
+      summaries.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: summaries });
+    }
+
+    if (action === 'getWeeklyReport') {
+      const sheet = getEntriesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      start.setDate(start.getDate() - start.getDay());
+      const pad = (n) => String(n).padStart(2, '0');
+      const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const days = [];
+      for (let i = 0; i < 7; i += 1) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        days.push(iso(d));
+      }
+      const from = days[0];
+      const to = days[6];
+      const totals = {};
+      const dayTotals = {};
+      days.forEach((day) => { dayTotals[day] = 0; });
+      let pages = 0;
+      let sessions = 0;
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+        rows.forEach(row => {
+          const date = String(row[6] || '').slice(0, 10);
+          if (!date || date < from || date > to) return;
+          const count = Number(row[5]) || 0;
+          const name = String(row[2] || '').trim() || 'عضو جليس';
+          pages += count;
+          sessions += 1;
+          if (dayTotals[date] !== undefined) dayTotals[date] += count;
+          const key = String(row[1] || '') || name;
+          if (!totals[key]) totals[key] = { memberId: String(row[1] || ''), memberName: name, pages: 0, books: {} };
+          totals[key].pages += count;
+          const bookTitle = String(row[4] || '').trim();
+          if (bookTitle) totals[key].books[bookTitle] = (totals[key].books[bookTitle] || 0) + count;
+        });
+      }
+      const members = Object.keys(totals).map((key) => ({
+        memberId: totals[key].memberId,
+        memberName: totals[key].memberName,
+        pages: totals[key].pages,
+        books: Object.keys(totals[key].books).map((title) => ({ title, pages: totals[key].books[title] }))
+      })).sort((a, b) => b.pages - a.pages);
+      return output({
+        success: true,
+        from: from,
+        to: to,
+        pages: pages,
+        sessions: sessions,
+        readers: members.length,
+        days: days.map((day) => ({ date: day, pages: dayTotals[day] || 0 })),
+        members: members
+      });
+    }
+
+    if (action === 'getSelectionQuotes') {
+      const sheet = getSelectionQuotesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const quotes = rows.filter(row => row[0] && !row[7]).map(row => ({
+        id: String(row[0] || ''), text: String(row[1] || ''), book: String(row[2] || ''),
+        bookAuthor: String(row[3] || ''), authorName: String(row[4] || ''),
+        createdAt: row[5], createdBy: String(row[6] || '')
+      }));
+      quotes.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: quotes });
+    }
+
+    if (action === 'getReadingLists') {
+      const sheet = getReadingListsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const lists = rows.map(row => {
+        let books = [];
+        try { books = JSON.parse(row[3] || '[]'); } catch (error) { books = []; }
+        return {
+          id: String(row[0] || ''), title: String(row[1] || ''), description: String(row[2] || ''),
+          books: Array.isArray(books) ? books : [], cover: String(row[4] || ''),
+          createdAt: row[5], createdBy: String(row[6] || '')
+        };
+      }).filter(item => item.id && !item.deletedAt);
+      lists.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: lists });
+    }
+
+    if (action === 'getLikes') {
+      const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
+      const sheet = getLikesSheet(ss);
+      const quotes = {};
+      const articles = {};
+      const mine = { quotes: [], articles: [] };
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+        rows.forEach(row => {
+          const type = String(row[0] || '').trim();
+          const id = String(row[1] || '').trim();
+          if (!id) return;
+          const who = String(row[2] || '').trim();
+          if (type === 'article') {
+            articles[id] = (articles[id] || 0) + 1;
+            if (memberId && who === memberId) mine.articles.push(id);
+          } else {
+            quotes[id] = (quotes[id] || 0) + 1;
+            if (memberId && who === memberId) mine.quotes.push(id);
+          }
+        });
+      }
+      return output({ success: true, quotes: quotes, articles: articles, mine: mine });
     }
 
     if (action === 'getReadingTips') {
@@ -1950,7 +2354,7 @@ function doGet(e) {
         ensureBookDeleteColumns(sheet);
         const lastRow = sheet.getLastRow();
         if (lastRow < 2) return;
-        const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+        const rows = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
         rows.forEach((row, index) => {
           if (!row[3]) return;
           const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
@@ -1959,7 +2363,7 @@ function doGet(e) {
             id, memberId: row[1], memberName: row[2], title: row[3],
             author: row[4], category: row[5], coverColor: row[6],
             report: row[7], pages: row[8], createdAt: row[9],
-            coverImage: row[10] || '', year: row[13] || ''
+            coverImage: row[10] || '', year: row[13] || '', pdfUrl: row[14] || ''
           };
         });
       });
@@ -2033,7 +2437,7 @@ function doGet(e) {
       const sheet = getRecordedMeetingsSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [], deletedIds: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
       const recordings = [];
       const deletedIds = [];
       rows.forEach(row => {
@@ -2042,7 +2446,8 @@ function doGet(e) {
         recordings.push({
           id: row[0], title: row[1], description: row[2], recordedAt: row[3],
           speaker: row[4], views: Number(row[5]) || 0, duration: row[6],
-          videoUrl: row[7], image: row[8], createdAt: row[9], createdBy: row[10]
+          videoUrl: row[7], image: row[8], createdAt: row[9], createdBy: row[10],
+          type: row[13] || ''
         });
       });
       recordings.sort((a, b) => {
@@ -2134,7 +2539,7 @@ function doGet(e) {
     ensureQuoteDeleteColumns(sheet);
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return output({ success: true, status: 'success', data: [], deletedIds: [], deletedTexts: [] });
-    const rows = sheet.getRange(1, 1, lastRow, 8).getValues();
+    const rows = sheet.getRange(1, 1, lastRow, 9).getValues();
     const quotes = [];
     const deletedIds = [];
     const deletedTexts = [];
@@ -2152,7 +2557,8 @@ function doGet(e) {
           author_name: rows[i][1],
           page_number: rows[i][2],
           book_title: rows[i][3],
-          quote_text: rows[i][4]
+          quote_text: rows[i][4],
+          book_author: rows[i][8] || ''
         });
       }
     }
@@ -2183,7 +2589,7 @@ function setupJaleesSheets() {
     const books = ss.getSheetByName(BOOKS_SHEET);
     if (!books) return 'غير موجود';
     ensureBookDeleteColumns(books);
-    books.getRange(1, 11, 1, 4).setValues([['coverImage', 'deletedAt', 'deletedBy', 'year']]);
+    books.getRange(1, 11, 1, 5).setValues([['coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl']]);
     repaintDeletedRows(books, 12, 14);
     return books.getMaxColumns() + ' عمود';
   });
@@ -2255,6 +2661,31 @@ function setupJaleesSheets() {
   step(READING_TIPS_SHEET, () => {
     const tips = getReadingTipsSheet(ss);
     return tips.getMaxColumns() + ' عمود';
+  });
+
+  step(LIKES_SHEET, () => {
+    const likes = getLikesSheet(ss);
+    return likes.getMaxColumns() + ' عمود';
+  });
+
+  step(PERSONAL_BOOKS_SHEET, () => {
+    const personal = getPersonalBooksSheet(ss);
+    return personal.getMaxColumns() + ' عمود';
+  });
+
+  step(READING_LISTS_SHEET, () => {
+    const lists = getReadingListsSheet(ss);
+    return lists.getMaxColumns() + ' عمود';
+  });
+
+  step(SELECTION_QUOTES_SHEET, () => {
+    const selected = getSelectionQuotesSheet(ss);
+    return selected.getMaxColumns() + ' عمود';
+  });
+
+  step(BOOK_SUMMARIES_SHEET, () => {
+    const summaries = getBookSummariesSheet(ss);
+    return summaries.getMaxColumns() + ' عمود';
   });
 
   step('الحفظ النهائي', () => {
