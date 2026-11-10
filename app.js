@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ==========================================================================
  * جليس | مساحة الأعضاء
  * تطبيق أعضاء نادي جليس القرائي — JavaScript خالص (بدون مكتبات)
@@ -1399,13 +1399,14 @@ function renderRecordedMeetings(root, meetings) {
         <div class="recorded-meeting-content">
           <div class="recorded-meeting-meta">
             ${dateLabel ? `<span><svg class="ic"><use href="#i-calendar"/></svg>${esc(dateLabel)}</span>` : ''}
-            <span><svg class="ic"><use href="#i-eye"/></svg>${toAr(Number(item.views) || 0)} مشاهدة</span>
+            ${item.location ? `<span><svg class="ic"><use href="#i-pin"/></svg>${esc(item.location)}</span>` : ''}
+            ${Number(item.views) > 0 ? `<span><svg class="ic"><use href="#i-users"/></svg>${toAr(Number(item.views) || 0)} حاضر</span>` : ''}
           </div>
           <h3>${esc(item.title || 'لقاء جليس')}</h3>
           ${item.description ? `<p class="recorded-meeting-description">${esc(item.description)}</p>` : ''}
           ${item.speaker ? `<div class="recorded-meeting-speaker"><svg class="ic"><use href="#i-user"/></svg>${esc(item.speaker)}</div>` : ''}
           <div class="recorded-meeting-actions">
-            ${videoUrl ? `<a class="btn btn-sm btn-primary" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer">شاهد اللقاء <svg class="ic"><use href="#i-play"/></svg></a>` : '<span class="recorded-meeting-unavailable">رابط التسجيل غير متوفر</span>'}
+            ${videoUrl ? `<a class="btn btn-sm btn-primary" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer">شاهد التسجيل <svg class="ic"><use href="#i-play"/></svg></a>` : ''}
             ${isSupervisor() ? `<button class="icon-btn recorded-meeting-delete" type="button" data-action="delete-recorded-meeting" data-id="${esc(item.id)}" aria-label="حذف اللقاء"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
           </div>
         </div>
@@ -1416,13 +1417,14 @@ function renderRecordedMeetings(root, meetings) {
 function openMeetingArchiveSheet() {
   const localMeetings = (state.recordedMeetings || []).slice().sort((a, b) => recordedMeetingTimestamp(b) - recordedMeetingTimestamp(a));
   openSheet(`
-    ${sheetHead('أرشيف النادي', 'لقاءات جليس السابقة مصنّفة حسب نوعها')}
+    ${sheetHead('أرشيف النادي', 'كل لقاءات جليس السابقة بصورها ومعلوماتها — مناقشات كتب وزيارات واستضافات')}
     <div class="recorded-meetings-toolbar">
-      <p>شاهد واستعد لحظات من لقاءاتنا السابقة.</p>
-      ${isSupervisor() ? `<button class="btn btn-sm btn-primary" type="button" data-action="add-recorded-meeting"><svg class="ic"><use href="#i-plus"/></svg> إضافة تسجيل</button>` : ''}
+      <p>سجلّ النادي الكامل: تضع الإدارة كل لقاء سابق مع صوره وتفاصيله.</p>
+      ${isSupervisor() ? `<button class="btn btn-sm btn-primary" type="button" data-action="add-recorded-meeting"><svg class="ic"><use href="#i-plus"/></svg> إضافة لقاء</button>` : ''}
+
     </div>
     <div class="chips-row" id="recorded-meetings-filters"></div>
-    <div id="recorded-meetings-list" class="recorded-meetings-list"><div class="recorded-meetings-loading">جارٍ تحميل اللقاءات…</div></div>`, (root) => {
+    <div id="recorded-meetings-list" class="recorded-meetings-list"><div class="recorded-meetings-loading">جارٍ تحميل الأرشيف…</div></div>`, (root) => {
     renderRecordedMeetings(root, localMeetings);
     loadRecordedMeetingsFromCloud().then(async (cloudMeetings) => {
       if (!cloudMeetings || !root.querySelector('#recorded-meetings-list')) return;
@@ -1439,35 +1441,36 @@ function openMeetingArchiveSheet() {
 }
 
 function openRecordedMeetingComposer() {
-  if (!isSupervisor()) { toast('إضافة التسجيلات للمشرفين فقط', 'info'); return; }
+  if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
   openSheet(`
-    ${sheetHead('إضافة لقاء مسجل', 'أضف تفاصيل اللقاء ورابط التسجيل')}
+    ${sheetHead('إضافة لقاء إلى الأرشيف', 'ضع اللقاء السابق مع صوره ومعلوماته — رابط التسجيل اختياري')}
     <form id="recorded-meeting-form" class="meeting-form" novalidate>
-      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="عنوان اللقاء المسجل"></div>
-      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء"></textarea></div>
-      <div class="meeting-form-row">
-        <div class="field"><label>تاريخ اللقاء (سنة / شهر / يوم)</label>${dateYMDField('recorded-date', 'تاريخ اللقاء')}</div>
-        <div class="field"><label for="recorded-speaker">مقدم اللقاء</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدم اللقاء"></div>
-      </div>
-      <div class="meeting-form-row">
-        <div class="field"><label for="recorded-views">عدد المشاهدات</label><input class="input" id="recorded-views" type="number" min="0" value="0"></div>
-        <div class="field"><label for="recorded-duration">مدة التسجيل</label><input class="input" id="recorded-duration" maxlength="20" placeholder="مثال: 1:35:55"></div>
-      </div>
-      <div class="field"><label for="recorded-video-url">رابط التسجيل</label><input class="input" id="recorded-video-url" type="url" required placeholder="https://…"></div>
       <div class="field">
         <label for="recorded-type">قسم الأرشيف</label>
         <select class="input" id="recorded-type">
           ${MEETING_ARCHIVE_TYPES.map((type) => `<option value="${esc(type)}">${esc(type)}</option>`).join('')}
         </select>
       </div>
+      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="مثال: مناقشة كتاب بناء الطفل"></div>
+      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء وأهم ما دار فيه"></textarea></div>
+      <div class="meeting-form-row">
+        <div class="field"><label>تاريخ اللقاء (سنة / شهر / يوم)</label>${dateYMDField('recorded-date', 'تاريخ اللقاء')}</div>
+        <div class="field"><label for="recorded-speaker">مقدّم اللقاء / الضيف</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدّم اللقاء"></div>
+      </div>
+      <div class="field"><label for="recorded-location">المكان</label><input class="input" id="recorded-location" maxlength="140" placeholder="مثال: قاعة النادي — القصيم"></div>
+      <div class="meeting-form-row">
+        <div class="field"><label for="recorded-views">عدد الحضور</label><input class="input" id="recorded-views" type="number" min="0" value="0"></div>
+        <div class="field"><label for="recorded-duration">مدة التسجيل</label><input class="input" id="recorded-duration" maxlength="20" placeholder="مثال: 1:35:55"></div>
+      </div>
+      <div class="field"><label for="recorded-video-url">رابط التسجيل (اختياري)</label><input class="input" id="recorded-video-url" type="url" placeholder="https://…"></div>
       <div class="field">
-        <label for="recorded-image-input">صورة مصغرة للقاء</label>
-        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>تظهر كغلاف للتسجيل</small></label>
+        <label for="recorded-image-input">صور اللقاء</label>
+        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>تظهر كغلاف للقاء في الأرشيف</small></label>
         <input id="recorded-image-input" class="meeting-file-input" type="file" accept="image/*">
         <div id="recorded-image-preview-wrap" class="meeting-image-preview-wrap" hidden><img id="recorded-image-preview" alt="معاينة صورة اللقاء"><button type="button" class="meeting-image-remove" id="recorded-image-remove" aria-label="إزالة الصورة">×</button></div>
         <small id="recorded-image-status" class="meeting-image-status"></small>
       </div>
-      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-play"/></svg> نشر في أرشيف اللقاءات</button>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> نشر في أرشيف النادي</button>
     </form>`, (root) => {
     let imageData = '';
     const fileInput = root.querySelector('#recorded-image-input');
@@ -1506,8 +1509,12 @@ function openRecordedMeetingComposer() {
       const title = root.querySelector('#recorded-title').value.trim();
       const recordedAt = readYMD('recorded-date');
       const videoUrl = root.querySelector('#recorded-video-url').value.trim();
-      if (!title || !recordedAt || !/^https?:\/\//i.test(videoUrl)) {
-        toast('أكمل العنوان والتاريخ، وأدخل رابط تسجيل صحيحًا', 'info');
+      if (!title || !recordedAt) {
+        toast('أكمل العنوان والتاريخ', 'info');
+        return;
+      }
+      if (videoUrl && !/^https?:\/\//i.test(videoUrl)) {
+        toast('رابط التسجيل غير صحيح', 'info');
         return;
       }
 
@@ -1522,6 +1529,7 @@ function openRecordedMeetingComposer() {
         videoUrl,
         image: imageData,
         type: root.querySelector('#recorded-type').value,
+        location: root.querySelector('#recorded-location').value.trim(),
         createdAt: Date.now(),
         createdBy: currentMember.name
       };
@@ -2046,6 +2054,7 @@ async function loadStateFor(member) {
         loadProfileFromCloud(member.id),
         loadEntriesFromCloud(member.id),
         loadMyBooksFromCloud(member.id),
+        loadPersonalBooksFromCloud(member.id),
         loadQuotesFromCloud(member.id),
         loadArticlesFromCloud(member.id),
         loadClubBooksFromCloud(member.id)
@@ -2054,7 +2063,7 @@ async function loadStateFor(member) {
       const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 4000));
       const cloudData = await Promise.race([cloudLoad, timeout]);
       if (!cloudData) throw new Error('cloud load timeout');
-      const [profile, entries, myBooks, quotes, articles, clubBooks] = cloudData;
+      const [profile, entries, myBooks, personalBooks, quotes, articles, clubBooks] = cloudData;
 
       if (profile) {
         loadedFromCloud = true;
@@ -2069,6 +2078,7 @@ async function loadStateFor(member) {
           },
           entries: Array.isArray(entries) ? entries : [],
           myBooks: Array.isArray(myBooks) ? myBooks : [],
+          personalBooks: Array.isArray(personalBooks) ? personalBooks : [],
           quotes: mergeQuoteLists(getLocalSharedQuotes(), Array.isArray(quotes) ? quotes : []),
           articles: Array.isArray(articles) && articles.length ? articles : base.articles,
           clubBooks: Array.isArray(clubBooks) ? clubBooks : [],
@@ -2445,7 +2455,7 @@ function renderHome() {
   }).format(new Date());
   $('#home-first-name').textContent = firstName;
 
-  const featuredBooks = BOOKS.filter((book) => book.pick).concat(state.clubBooks || []).slice(0, 4);
+  const featuredBooks = [...(state.clubBooks || []), ...BOOKS.filter((book) => book.pick)].slice(0, 4);
   $('#home-books').innerHTML = featuredBooks.map((book) => `
     <button class="book-mini" type="button" data-action="book" data-id="${book.id}" aria-label="${esc(book.title)}">
       ${coverHTML(book)}
@@ -2690,7 +2700,6 @@ function quoteCardHTML(quote, options = {}) {
   const saved = state.savedQuotes.includes(quote.id);
   const liked = state.likedQuotes.includes(quote.id);
   const likes = Number((state.likeCounts && state.likeCounts.quotes && state.likeCounts.quotes[quote.id]) || 0);
-  const selected = (selectionQuotesCache || []).some((item) => String(item.id) === String(quote.id));
   const name = authorNameOf(quote);
   const color = authorColorOf(quote);
   const canDelete = isSupervisor();
@@ -2704,7 +2713,10 @@ function quoteCardHTML(quote, options = {}) {
       ${compact ? `<div class="home-quote-eyebrow"><span class="quote-number-stamp"><b class="quote-number-badge">${toAr(options.number || quoteSerialNumber(quote))}</b><img class="quote-number-image" src="quote-marks.svg" alt="" aria-hidden="true"></span>${options.latest ? '<span class="quote-new-badge">جديد</span>' : ''}</div>` : `<div class="quote-serial"><span class="quote-number-stamp"><b class="quote-number-badge">${toAr(options.number || quoteSerialNumber(quote))}</b><img class="quote-number-image" src="quote-marks.svg" alt="" aria-hidden="true"></span></div>`}
       <p class="quote-text${quote.text && quote.text.length > 240 ? ' is-long' : ''}" data-quote-body="${esc(quote.id)}"${textStyle}>${esc(quote.text)}</p>
       ${quote.text && quote.text.length > 240 ? `<button class="quote-more" type="button" data-action="expand-quote" data-id="${esc(quote.id)}">قراءة المزيد</button>` : ''}
-      <div class="quote-source">${esc(quote.book || 'من هامش القراءة')}${quote.bookAuthor ? `<span> · ${esc(quote.bookAuthor)}</span>` : ''}${quote.page ? `<span> · ص ${esc(quote.page)}</span>` : ''}
+      <div class="quote-source">
+        <span class="quote-source-text">
+          <span class="quote-source-book">${esc(quote.book || 'من هامش القراءة')}</span>${quote.bookAuthor ? `<span class="quote-source-author"> · ${esc(quote.bookAuthor)}</span>` : ''}${quote.page ? `<span class="quote-source-page"> · ص ${esc(quote.page)}</span>` : ''}
+        </span>
         <span class="quote-font-controls" role="group" aria-label="حجم خط الاقتباس">
           <button type="button" class="font-size-btn" data-font-quote="${esc(quote.id)}" data-font-step="-1" aria-label="تصغير خط الاقتباس">أ−</button>
           <button type="button" class="font-size-btn" data-font-quote="${esc(quote.id)}" data-font-step="1" aria-label="تكبير خط الاقتباس">أ+</button>
@@ -2727,9 +2739,6 @@ function quoteCardHTML(quote, options = {}) {
           <button type="button" data-action="share-quote" data-id="${quote.id}" aria-label="مشاركة الاقتباس">
             <svg class="ic"><use href="#i-share"/></svg>
           </button>
-          ${canDelete ? `<button type="button" data-action="toggle-selection-quote" data-id="${quote.id}" class="quote-select${selected ? ' active' : ''}" aria-label="إضافة إلى مختارات النادي" aria-pressed="${selected ? 'true' : 'false'}">
-            <svg class="ic"><use href="#i-star"/></svg>
-          </button>` : ''}
           ${canDelete ? `<button type="button" data-action="delete-quote" data-id="${quote.id}" class="danger" aria-label="حذف الاقتباس">
             <svg class="ic"><use href="#i-trash"/></svg>
           </button>` : ''}
@@ -3747,8 +3756,8 @@ async function openMemberProfileSheet(name) {
       </div>
       <section class="member-contributions">
         <div class="member-contrib-tabs" role="tablist">
-          <button class="active" type="button" data-contrib-tab="quotes" role="tab" aria-selected="true">اقتباساته <span>${toAr(quotesCount)}</span></button>
-          <button type="button" data-contrib-tab="articles" role="tab" aria-selected="false">مقالاته <span>${toAr(articlesCount)}</span></button>
+          <button class="active" type="button" data-contrib-tab="quotes" role="tab" aria-selected="true">الاقتباسات <span>${toAr(quotesCount)}</span></button>
+          <button type="button" data-contrib-tab="articles" role="tab" aria-selected="false">المقالات <span>${toAr(articlesCount)}</span></button>
         </div>
         <div class="member-contrib-panel active" data-contrib-panel="quotes">
           ${myQuotes.length ? myQuotes.map((q) => `
@@ -4456,18 +4465,41 @@ function quoteShareUrl(quote) {
   return url.toString();
 }
 
+/* يحسب مقاس الخط وارتفاع البطاقة بحيث يظهر الاقتباس كاملًا مهما طال */
+function layoutQuoteShareText(text) {
+  const measure = document.createElement('canvas').getContext('2d');
+  const top = 380;
+  const reserve = 350;
+  const baseHeight = 1350;
+  const fit = (size) => {
+    measure.font = `700 ${size}px "Amiri", "IBM Plex Sans Arabic", serif`;
+    return wrapCanvasText(measure, text, 880, 999);
+  };
+  for (let size = 60; size >= 30; size -= 2) {
+    const lines = fit(size);
+    const needed = lines.length * Math.round(size * 1.5);
+    if (top + needed + reserve <= baseHeight) return { size, lines, top, height: baseHeight };
+  }
+  const size = 30;
+  const lines = fit(size);
+  const needed = lines.length * Math.round(size * 1.5);
+  return { size, lines, top, height: Math.max(baseHeight, Math.ceil(top + needed + reserve)) };
+}
+
 async function createQuoteShareCard(quote) {
+  const layout = layoutQuoteShareText(quote.text || '');
+  const H = layout.height;
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
-  canvas.height = 1350;
+  canvas.height = H;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('تعذر تجهيز بطاقة المشاركة');
 
-  const backdrop = context.createLinearGradient(0, 0, 1080, 1350);
+  const backdrop = context.createLinearGradient(0, 0, 1080, H);
   backdrop.addColorStop(0, '#FBF8F1');
   backdrop.addColorStop(1, '#EEE4D0');
   context.fillStyle = backdrop;
-  context.fillRect(0, 0, 1080, 1350);
+  context.fillRect(0, 0, 1080, H);
 
   /* الشريط العلوي */
   context.fillStyle = '#14281E';
@@ -4485,35 +4517,37 @@ async function createQuoteShareCard(quote) {
 
   /* علامة الاقتباس */
   context.fillStyle = 'rgba(197,155,99,.32)';
-  context.font = '700 230px "Amiri", "IBM Plex Sans Arabic", serif';
-  context.fillText('”', 1000, 400);
+  context.font = '700 170px "Amiri", "IBM Plex Sans Arabic", serif';
+  context.textAlign = 'right';
+  context.fillText('”', 1000, 330);
 
-  /* نص الاقتباس */
+  /* نص الاقتباس — مقاس وارتفاع تلقائيان */
   context.fillStyle = '#1E3A2B';
-  context.font = '700 54px "Amiri", "IBM Plex Sans Arabic", serif';
-  const lines = wrapCanvasText(context, quote.text || '', 880, 9);
-  let y = 430;
-  lines.forEach((line) => { context.fillText(line, 1000, y); y += 80; });
+  context.font = `700 ${layout.size}px "Amiri", "IBM Plex Sans Arabic", serif`;
+  const lineHeight = Math.round(layout.size * 1.5);
+  let y = layout.top + layout.size;
+  layout.lines.forEach((line) => { context.fillText(line, 1000, y); y += lineHeight; });
 
   /* المصدر */
-  const source = `${quote.book || 'من هامش القراءة'}${quote.page ? ` — ص ${quote.page}` : ''}`;
+  const source = `${quote.book || 'من هامش القراءة'}${quote.bookAuthor ? ` — ${quote.bookAuthor}` : ''}${quote.page ? ` — ص ${quote.page}` : ''}`;
   context.fillStyle = '#9A7440';
   context.font = '600 28px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText(source.slice(0, 60), 1000, Math.max(y + 10, 980));
+  context.fillText(source.slice(0, 70), 1000, y + 24);
 
   /* الفاصل */
+  const footY = H - 270;
   context.strokeStyle = 'rgba(30,58,43,.18)';
   context.lineWidth = 2;
   context.beginPath();
-  context.moveTo(140, 1080);
-  context.lineTo(940, 1080);
+  context.moveTo(140, footY);
+  context.lineTo(940, footY);
   context.stroke();
 
   /* صاحب الاقتباس */
   const author = authorNameOf(quote);
   const avatarSize = 96;
   const avatarX = 880;
-  const avatarY = 1110;
+  const avatarY = footY + 30;
   context.save();
   context.beginPath();
   context.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
@@ -4536,15 +4570,15 @@ async function createQuoteShareCard(quote) {
   context.textAlign = 'right';
   context.fillStyle = '#9A7440';
   context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('بقلم', 840, 1146);
+  context.fillText('بقلم', 840, footY + 84);
   context.fillStyle = '#1E3A2B';
   context.font = '800 30px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText(String(author).slice(0, 40), 840, 1188);
+  context.fillText(String(author).slice(0, 40), 840, footY + 122);
 
   context.textAlign = 'left';
   context.fillStyle = '#667269';
   context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('نادي جليس القرائي · لأن القراءة تجمعنا', 140, 1160);
+  context.fillText('نادي جليس القرائي · لأن القراءة تجمعنا', 140, footY + 90);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('تعذر إنشاء بطاقة الاقتباس')), 'image/png');
@@ -4700,7 +4734,7 @@ function openArticleSheet(id) {
           <small>عضو في نادي جليس القرائي</small>
         </div>
       </div>
-      <div class="reader-body" data-reader-article="${esc(article.id)}" style="font-size:${readerSize}px">${body}</div>
+      <div class="reader-body" data-reader-article="${esc(article.id)}" style="--reader-font:${readerSize}px">${body}</div>
       <div class="reader-actions">
         <button class="btn btn-ghost btn-sm" type="button" data-action="save-article" data-id="${article.id}">
           <svg class="ic"><use href="#i-bookmark"/></svg> ${saved ? 'محفوظ' : 'حفظ المقال'}
@@ -5391,6 +5425,66 @@ function readingWindowDate(value) {
   return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(date);
 }
 
+/* ===== تنظيم الشيت: فحص + توحيد الأسماء + حذف المكرّر ===== */
+async function openSheetsOrganizer() {
+  if (!isSupervisor()) { toast('التنظيم متاح للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('تنظيم الشيت', 'توحيد أسماء التبويبات وترتيبها وحذف الفارغ والمكرّر — بلا فقدان بيانات')}
+    <div id="sheets-organizer" class="sheets-organizer">
+      <p class="deleted-items-loading">جارٍ فحص التبويبات…</p>
+    </div>`);
+  const root = document.getElementById('sheet-root');
+  const box = root ? root.querySelector('#sheets-organizer') : null;
+  if (!box) return;
+
+  let lastReport = [];
+
+  const render = (sheets, report) => {
+    const rows = sheets.map((sheet) => `
+      <div class="sheet-row${sheet.empty ? ' is-empty' : ''}">
+        <span class="sheet-row-name">${esc(sheet.name)}</span>
+        <span class="sheet-row-count">${toAr(sheet.dataRows)} صف</span>
+        <span class="sheet-row-cols">${toAr(sheet.cols)} عمود</span>
+        ${sheet.empty ? '<span class="sheet-row-tag">فارغ</span>' : ''}
+      </div>`).join('');
+    box.innerHTML = `
+      <div class="sheet-organizer-actions">
+        <button class="btn btn-sm btn-gold" type="button" data-action="run-organize"><svg class="ic"><use href="#i-check"/></svg> تنظيم الآن</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-action="refresh-sheets">تحديث</button>
+      </div>
+      ${report && report.length ? `<div class="sheet-organizer-report">${report.map((line) => `<p>${esc(line)}</p>`).join('')}</div>` : ''}
+      <div class="sheet-organizer-list">${rows}</div>`;
+    const run = box.querySelector('[data-action="run-organize"]');
+    if (run) run.addEventListener('click', async () => {
+      setBtnBusy(run, true, 'جارٍ التنظيم…');
+      const result = await cloudRequest('organizeSheets', { requesterName: (currentMember && currentMember.name) || '' });
+      setBtnBusy(run, false);
+      if (!result || result.success !== true) {
+        toast(cleanServerError(result, 'تعذر تنظيم الشيت'), 'info');
+        return;
+      }
+      const lines = [];
+      if (Array.isArray(result.renamed) && result.renamed.length) lines.push('أُعيدت تسمية: ' + result.renamed.join('، '));
+      if (Array.isArray(result.deleted) && result.deleted.length) lines.push('حُذف: ' + result.deleted.join('، '));
+      if (Array.isArray(result.keptUnknown) && result.keptUnknown.length) lines.push('أُبقيت (غير معروفة): ' + result.keptUnknown.join('، '));
+      if (Array.isArray(result.report) && result.report.length) lines.push(...result.report);
+      lastReport = lines.length ? lines : ['لا تغييرات — الشيت منظّم بالفعل'];
+      toast('تم تنظيم الشيت', 'check');
+      await loadSheetsOverview();
+    });
+    const refresh = box.querySelector('[data-action="refresh-sheets"]');
+    if (refresh) refresh.addEventListener('click', () => loadSheetsOverview());
+  };
+
+  const loadSheetsOverview = async () => {
+    const result = await cloudRequest('describeSpreadsheet');
+    const sheets = (result && result.success === true && Array.isArray(result.sheets)) ? result.sheets : [];
+    if (box.isConnected) render(sheets, lastReport);
+  };
+
+  await loadSheetsOverview();
+}
+
 /* ===== ملخصات الكتب — قائمة مستقلة ينشر فيها الأعضاء ملخصاتهم ===== */
 function openBookSummariesSheet() {
   openSheet(`
@@ -5502,63 +5596,200 @@ function openBookSummaryComposer() {
 
 /* ===== التقرير الأسبوعي ===== */
 async function openWeeklyReportSheet() {
+  weeklyReportsMode = 'recent';
   openSheet(`
-    ${sheetHead('التقرير الأسبوعي', 'كم قرأ الأعضاء من صفحات خلال الأسبوع')}
-    <div id="weekly-report" class="weekly-report"><div class="recorded-meetings-loading">جارٍ إعداد التقرير…</div></div>`);
-  const root = document.getElementById('sheet-root');
-  const box = root.querySelector('#weekly-report');
+    ${sheetHead('التقرير الأسبوعي', 'تقارير النادي الأسبوعية — أحدث تقرير أولًا')}
+    <div id="weekly-report" class="weekly-report"><div class="recorded-meetings-loading">جارٍ تحميل التقارير…</div></div>`);
+  await loadWeeklyReports();
+}
+
+let weeklyReportsCache = [];
+let weeklyReportsMode = 'recent';
+
+async function loadWeeklyReports() {
+  const result = await cloudRequest('getWeeklyReports');
+  weeklyReportsCache = (result && result.success === true && Array.isArray(result.data)) ? result.data : [];
+  renderWeeklyReports();
+}
+
+function weeklyReportLabel(report) {
+  return `الأسبوع ${toAr(report.weekNo)}`;
+}
+
+function weeklyRangeLabel(report) {
+  const from = report.weekStart ? formatLongDate(fromISO(report.weekStart)) : '';
+  const to = report.weekEnd ? formatLongDate(fromISO(report.weekEnd)) : '';
+  return from && to ? `من ${from} إلى ${to}` : (from || '');
+}
+
+function weeklyReportCardHTML(report, big = false) {
+  const label = weeklyReportLabel(report);
+  const range = weeklyRangeLabel(report);
+  const title = String(report.title || '').trim();
+  const stats = [];
+  if (Number(report.pages) > 0) stats.push(`${toAr(report.pages)} صفحة`);
+  if (Number(report.participants) > 0) stats.push(`${toAr(report.participants)} مشارك`);
+  return `
+    <article class="weekly-report-card${big ? ' is-latest' : ''}">
+      <button class="weekly-report-open" type="button" data-action="open-weekly-report" data-id="${esc(report.id)}" aria-label="عرض ${esc(label)}">
+        <span class="weekly-report-media">
+          ${report.image ? `<img src="${esc(report.image)}" alt="${esc(title || label)}" loading="lazy">` : '<span class="weekly-report-placeholder"></span>'}
+          <span class="weekly-report-week">${toAr(report.weekNo)}</span>
+          ${big ? '<span class="weekly-report-tag">أحدث تقرير</span>' : ''}
+        </span>
+        <span class="weekly-report-caption">
+          <strong>${esc(title || label)}</strong>
+          <small>${esc(range || label)}</small>
+          ${stats.length ? `<span class="weekly-report-stats">${stats.map((item) => `<i>${esc(item)}</i>`).join('')}</span>` : ''}
+        </span>
+      </button>
+      ${isSupervisor() ? `<button class="weekly-report-delete" type="button" data-action="delete-weekly-report" data-id="${esc(report.id)}" aria-label="حذف ${esc(label)}"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+    </article>`;
+}
+
+function renderWeeklyReports() {
+  const box = document.getElementById('weekly-report');
   if (!box) return;
-
-  const localStats = weekStats();
-  let report = null;
-  try {
-    const result = await cloudRequest('getWeeklyReport');
-    if (result && result.success === true) report = result;
-  } catch (error) { report = null; }
-  if (!box.isConnected) return;
-
-  const days = (report && Array.isArray(report.days) && report.days.length)
-    ? report.days
-    : localStats.days.map((day) => ({ date: day.date, pages: day.pages }));
-  const maxDay = days.reduce((max, day) => Math.max(max, Number(day.pages || 0)), 0) || 1;
-  const totalPages = report ? Number(report.pages || 0) : localStats.pages;
-  const sessions = report ? Number(report.sessions || 0) : localStats.sessions;
-  const readers = report ? Number(report.readers || 0) : 0;
-  const members = (report && Array.isArray(report.members)) ? report.members : [];
-  const labels = ['أحد', 'إثن', 'ثلا', 'أرب', 'خمي', 'جمع', 'سبت'];
-
-  box.innerHTML = `
-    <div class="weekly-report-hero">
-      <div><strong>${toAr(totalPages)}</strong><span>صفحة هذا الأسبوع</span></div>
-      <div><strong>${toAr(sessions)}</strong><span>جلسات قراءة</span></div>
-      <div><strong>${toAr(readers)}</strong><span>قارئ نشط</span></div>
-    </div>
-    <div class="weekly-report-block">
-      <span class="eyebrow">القراءة اليومية</span>
-      <div class="weekly-report-bars">
-        ${days.map((day, index) => `
-          <div class="weekly-report-bar">
-            <i style="height:${Math.max(6, Math.round((Number(day.pages || 0) / maxDay) * 100))}%"></i>
-            <b>${toAr(Number(day.pages || 0))}</b>
-            <small>${esc(labels[index] || '')}</small>
-          </div>`).join('')}
+  const reports = weeklyReportsCache.slice().sort((a, b) => (Number(b.weekNo) || 0) - (Number(a.weekNo) || 0));
+  const toolbar = `
+    <div class="weekly-report-toolbar">
+      <div class="weekly-report-toolbar-text">
+        <span class="eyebrow">تقارير النادي</span>
+        <strong>${toAr(reports.length)} تقرير أسبوعي</strong>
       </div>
-    </div>
-    <div class="weekly-report-block">
-      <span class="eyebrow">أكثر القرّاء</span>
-      <div class="weekly-report-members">
-        ${members.length ? members.slice(0, 12).map((member, index) => {
-          const known = MEMBERS.find((mem) => normalizeName(mem.name) === normalizeName(member.memberName));
-          const color = known ? known.color : '#C59B63';
-          return `<div class="weekly-report-member">
-            <span class="weekly-report-rank">${toAr(index + 1)}</span>
-            ${avatarHTML(member.memberName || 'عضو جليس', color, 'avatar-mini', memberPhoto(member.memberName, ''))}
-            <div><strong>${esc(member.memberName || 'عضو جليس')}</strong><small>${esc((member.books || []).slice(0, 2).map((b) => b.title).join(' · '))}</small></div>
-            <b>${toAr(member.pages)} صفحة</b>
-          </div>`;
-        }).join('') : '<div class="reading-tip-empty">لا توجد قراءات مسجلة هذا الأسبوع بعد.</div>'}
+      <div class="weekly-report-tools">
+        ${reports.length > 3 ? `<button class="btn btn-sm btn-ghost" type="button" data-action="weekly-archive">${weeklyReportsMode === 'archive' ? 'آخر ثلاثة أسابيع' : 'كل الأسابيع'}</button>` : ''}
+        ${isSupervisor() && reports.length ? `<button class="btn btn-sm btn-ghost danger" type="button" data-action="weekly-clear">حذف الكل</button>` : ''}
+        ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-weekly-report"><svg class="ic"><use href="#i-plus"/></svg> إضافة</button>` : ''}
       </div>
     </div>`;
+  if (!reports.length) {
+    box.innerHTML = toolbar + emptyHTML('calendar', 'لا توجد تقارير بعد', isSupervisor() ? 'أضف أول تقرير أسبوعي بالزر أعلاه.' : 'ستظهر هنا التقارير الأسبوعية للنادي.');
+    return;
+  }
+  if (weeklyReportsMode === 'archive') {
+    box.innerHTML = toolbar + `<div class="weekly-report-grid">${reports.map((report) => weeklyReportCardHTML(report)).join('')}</div>`;
+    return;
+  }
+  const [latest, ...previous] = reports.slice(0, 3);
+  box.innerHTML = toolbar
+    + `<div class="weekly-report-latest">${weeklyReportCardHTML(latest, true)}</div>`
+    + (previous.length ? `
+      <div class="weekly-report-prev-block">
+        <span class="weekly-report-prev-label">الأسابيع السابقة</span>
+        <div class="weekly-report-prev">${previous.map((report) => weeklyReportCardHTML(report)).join('')}</div>
+      </div>` : '');
+}
+
+function openWeeklyReportViewer(id) {
+  const report = weeklyReportsCache.find((item) => String(item.id) === String(id));
+  if (!report) { toast('تعذر فتح التقرير', 'info'); return; }
+  openSheet(`
+    <div class="sheet-head reading-window-viewer-head">
+      <div>
+        <h2>${esc(weeklyReportLabel(report))}</h2>
+        <p>${esc(weeklyRangeLabel(report))}</p>
+      </div>
+      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+        <svg class="ic"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div class="reading-window-viewer">
+      <img class="reading-window-viewer-image" src="${esc(report.image)}" alt="${esc(weeklyReportLabel(report))}">
+    </div>`, null, { fullscreen: true });
+}
+
+function openWeeklyReportComposer() {
+  if (!isSupervisor()) { toast('إضافة التقارير للمشرفين فقط', 'info'); return; }
+  const nextNo = weeklyReportsCache.reduce((max, report) => Math.max(max, Number(report.weekNo) || 0), 0) + 1;
+  openSheet(`
+    ${sheetHead('إضافة تقرير أسبوعي', 'الصورة تُعرض كما هي — ورقم الأسبوع المسجّل نفسه يستبدل صورته')}
+    <form id="weekly-report-form" novalidate>
+      <div class="field">
+        <label for="weekly-no">رقم الأسبوع</label>
+        <input class="input" id="weekly-no" type="number" min="1" max="9999" value="${nextNo}" required>
+      </div>
+      <div class="field">
+        <label for="weekly-title">عنوان الأسبوع</label>
+        <input class="input" id="weekly-title" maxlength="90" placeholder="مثال: أسبوع القراءة والمشاركة">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="weekly-pages">الصفحات المقروءة</label>
+          <input class="input" id="weekly-pages" type="number" min="0" max="999999" placeholder="0">
+        </div>
+        <div class="field">
+          <label for="weekly-participants">عدد المشاركين</label>
+          <input class="input" id="weekly-participants" type="number" min="0" max="9999" placeholder="0">
+        </div>
+      </div>
+      <div class="field">
+        <label for="weekly-notes">ملاحظات</label>
+        <textarea class="input" id="weekly-notes" rows="3" maxlength="500" placeholder="أبرز ما جرى في الأسبوع…"></textarea>
+      </div>
+      <div class="field">
+        <label>تاريخ بداية الأسبوع (سنة / شهر / يوم)</label>
+        ${dateYMDField('weekly-date', 'بداية الأسبوع')}
+      </div>
+      <div class="quote-dropzone" id="weekly-dropzone">
+        <svg class="ic"><use href="#i-article"/></svg>
+        <strong>أسقط صورة التقرير هنا</strong>
+        <span>تُحفظ كاملة بدون قص</span>
+        <button type="button" class="btn btn-sm btn-ghost" id="weekly-pick">أو اختر صورة</button>
+        <input type="file" id="weekly-image" accept="image/*" hidden>
+        <small id="weekly-status" class="meeting-image-status"></small>
+      </div>
+      <div class="field" id="weekly-preview-wrap" hidden><img id="weekly-preview" class="selection-preview" alt="معاينة التقرير"></div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> حفظ التقرير</button>
+    </form>`, (root) => {
+    let imageData = '';
+    const status = root.querySelector('#weekly-status');
+    const previewWrap = root.querySelector('#weekly-preview-wrap');
+    const preview = root.querySelector('#weekly-preview');
+    const handleFile = async (file) => {
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await prepareUploadImage(file);
+        preview.src = imageData;
+        previewWrap.hidden = false;
+        status.textContent = 'الصورة جاهزة — اضغط حفظ التقرير.';
+      } catch (error) {
+        imageData = '';
+        previewWrap.hidden = true;
+        status.textContent = error.message || 'تعذر قراءة الصورة';
+      }
+    };
+    bindImageDropzone(root.querySelector('#weekly-dropzone'), root.querySelector('#weekly-image'), handleFile);
+    const pick = root.querySelector('#weekly-pick');
+    const input = root.querySelector('#weekly-image');
+    if (pick && input) pick.addEventListener('click', () => input.click());
+
+    root.querySelector('#weekly-report-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const weekNo = Number(root.querySelector('#weekly-no').value) || 0;
+      const weekStart = readYMD('weekly-date');
+      if (!weekNo) { toast('أدخل رقم الأسبوع', 'info'); return; }
+      if (!weekStart) { toast('حدّد تاريخ بداية الأسبوع', 'info'); return; }
+      if (!imageData) { toast('أضف صورة التقرير أولًا', 'info'); return; }
+      const weekEnd = toISO(addDays(fromISO(weekStart), 6));
+      const result = await cloudRequest('saveWeeklyReport', {
+        weekNo,
+        weekStart,
+        weekEnd,
+        title: root.querySelector('#weekly-title').value.trim(),
+        pages: Number(root.querySelector('#weekly-pages').value) || 0,
+        participants: Number(root.querySelector('#weekly-participants').value) || 0,
+        notes: root.querySelector('#weekly-notes').value.trim(),
+        image: imageData,
+        createdAt: Date.now(),
+        by: (currentMember && currentMember.name) || 'مشرف'
+      });
+      if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر حفظ التقرير'), 'info'); return; }
+      toast(result.replaced ? `تم تحديث تقرير الأسبوع ${toAr(weekNo)}` : `تم إضافة الأسبوع ${toAr(weekNo)}`, 'check');
+      closeSheet();
+      setTimeout(() => openWeeklyReportSheet(), 340);
+    });
+  });
 }
 
 /* ===== اقتباسات مختارات النادي ===== */
@@ -5613,25 +5844,129 @@ function openClubSelectionsSheet(activeTab = 'quotes') {
   });
 }
 
+function selectionQuoteCardHTML(item) {
+  const hasImage = Boolean(item.image);
+  return `
+    <article class="selection-quote-card${hasImage ? ' has-image' : ''}">
+      ${hasImage
+        ? `<img class="selection-quote-image" src="${esc(item.image)}" alt="اقتباس مختار${item.book ? ` من ${esc(item.book)}` : ''}" loading="lazy">`
+        : `<blockquote class="selection-quote-text"><p>«${esc(item.text || '')}»</p><footer>${esc(item.book || '')}${item.bookAuthor ? ` — ${esc(item.bookAuthor)}` : ''}${item.authorName ? ` · ${esc(item.authorName)}` : ''}</footer></blockquote>`}
+      ${isSupervisor() ? `<button class="selection-quote-delete" type="button" data-action="delete-selection-quote" data-id="${esc(item.id)}">حذف</button>` : ''}
+    </article>`;
+}
+
 function renderSelectionsQuotes(panel) {
-  const curated = (selectionQuotesCache || []).map((item) => ({
-    id: item.id,
-    text: item.text,
-    book: item.book,
-    bookAuthor: item.bookAuthor,
-    authorName: item.authorName,
-    createdAt: item.createdAt
-  }));
+  const items = selectionQuotesCache || [];
   panel.innerHTML = `
     <div class="selections-head-row">
-      <div><span class="eyebrow">اقتباسات مختارة</span><p>اختارات المشرفين من اقتباسات الأعضاء</p></div>
-      <button class="link-btn" type="button" data-action="go-quotes">كل الاقتباسات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+      <div><span class="eyebrow">اقتباسات مختارة</span><p>صور الاقتباسات التي يختارها المشرفون</p></div>
+      ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button>` : ''}
     </div>
     <div class="selections-quotes">
-      ${curated.length
-        ? curated.map((quote, index) => quoteCardHTML(quote, { compact: true, number: index + 1 })).join('')
-        : emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'أضف الاقتباسات المميزة من زر النجمة في قائمة الاقتباسات.')}
+      ${items.length
+        ? items.map((item) => selectionQuoteCardHTML(item)).join('')
+        : emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'يضيف المشرف هنا صور الاقتباسات المختارة.')}
     </div>`;
+}
+
+/* قبول صورة بالإسقاط أو الاختيار وتحويلها لنص يرفع إلى Drive */
+function bindImageDropzone(zone, input, onFile) {
+  if (zone) {
+    ['dragenter', 'dragover'].forEach((type) => zone.addEventListener(type, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      zone.classList.add('is-over');
+    }));
+    ['dragleave', 'drop'].forEach((type) => zone.addEventListener(type, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      zone.classList.remove('is-over');
+    }));
+    zone.addEventListener('drop', (event) => {
+      const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+      if (file) onFile(file);
+    });
+  }
+  if (input) input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    if (file) onFile(file);
+  });
+}
+
+async function prepareUploadImage(file) {
+  if (!file || !file.type || !file.type.startsWith('image/')) throw new Error('اختر ملف صورة صالحًا');
+  if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 4 * 1024 * 1024) {
+    return readFileAsDataUrl(file);
+  }
+  return compressMeetingImage(file);
+}
+
+function openSelectionQuoteComposer() {
+  if (!isSupervisor()) { toast('إضافة الاقتباسات المختارة للمشرفين فقط', 'info'); return; }
+  const options = (state.quotes || []).slice(0, 300).map((quote) =>
+    `<option value="${esc(quote.id)}">${esc(String(quote.text || '').slice(0, 70))}</option>`).join('');
+  openSheet(`
+    ${sheetHead('إضافة اقتباس مختار', 'أسقط صورة الاقتباس — تظهر في مختارات النادي كما هي')}
+    <form id="selection-quote-form" novalidate>
+      <div class="quote-dropzone" id="selection-dropzone">
+        <svg class="ic"><use href="#i-article"/></svg>
+        <strong>أسقط صورة الاقتباس هنا</strong>
+        <span>تُعرض كاملة كما صممتها، وتصلح للنشر في مواقع التواصل</span>
+        <button type="button" class="btn btn-sm btn-ghost" id="selection-pick">أو اختر صورة</button>
+        <input type="file" id="selection-image" accept="image/*" hidden>
+        <small id="selection-status" class="meeting-image-status"></small>
+      </div>
+      <div class="field" id="selection-preview-wrap" hidden><img id="selection-preview" class="selection-preview" alt="معاينة الاقتباس"></div>
+      <div class="field">
+        <label for="selection-quote">ربطها باقتباس من القائمة (اختياري)</label>
+        <select class="input" id="selection-quote"><option value="">— بدون ربط —</option>${options}</select>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> نشر في مختارات النادي</button>
+    </form>`, (root) => {
+    let imageData = '';
+    const status = root.querySelector('#selection-status');
+    const previewWrap = root.querySelector('#selection-preview-wrap');
+    const preview = root.querySelector('#selection-preview');
+    const handleFile = async (file) => {
+      status.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        imageData = await prepareUploadImage(file);
+        preview.src = imageData;
+        previewWrap.hidden = false;
+        status.textContent = 'الصورة جاهزة — اضغط النشر.';
+      } catch (error) {
+        imageData = '';
+        previewWrap.hidden = true;
+        status.textContent = error.message || 'تعذر قراءة الصورة';
+      }
+    };
+    bindImageDropzone(root.querySelector('#selection-dropzone'), root.querySelector('#selection-image'), handleFile);
+    const pick = root.querySelector('#selection-pick');
+    const input = root.querySelector('#selection-image');
+    if (pick && input) pick.addEventListener('click', () => input.click());
+
+    root.querySelector('#selection-quote-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!imageData) { toast('أضف صورة الاقتباس أولًا', 'info'); return; }
+      const selectId = root.querySelector('#selection-quote').value;
+      const linked = selectId ? (state.quotes || []).find((quote) => String(quote.id) === String(selectId)) : null;
+      const result = await cloudRequest('saveSelectionQuote', {
+        id: `sel-${Date.now()}`,
+        quoteId: linked ? linked.id : '',
+        text: linked ? linked.text : '',
+        book: linked ? (linked.book || '') : '',
+        bookAuthor: linked ? (linked.bookAuthor || '') : '',
+        authorName: linked ? authorNameOf(linked) : '',
+        image: imageData,
+        createdAt: Date.now(),
+        by: (currentMember && currentMember.name) || 'مشرف'
+      });
+      if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر نشر الاقتباس المختار'), 'info'); return; }
+      toast('نُشر الاقتباس في مختارات النادي', 'check');
+      closeSheet();
+      setTimeout(() => openClubSelectionsSheet('quotes'), 340);
+    });
+  });
 }
 
 async function renderSelectionsWindows(panel) {
@@ -6016,6 +6351,12 @@ function openMoreSheet() {
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>` : ''}
       ${isSupervisor() ? `
+      <button class="more-item" type="button" data-action="organize-sheets">
+        <span class="more-icon"><svg class="ic"><use href="#i-library"/></svg></span>
+        <div class="more-body"><strong>تنظيم الشيت</strong><p>توحيد أسماء التبويبات وحذف المكرّر والفارغ</p></div>
+        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
+      </button>` : ''}
+      ${isSupervisor() ? `
       <button class="more-item" type="button" data-action="open-trash">
         <span class="more-icon"><svg class="ic"><use href="#i-trash"/></svg></span>
         <div class="more-body"><strong>سلة المحذوفات</strong><p>استعادة الاقتباسات والمقالات والكتب والرفوف واللقاءات</p></div>
@@ -6264,14 +6605,19 @@ function renderDeletedItems(root, items) {
     const icon = icons[item.type] || 'library';
     return `
       <article class="deleted-item-card">
-        <span class="deleted-item-icon"><svg class="ic"><use href="#i-${icon}"/></svg></span>
-        <div class="deleted-item-body">
-          <small>${esc(labels[item.type] || 'عنصر')}</small>
-          <strong>${esc(title)}</strong>
-          ${detail ? `<p>${esc(String(detail).slice(0, 110))}</p>` : ''}
-          <span>${deletedAt ? `حُذف ${esc(deletedAt)}` : ''}${item.deletedBy ? ` · ${esc(item.deletedBy)}` : ''}</span>
+        <div class="deleted-item-head">
+          <span class="deleted-item-icon"><svg class="ic"><use href="#i-${icon}"/></svg></span>
+          <div class="deleted-item-body">
+            <small>${esc(labels[item.type] || 'عنصر')}</small>
+            <strong>${esc(title)}</strong>
+            ${detail ? `<p>${esc(String(detail).slice(0, 110))}</p>` : ''}
+            <span>${deletedAt ? `حُذف ${esc(deletedAt)}` : ''}${item.deletedBy ? ` · ${esc(item.deletedBy)}` : ''}</span>
+          </div>
         </div>
-        <button class="btn btn-sm btn-ghost deleted-item-restore" type="button" data-action="restore-deleted" data-type="${esc(item.type)}" data-id="${encodeURIComponent(String(item.id))}">استعادة</button>
+        <div class="deleted-item-actions">
+          <button class="btn btn-sm btn-ghost deleted-item-restore" type="button" data-action="restore-deleted" data-type="${esc(item.type)}" data-id="${encodeURIComponent(String(item.id))}">استعادة</button>
+          <button class="btn btn-sm btn-ghost deleted-item-purge danger" type="button" data-action="purge-deleted" data-type="${esc(item.type)}" data-id="${encodeURIComponent(String(item.id))}">حذف نهائي</button>
+        </div>
       </article>`;
   }).join('');
 }
@@ -6963,7 +7309,7 @@ async function handleGlobalClick(event) {
     saveState();
     renderArticles();
     const reader = document.querySelector(`[data-reader-article="${CSS.escape(String(articleId))}"]`);
-    if (reader) reader.style.fontSize = `${next}px`;
+    if (reader) reader.style.setProperty('--reader-font', `${next}px`);
     return;
   }
 
@@ -7008,10 +7354,57 @@ async function handleGlobalClick(event) {
       closeSheet();
       openBookSummariesSheet();
       break;
+    case 'organize-sheets':
+      openSheetsOrganizer();
+      break;
     case 'weekly-report':
       closeSheet();
       openWeeklyReportSheet();
       break;
+    case 'add-weekly-report':
+      openWeeklyReportComposer();
+      break;
+    case 'weekly-archive':
+      weeklyReportsMode = weeklyReportsMode === 'archive' ? 'recent' : 'archive';
+      renderWeeklyReports();
+      break;
+    case 'open-weekly-report':
+      openWeeklyReportViewer(id);
+      break;
+    case 'weekly-clear': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      openConfirm({
+        title: 'حذف كل التقارير',
+        text: 'سيُحذف كل التقارير الأسبوعية نهائيًا. هل أنت متأكد؟',
+        confirmLabel: 'حذف الكل',
+        danger: true,
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteAllWeeklyReports', { by: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success !== true) { toast('تعذر حذف التقارير', 'info'); return; }
+          weeklyReportsCache = [];
+          toast('تم حذف كل التقارير', 'trash');
+          renderWeeklyReports();
+        }
+      });
+      break;
+    }
+    case 'delete-weekly-report': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const report = weeklyReportsCache.find((item) => String(item.id) === String(id));
+      openConfirm({
+        title: 'حذف التقرير الأسبوعي',
+        text: `سيُحذف ${report ? weeklyReportLabel(report) : 'هذا التقرير'} من القائمة.`,
+        confirmLabel: 'حذف',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteWeeklyReport', { id, by: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success !== true) { toast('تعذر حذف التقرير', 'info'); return; }
+          toast('تم حذف التقرير', 'trash');
+          closeSheet();
+          setTimeout(() => openWeeklyReportSheet(), 340);
+        }
+      });
+      break;
+    }
     case 'open-reading-window':
       openReadingWindowViewer(id);
       break;
@@ -7149,6 +7542,26 @@ async function handleGlobalClick(event) {
     case 'restore-deleted':
       restoreDeletedItem(actionEl.dataset.type, id);
       break;
+    case 'purge-deleted': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const type = actionEl.dataset.type;
+      openConfirm({
+        title: 'حذف نهائي',
+        text: 'سيُحذف هذا العنصر نهائياً ولا يمكن استعادته. هل أنت متأكد؟',
+        confirmLabel: 'حذف نهائي',
+        danger: true,
+        onConfirm: async () => {
+          const result = await cloudRequest('purgeDeletedItem', { type, id, by: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success === false) { toast('تعذر الحذف النهائي', 'info'); return; }
+          toast('تم الحذف النهائي', 'trash');
+          refreshJoinRequests();
+          const trashRoot = document.getElementById('sheet-root');
+          const refreshBtn = trashRoot ? trashRoot.querySelector('#refresh-trash') : null;
+          if (refreshBtn) refreshBtn.click();
+        }
+      });
+      break;
+    }
     case 'open-add-my-book':
       openAddMyBook();
       break;
@@ -7214,24 +7627,24 @@ async function handleGlobalClick(event) {
       if (button) button.textContent = open ? 'طيّ الاقتباس' : 'قراءة المزيد';
       break;
     }
-    case 'toggle-selection-quote': {
+    case 'add-selection-quote':
+      openSelectionQuoteComposer();
+      break;
+    case 'delete-selection-quote': {
       if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
-      const quote = state.quotes.find((item) => String(item.id) === String(id));
-      if (!quote) break;
-      const result = await cloudRequest('toggleSelectionQuote', {
-        id: quote.id,
-        text: quote.text,
-        book: quote.book || '',
-        bookAuthor: quote.bookAuthor || '',
-        authorName: authorNameOf(quote),
-        by: (currentMember && currentMember.name) || 'مشرف'
+      openConfirm({
+        title: 'حذف من مختارات النادي',
+        text: 'سيُزال هذا الاقتباس من مختارات النادي.',
+        confirmLabel: 'حذف',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteSelectionQuote', { id, by: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success !== true) { toast('تعذر الحذف', 'info'); return; }
+          toast('أُزيل من مختارات النادي', 'trash');
+          await refreshSelectionQuotes();
+          closeSheet();
+          setTimeout(() => openClubSelectionsSheet('quotes'), 340);
+        }
       });
-      if (!result || result.success !== true) {
-        toast(cleanServerError(result, 'تعذر تحديث مختارات النادي'), 'info');
-        break;
-      }
-      toast(result.selected ? 'أُضيف الاقتباس إلى مختارات النادي' : 'أُزيل الاقتباس من مختارات النادي', result.selected ? 'check' : 'info');
-      await refreshSelectionQuotes();
       break;
     }
     case 'like-quote': {

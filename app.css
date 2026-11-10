@@ -1350,15 +1350,19 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .trash-toolbar .icon-btn { width:30px; height:30px; color:var(--green-700); background:var(--green-50); }
 .trash-toolbar .icon-btn .ic { width:14px; height:14px; }
 .deleted-items-loading { padding:18px 8px; text-align:center; color:var(--muted-2); font-size:10px; }
-.deleted-item-card { display:flex; align-items:center; gap:9px; padding:10px; border:1px solid var(--line); border-radius:13px; background:#fff; }
+.deleted-item-card { display:flex; flex-direction: column; gap:9px; padding:11px; border:1px solid var(--line); border-radius:13px; background:#fff; min-width:0; overflow: hidden; }
+.deleted-item-card > div { min-width:0; }
+.deleted-item-head { display:flex; align-items:center; gap:9px; min-width:0; }
 .deleted-item-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:10px; color:var(--clay); background:rgba(163,80,59,.08); }
 .deleted-item-icon .ic { width:15px; height:15px; }
-.deleted-item-body { flex:1; min-width:0; }
+.deleted-item-body { flex:1; min-width:0; overflow: hidden; }
 .deleted-item-body small { display:block; color:var(--gold-700); font-size:7px; font-weight:800; }
 .deleted-item-body strong { display:block; overflow:hidden; color:var(--green-800); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
 .deleted-item-body p { margin-top:2px; overflow:hidden; color:var(--muted); font-size:7.5px; text-overflow:ellipsis; white-space:nowrap; }
 .deleted-item-body > span { display:block; margin-top:3px; color:var(--muted-2); font-size:6.5px; }
-.deleted-item-restore { flex:none; min-height:27px; padding:5px 8px; color:var(--green-700); background:var(--green-50); font-size:8px; }
+.deleted-item-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.deleted-item-restore, .deleted-item-purge { flex:none; min-height:27px; padding:5px 9px; color:var(--green-700); background:var(--green-50); font-size:8px; }
+.deleted-item-purge.danger { color:var(--clay); background:rgba(163,80,59,.12); }
 
 /* ط§ظ‚طھط¨ط§ط³ ط§ظ„ظٹظˆظ… */
 .daily-quote {
@@ -1428,12 +1432,10 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .book-shelf-edit-category { color:var(--gold-700); background:rgba(197,155,99,.14); }
 .book-shelf-more .ic { width:14px; height:14px; }
 .book-rail {
-  display: flex;
-  gap: 11px;
-  overflow-x: auto;
-  padding: 2px 2px 9px;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 2px 2px 4px;
 }
 .book-rail::-webkit-scrollbar { display: none; }
 .book-shelf-card { flex:0 0 96px; min-width:0; scroll-snap-align:start; }
@@ -1536,6 +1538,13 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   font-family: var(--serif);
 }
 
+.book-rail .book-mini { min-width: 0; display: flex; flex-direction: column; gap: 5px; text-align: center; }
+.book-rail .book-mini .cover { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 9px; }
+.book-rail .book-mini h4 {
+  font-size: 8.5px; font-weight: 700; color: var(--green-700); margin-top: 0; line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.book-rail .book-mini p { font-size: 7.5px; color: var(--muted-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .book-mini { text-align: right; }
 .book-mini .cover-title { font-size: 14px; }
 .book-mini h4 {
@@ -1550,6 +1559,7 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .book-mini p { font-size: 8.5px; color: var(--muted-2); margin-top: 1px; }
 
 /* ظ…ظ‚ط§ظ„ ط§ظ„ط±ط¦ظٹط³ظٹط© */
+
 .home-article {
   display: flex;
   gap: 13px;
@@ -2349,22 +2359,27 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .quote-source {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   margin-top: 9px;
   font-size: 9.5px;
   color: var(--gold-700);
+  min-width: 0;
 }
-.quote-source::before { content: ''; width: 12px; height: 1px; background: var(--gold); }
-.quote-source span { color: var(--muted-2); }
-.quote-source .quote-font-controls {
-  margin-inline-start: auto; display: inline-flex; align-items: center; gap: 3px;
+.quote-source::before { content: ''; width: 12px; height: 1px; background: var(--gold); flex: none; }
+.quote-source-text {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.quote-source .quote-font-controls .font-size-btn {
+.quote-source-book { color: var(--gold-700); }
+.quote-source-author, .quote-source-page { color: #16281E; font-weight: 700; }
+.quote-font-controls {
+  flex: none; margin-inline-start: auto; display: inline-flex; align-items: center; gap: 3px;
+}
+.quote-font-controls .font-size-btn {
   width: 24px; height: 22px; border-radius: 7px; border: 1px solid var(--line);
   background: var(--paper-2); color: var(--green-700); font-size: 9.5px; font-weight: 800;
   line-height: 1; cursor: pointer; font-family: inherit;
 }
-.quote-source .quote-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .55); color: var(--gold-700); }
+.quote-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .55); color: var(--gold-700); }
 
 .quote-foot {
   display: flex;
@@ -2857,6 +2872,28 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 }
 .ar-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .55); color: var(--gold-700); }
 
+/* ---------- تنظيم الشيت ---------- */
+.sheets-organizer { display: grid; gap: 11px; }
+.sheet-organizer-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.sheet-organizer-report {
+  display: grid; gap: 5px; padding: 11px 12px; border-radius: 13px;
+  background: #F8F5EE; border: 1px solid rgba(197, 155, 99, .3);
+}
+.sheet-organizer-report p { font-size: 8.5px; line-height: 1.8; color: var(--text); }
+.sheet-organizer-list { display: grid; gap: 6px; }
+.sheet-row {
+  display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 12px;
+  background: var(--white); border: 1px solid var(--line);
+}
+.sheet-row.is-empty { opacity: .62; }
+.sheet-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; font-weight: 800; color: var(--green-700); }
+.sheet-row-count, .sheet-row-cols { font-size: 7.5px; color: var(--muted-2); white-space: nowrap; }
+.sheet-row-tag {
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  background: rgba(163, 80, 59, .12); border: 1px solid rgba(163, 80, 59, .3);
+  color: var(--clay); font-size: 7px; font-weight: 800;
+}
+
 /* ---------- ملخصات الكتب ---------- */
 .book-summaries-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -2887,8 +2924,94 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 }
 .book-summary-actions { display: flex; gap: 7px; flex-wrap: wrap; }
 
-/* ---------- التقرير الأسبوعي ---------- */
-.weekly-report { display: grid; gap: 13px; }
+/* ---------- التقرير الأسبوعي: صور التقارير ---------- */
+.weekly-report { display: grid; gap: 14px; }
+.weekly-report-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: 16px;
+  background: linear-gradient(150deg, #1E3A2B, #2A5240); color: #F8F5EE;
+}
+.weekly-report-toolbar-text { display: grid; gap: 3px; }
+.weekly-report-toolbar-text .eyebrow { color: #C59B63; }
+.weekly-report-toolbar-text strong { font-size: 12px; font-weight: 850; color: #fff; }
+.weekly-report-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.weekly-report-tools .btn-ghost { color: #F3E4C6; border-color: rgba(197, 155, 99, .5); background: rgba(248, 245, 238, .1); }
+.weekly-report-tools .btn-ghost.danger { color: #F0B7AE; border-color: rgba(190, 90, 75, .55); background: rgba(190, 90, 75, .16); }
+
+.weekly-report-card {
+  position: relative; border-radius: 16px; overflow: hidden;
+  background: var(--white); border: 1px solid rgba(197, 155, 99, .3);
+  box-shadow: 0 8px 18px rgba(30, 58, 43, .08);
+}
+.weekly-report-card.is-latest { box-shadow: 0 14px 30px rgba(30, 58, 43, .18); border-color: rgba(197, 155, 99, .55); }
+.weekly-report-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; text-align: start; font-family: inherit; }
+.weekly-report-media { position: relative; display: block; width: 100%; background: var(--paper-2); }
+.weekly-report-media img { display: block; width: 100%; height: 168px; object-fit: cover; }
+.weekly-report-card.is-latest .weekly-report-media img { height: 240px; }
+.weekly-report-week {
+  position: absolute; inset-block-start: 9px; inset-inline-end: 9px;
+  min-width: 30px; height: 30px; padding: 0 7px; display: grid; place-items: center;
+  border-radius: 10px; background: rgba(14, 26, 20, .72); border: 1px solid rgba(197, 155, 99, .55);
+  color: #E3C393; font-size: 11px; font-weight: 850; z-index: 2;
+}
+.weekly-report-tag {
+  position: absolute; inset-block-start: 9px; inset-inline-start: 9px;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(197, 155, 99, .92); color: #14281E;
+  font-size: 7.5px; font-weight: 850; z-index: 2;
+}
+.weekly-report-caption { display: grid; gap: 2px; padding: 10px 12px 12px; }
+.weekly-report-caption strong { font-size: 11.5px; font-weight: 850; color: var(--green-700); }
+.weekly-report-caption small { font-size: 7.5px; color: var(--muted-2); }
+.weekly-report-stats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.weekly-report-stats i {
+  font-style: normal; padding: 3px 8px; border-radius: 999px;
+  background: var(--paper-2); border: 1px solid var(--line);
+  color: var(--green-700); font-size: 7.5px; font-weight: 800;
+}
+.weekly-report-placeholder {
+  display: block; width: 100%; height: 168px;
+  background: linear-gradient(150deg, #1E3A2B, #2A5240);
+}
+.weekly-report-card.is-latest .weekly-report-placeholder { height: 240px; }
+.weekly-report-delete {
+  position: absolute; inset-block-end: 9px; inset-inline-end: 9px;
+  width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px;
+  border: 1px solid rgba(163, 80, 59, .35); background: rgba(255, 255, 255, .9); color: var(--clay);
+  cursor: pointer; z-index: 2;
+}
+.weekly-report-delete .ic { width: 13px; height: 13px; }
+.weekly-report-latest { display: grid; }
+.weekly-report-prev-block { display: grid; gap: 8px; }
+.weekly-report-prev-label { font-size: 8.5px; font-weight: 800; color: var(--gold-700); }
+.weekly-report-prev { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.weekly-report-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.weekly-report-grid .weekly-report-media img { height: 108px; }
+.weekly-report-grid .weekly-report-caption { padding: 7px 9px 9px; }
+.weekly-report-grid .weekly-report-caption strong { font-size: 8.5px; }
+.weekly-report-grid .weekly-report-caption small { display: none; }
+.weekly-report-grid .weekly-report-week { min-width: 24px; height: 24px; font-size: 9px; border-radius: 8px; }
+.weekly-report-prev .weekly-report-caption small { display: none; }
+.weekly-report-prev .weekly-report-media img { height: 130px; }
+
+/* ---------- صور الاقتباسات المختارة ---------- */
+.selection-quote-card {
+  position: relative; display: grid; gap: 8px; padding: 8px; border-radius: 18px;
+  background: var(--white); border: 1px solid rgba(197, 155, 99, .3);
+  box-shadow: 0 8px 18px rgba(30, 58, 43, .08);
+}
+.selection-quote-image { display: block; width: 100%; height: auto; border-radius: 13px; background: var(--paper-2); }
+.selection-quote-text { margin: 0; padding: 14px 15px; border-radius: 14px; background: #F8F5EE; border-right: 3px solid var(--gold); }
+.selection-quote-text p { font-family: var(--serif); font-size: 15px; line-height: 1.9; color: var(--green-700); }
+.selection-quote-text footer { margin-top: 6px; font-size: 8px; color: var(--gold-700); }
+.selection-quote-delete {
+  justify-self: start; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid rgba(163, 80, 59, .35); background: rgba(163, 80, 59, .1); color: var(--clay);
+  font-size: 7.5px; font-weight: 800; font-family: inherit; cursor: pointer;
+}
+.selection-preview { display: block; width: 100%; height: auto; border-radius: 14px; background: var(--paper-2); border: 1px solid var(--line); }
+
+/* ---------- إحصائيات القراءة الأسبوعية (قديمة — للتوافق) ---------- */
 .weekly-report-hero {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
 }

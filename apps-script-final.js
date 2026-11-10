@@ -1,19 +1,20 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r15';
+const CODE_VERSION = 'jalees-2026-11-10-r21';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
 const LIBRARY_CATEGORIES_SHEET = 'تصنيفات المكتبة';
 const JOIN_REQUESTS_SHEET = 'طلبات الانضمام';
 const MEETINGS_SHEET = 'اللقاءات';
-const RECORDED_MEETINGS_SHEET = 'اللقاءات المسجلة';
-const READING_TIPS_SHEET = 'نافذة قرائية';
+const RECORDED_MEETINGS_SHEET = 'أرشيف النادي';
+const READING_TIPS_SHEET = 'النوافذ القرائية';
 const PROFILES_SHEET = 'الملفات الشخصية';
 const ENTRIES_SHEET = 'سجلات القراءة';
 const LIKES_SHEET = 'الإعجابات';
 const PERSONAL_BOOKS_SHEET = 'كتبي الخاصة';
 const READING_LISTS_SHEET = 'القوائم القرائية';
 const SELECTION_QUOTES_SHEET = 'مختارات الاقتباسات';
+const WEEKLY_REPORTS_SHEET = 'التقارير الأسبوعية';
 const BOOK_SUMMARIES_SHEET = 'ملخصات الأعضاء';
 
 const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
@@ -107,9 +108,33 @@ function getBookSummariesSheet(ss) {
 
 /* ---- اقتباسات اختارها المشرف لتظهر في «مختارات النادي» ---- */
 function getSelectionQuotesSheet(ss) {
-  return getDataSheet(ss, SELECTION_QUOTES_SHEET, [
-    'quoteId', 'quoteText', 'book', 'bookAuthor', 'authorName', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy'
+  const sheet = getDataSheet(ss, SELECTION_QUOTES_SHEET, [
+    'id', 'text', 'book', 'bookAuthor', 'authorName', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy', 'image', 'quoteId'
   ]);
+  if (sheet.getMaxColumns() < 11) sheet.insertColumnsAfter(sheet.getMaxColumns(), 11 - sheet.getMaxColumns());
+  if (!sheet.getRange(1, 10).getValue()) sheet.getRange(1, 10).setValue('image');
+  if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('quoteId');
+  return sheet;
+}
+
+/* ---- التقارير الأسبوعية: صورة لكل أسبوع يرفعها المشرف ---- */
+function getWeeklyReportsSheet(ss) {
+  const sheet = getDataSheet(ss, WEEKLY_REPORTS_SHEET, [
+    'id', 'weekNo', 'weekStart', 'weekEnd', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy',
+    'title', 'pages', 'participants', 'notes'
+  ]);
+  if (sheet.getMaxColumns() < 13) sheet.insertColumnsAfter(sheet.getMaxColumns(), 13 - sheet.getMaxColumns());
+  if (!sheet.getRange(1, 10).getValue()) sheet.getRange(1, 10).setValue('title');
+  if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('pages');
+  if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('participants');
+  if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('notes');
+  return sheet;
+}
+
+/* Google Sheets قد يحوّل التاريخ النصي إلى تاريخ؛ نعيده إلى YYYY-MM-DD */
+function dateKeyOf(value) {
+  if (value instanceof Date) return Utilities.formatDate(value, Session.getScriptTimeZone() || 'Asia/Riyadh', 'yyyy-MM-dd');
+  return String(value || '').slice(0, 10);
 }
 
 /* ---- قوائم قرائية مختارة (مختارات النادي) ---- */
@@ -248,11 +273,12 @@ function getRecordedMeetingsSheet(ss) {
   let sheet = target.getSheetByName(RECORDED_MEETINGS_SHEET);
   if (!sheet) sheet = target.insertSheet(RECORDED_MEETINGS_SHEET);
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy', '', '', 'type']);
+    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy', '', '', 'type', 'location']);
   }
   ensureRecordedMeetingDeleteColumns(sheet);
-  if (sheet.getMaxColumns() < 14) sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('type');
+  if (!sheet.getRange(1, 15).getValue()) sheet.getRange(1, 15).setValue('location');
   return sheet;
 }
 
@@ -415,6 +441,12 @@ function normalizePersonName(value) {
     .replace(/ة/g, 'ه')
     .replace(/\s+/g, '')
     .trim();
+}
+
+function isSupervisorName(name) {
+  const target = normalizePersonName(name);
+  if (!target) return false;
+  return SUPERVISOR_NAMES.some(item => normalizePersonName(item) === target);
 }
 
 function isConsultantName(name) {
@@ -867,6 +899,13 @@ function doPost(e) {
     const action = (e && e.parameter && e.parameter.action) || data.action || '';
     const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
 
+    if (action === 'organizeSheets') {
+      const requester = String(data.requesterName || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('التنظيم متاح للمشرفين فقط');
+      const result = organizeSheets(ss);
+      return output(Object.assign({ success: true }, result));
+    }
+
     if (action === 'saveClubBook') {
       const sheet = ss.getSheetByName(BOOKS_SHEET);
       if (!sheet) throw new Error('لم أجد تبويب المكتبة');
@@ -1170,6 +1209,127 @@ function doPost(e) {
         }
       }
       return output({ success: true, message: 'الملخص غير موجود' });
+    }
+
+    /* حذف نهائي من سلة المهملات (لا استعادة) */
+    if (action === 'purgeDeletedItem') {
+      const type = String(data.type || '').trim();
+      const id = String(data.id || '').trim();
+      if (!id) throw new Error('معرّف العنصر مطلوب');
+      const sources = [];
+      if (type === 'quote') sources.push(ss.getSheetByName(QUOTES_SHEET));
+      else if (type === 'article') sources.push(getArticlesSheet(ss));
+      else if (type === 'recording') sources.push(getRecordedMeetingsSheet(ss));
+      else if (type === 'shelf') sources.push(getLibraryCategoriesSheet(ss));
+      else if (type === 'book') sources.push(ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID));
+      else if (type === 'summary') sources.push(getBookSummariesSheet(ss));
+      else if (type === 'consultation') sources.push(getConsultationsSheet(ss));
+      else if (type === 'list') sources.push(getReadingListsSheet(ss));
+      else if (type === 'window') sources.push(getReadingTipsSheet(ss));
+      else if (type === 'meeting') sources.push(getMeetingsSheet(ss));
+
+      let deleted = false;
+      sources.filter(Boolean).forEach((source) => {
+        if (deleted) return;
+        try { ensureBookDeleteColumns(source); } catch (error) { /* تجاهل */ }
+        const lastRow = source.getLastRow();
+        if (lastRow < 2) return;
+        const ids = source.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
+        for (let i = ids.length - 1; i >= 0; i--) {
+          const rowId = (type === 'book') ? bookIdForRow(source, ids[i][0], i) : String(ids[i][0] || '');
+          if (rowId === id) {
+            source.deleteRow(i + 2);
+            deleted = true;
+            return;
+          }
+        }
+      });
+      return output({ success: true, message: deleted ? 'تم الحذف النهائي' : 'العنصر غير موجود' });
+    }
+
+    if (action === 'saveSelectionQuote') {
+      const sheet = getSelectionQuotesSheet(ss);
+      const selectionId = String(data.id || `sel-${Date.now()}`);
+      const image = storeImage(data.image, 'selquote');
+      if (!image) throw new Error('أضف صورة الاقتباس');
+      const rowData = [
+        selectionId, data.text || '', data.book || '', data.bookAuthor || '',
+        data.authorName || '', data.createdAt || Date.now(), data.by || 'مشرف', '', '',
+        image, String(data.quoteId || '')
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === selectionId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, id: selectionId, message: 'تم تحديث الاقتباس المختار' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, id: selectionId, message: 'تم نشر الاقتباس في مختارات النادي' });
+    }
+
+    if (action === 'deleteSelectionQuote') {
+      const sheet = getSelectionQuotesSheet(ss);
+      const selectionId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === selectionId) {
+            sheet.getRange(i + 2, 8, 1, 2).setValues([[Date.now(), data.by || 'مشرف']]);
+            return output({ success: true, message: 'تمت الإزالة من مختارات النادي' });
+          }
+        }
+      }
+      return output({ success: true, message: 'الاقتباس غير موجود' });
+    }
+
+    if (action === 'saveWeeklyReport') {
+      const sheet = getWeeklyReportsSheet(ss);
+      const weekNo = Number(data.weekNo) || 0;
+      if (!weekNo) throw new Error('أدخل رقم الأسبوع');
+      const image = storeImage(data.image, 'weekly');
+      if (!image) throw new Error('أضف صورة التقرير');
+      let reportId = String(data.id || `wk-${Date.now()}`);
+      let target = 0;
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (rows[i][7]) continue;
+          if (Number(rows[i][1]) === weekNo) { target = i + 2; reportId = String(rows[i][0]); break; }
+        }
+      }
+      const rowData = [
+        reportId, weekNo, String(data.weekStart || ''), String(data.weekEnd || ''),
+        image, Date.now(), data.by || 'مشرف', '', '',
+        data.title || '', Number(data.pages) || 0, Number(data.participants) || 0, data.notes || ''
+      ];
+      if (target) {
+        sheet.getRange(target, 1, 1, rowData.length).setValues([rowData]);
+        return output({ success: true, id: reportId, message: 'تم تحديث تقرير هذا الأسبوع' });
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, id: reportId, message: 'تم حفظ التقرير الأسبوعي' });
+    }
+
+    if (action === 'deleteWeeklyReport') {
+      const sheet = getWeeklyReportsSheet(ss);
+      const reportId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === reportId) {
+            sheet.getRange(i + 2, 8, 1, 2).setValues([[Date.now(), data.by || 'مشرف']]);
+            return output({ success: true, message: 'تم حذف التقرير' });
+          }
+        }
+      }
+      return output({ success: true, message: 'التقرير غير موجود' });
     }
 
     if (action === 'toggleSelectionQuote') {
@@ -1865,7 +2025,7 @@ function doPost(e) {
         recordId, data.title || '', data.description || '', data.recordedAt || '',
         data.speaker || '', Number(data.views) || 0, data.duration || '',
         data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || '',
-        '', '', data.type || ''
+        '', '', data.type || '', data.location || ''
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -2033,6 +2193,10 @@ function doGet(e) {
       return output({ success: true, version: CODE_VERSION, deployed: true });
     }
 
+    if (action === 'describeSpreadsheet') {
+      return output({ success: true, sheets: describeSpreadsheet() });
+    }
+
     if (action === 'getMailStatus') {
       return output(getMailStatus());
     }
@@ -2182,15 +2346,43 @@ function doGet(e) {
       });
     }
 
+    if (action === 'getWeeklyReports') {
+      const sheet = getWeeklyReportsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+      const reports = rows.filter(row => row[0] && !row[7]).map(row => ({
+        id: String(row[0]), weekNo: Number(row[1]) || 0,
+        weekStart: dateKeyOf(row[2]), weekEnd: dateKeyOf(row[3]),
+        image: String(row[4]), createdAt: row[5],
+        title: String(row[9] || ''), pages: Number(row[10]) || 0,
+        participants: Number(row[11]) || 0, notes: String(row[12] || '')
+      }));
+      reports.sort((a, b) => b.weekNo - a.weekNo);
+      return output({ success: true, data: reports });
+    }
+
+    /* حذف كل التقارير الأسبوعية دفعة واحدة (للمشرف) */
+    if (action === 'deleteAllWeeklyReports') {
+      const sheet = getWeeklyReportsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) {
+        sheet.deleteRow(row);
+        removed += 1;
+      }
+      return output({ success: true, removed: removed, message: 'تم حذف كل التقارير' });
+    }
+
     if (action === 'getSelectionQuotes') {
       const sheet = getSelectionQuotesSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
       const quotes = rows.filter(row => row[0] && !row[7]).map(row => ({
         id: String(row[0] || ''), text: String(row[1] || ''), book: String(row[2] || ''),
         bookAuthor: String(row[3] || ''), authorName: String(row[4] || ''),
-        createdAt: row[5], createdBy: String(row[6] || '')
+        createdAt: row[5], createdBy: String(row[6] || ''), image: String(row[9] || '')
       }));
       quotes.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
       return output({ success: true, data: quotes });
@@ -2437,7 +2629,7 @@ function doGet(e) {
       const sheet = getRecordedMeetingsSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [], deletedIds: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
       const recordings = [];
       const deletedIds = [];
       rows.forEach(row => {
@@ -2447,7 +2639,7 @@ function doGet(e) {
           id: row[0], title: row[1], description: row[2], recordedAt: row[3],
           speaker: row[4], views: Number(row[5]) || 0, duration: row[6],
           videoUrl: row[7], image: row[8], createdAt: row[9], createdBy: row[10],
-          type: row[13] || ''
+          type: row[13] || '', location: row[14] || ''
         });
       });
       recordings.sort((a, b) => {
@@ -2569,6 +2761,218 @@ function doGet(e) {
 }
 
 /* ==========================================================================
+   تنظيم الشيت: تسمية موحّدة + حذف ما لا داعي له + ترتيب التبويبات
+   - الأسماء القديمة تُعاد تسميتها إلى الأسماء القياسية (بلا فقدان بيانات)
+   - التبويبات الفارغة والمكرّرة تُحذف
+   - الترتيب النهائي منطقي (الأعضاء أولًا … الإحصاءات آخرًا)
+   ========================================================================== */
+
+/* الاسم القياسي ← الأسماء القديمة المحتملة (بدون تكرار الاسم القياسي) */
+const SHEET_NAME_ALIASES = {
+  'الأعضاء': ['الاعضاء', 'أعضاء النادي', 'العضو', 'members'],
+  'الاقتباسات': ['الاقتباس', 'اقتباسات', 'quotes', 'اقتباس'],
+  'المقالات': ['مقالات', 'المقال', 'articles', 'مقالة'],
+  'المكتبة': ['كتب النادي', 'الكتب', 'مكتبة النادي', 'books', 'المكتبة القديمة'],
+  'تصنيفات المكتبة': ['التصنيفات', 'تصنيفات', 'رفوف المكتبة', 'categories'],
+  'تقييمات الكتب': ['التقييمات', 'تقييمات', 'ratings'],
+  'طلبات الانضمام': ['الطلبات', 'انضمام', 'طلبات', 'join requests'],
+  'اللقاءات': ['لقاءات', 'الMeetings', 'meetings'],
+  'أرشيف النادي': ['اللقاءات المسجلة', 'التسجيلات', 'أرشيف اللقاءات', 'recordings', 'أرشيف'],
+  'النوافذ القرائية': ['نافذة قرائية', 'النافذة القرائية', 'نوافذ', 'reading windows', 'نوافذ قرائية'],
+  'التقارير الأسبوعية': ['التقارير', 'تقارير أسبوعية', 'التقرير الأسبوعي', 'weekly reports'],
+  'الملفات الشخصية': ['الملف الشخصي', 'ملفات شخصية', 'profiles', 'الملفات'],
+  'سجلات القراءة': ['سجلات', 'سجل القراءة', 'entries', 'القراءات'],
+  'استشارات الأعضاء': ['الاستشارات', 'استشارات', 'consultations'],
+  'الإعجابات': ['الاعجابات', 'اعجابات', 'likes', 'الإعجاب'],
+  'كتبي الخاصة': ['كتب خاصة', 'مكتبتي', 'personal books', 'الكتب الخاصة'],
+  'القوائم القرائية': ['القوائم', 'قوائم', 'reading lists'],
+  'مختارات الاقتباسات': ['مختارات', 'اقتباسات مختارة', 'selection quotes'],
+  'ملخصات الأعضاء': ['الملخصات', 'ملخصات', 'summaries']
+};
+
+/* التبويبات القياسية بالترتيب + وصفها */
+const SHEET_ORDER = [
+  'الأعضاء', 'الملفات الشخصية', 'طلبات الانضمام', 'استشارات الأعضاء',
+  'المكتبة', 'تصنيفات المكتبة', 'تقييمات الكتب',
+  'مكتبات الأعضاء', 'كتبي الخاصة', 'سجلات القراءة',
+  'الاقتباسات', 'مختارات الاقتباسات', 'المقالات', 'ملخصات الأعضاء', 'القوائم القرائية',
+  'النوافذ القرائية', 'اللقاءات', 'أرشيف النادي', 'التقارير الأسبوعية', 'الإعجابات'
+];
+
+function normalizeSheetName(value) {
+  let text = String(value || '')
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[‌‍‎‏]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  /* نحذف «ال» التعريف في البداية لمطابقة «المكتبة» بـ«مكتبة» */
+  text = text.replace(/^ال(?=.{2,})/, '');
+  return text;
+}
+
+/* أسماء تبويبات عامة لا قيمة لها — تُحذف إن كانت فارغة */
+function isJunkSheetName(name) {
+  let normalized = String(name || '').trim().toLowerCase();
+  if (!normalized) return true;
+  /* «الورقة 1» ← «ورقة 1» */
+  normalized = normalized.replace(/^ال(?=ورقة|صفحة|نسخة)/, '');
+  if (/^(sheet|ورقة|صفحة|tab|untitled|نسخة|copy)[ _-]*\d*$/i.test(normalized)) return true;
+  return false;
+}
+
+function canonicalSheetName(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const normalized = normalizeSheetName(raw);
+  if (SHEET_ORDER.indexOf(raw) >= 0) return raw;
+  /* مطابقة التطبيع: «النافذه القرائيه» → «النوافذ القرائية» */
+  for (let i = 0; i < SHEET_ORDER.length; i++) {
+    const canonical = SHEET_ORDER[i];
+    if (normalizeSheetName(canonical) === normalized) return canonical;
+    const aliases = SHEET_NAME_ALIASES[canonical] || [];
+    for (let j = 0; j < aliases.length; j++) {
+      if (normalizeSheetName(aliases[j]) === normalized) return canonical;
+    }
+  }
+  return '';
+}
+
+/* هل التبويب فارغ تمامًا (لا صفوف بيانات)؟ */
+function sheetHasNoData(sheet) {
+  if (!sheet) return true;
+  try {
+    if (sheet.getLastRow() <= 1) return true;
+    const lastRow = sheet.getLastRow();
+    const lastCol = Math.max(1, sheet.getLastColumn());
+    const values = sheet.getRange(2, 1, Math.max(1, lastRow - 1), lastCol).getValues();
+    return values.every((row) => row.every((cell) => String(cell === null ? '' : cell).trim() === ''));
+  } catch (error) {
+    return false;
+  }
+}
+
+function organizeSheets(ss) {
+  const target = resolveSpreadsheet(ss);
+  const report = [];
+  const sheets = target.getSheets();
+
+  /* 1) إعادة التسمية + حذف المكرر/الفارغ */
+  const renamed = [];
+  const deleted = [];
+  const keptUnknown = [];
+
+  sheets.slice().forEach((sheet) => {
+    const currentName = sheet.getName();
+    /* تبويبة المكتبة القديمة تُقرأ بمعرّفها — نُبقيها باسم واضح ولا ندمجها */
+    if (sheet.getSheetId() === OLD_BOOKS_SHEET_ID) {
+      try {
+        if (currentName !== 'المكتبة — نسخة قديمة') {
+          sheet.setName('المكتبة — نسخة قديمة');
+          renamed.push(currentName + ' → المكتبة — نسخة قديمة');
+        }
+      } catch (error) { /* تجاهل */ }
+      return;
+    }
+    if (isJunkSheetName(currentName)) {
+      if (sheetHasNoData(sheet)) {
+        target.deleteSheet(sheet);
+        deleted.push(currentName + ' (فارغ)');
+      } else {
+        /* فيه بيانات — ننقله لمسمّى واضح بدل حذفه */
+        try {
+          sheet.setName('أرشيف — ' + currentName);
+          renamed.push(currentName + ' → أرشيف — ' + currentName);
+        } catch (error) { /* تجاهل */ }
+      }
+      return;
+    }
+    const canonical = canonicalSheetName(currentName);
+    if (!canonical) {
+      keptUnknown.push(currentName);
+      return;
+    }
+    if (canonical === currentName) return;
+    /* توجد تبويبة قياسية بنفس الاسم؟ ندمج البيانات ثم نحذف المكرّر */
+    const existing = target.getSheetByName(canonical);
+    if (existing && existing.getSheetId() !== sheet.getSheetId()) {
+      try {
+        const sourceRows = sheet.getDataRange().getValues();
+        const targetRows = existing.getDataRange().getValues();
+        if (sourceRows.length > 1) {
+          const targetHeaders = (targetRows[0] || []).map((h) => String(h || '').trim());
+          const sourceHeaders = (sourceRows[0] || []).map((h) => String(h || '').trim());
+          const map = sourceHeaders.map((h, index) => {
+            const pos = targetHeaders.indexOf(h);
+            return pos >= 0 ? pos : index;
+          });
+          const existingKeys = new Set(targetRows.slice(1).map((row) => row.map((c) => String(c === null ? '' : c)).join('|')));
+          const additions = sourceRows.slice(1)
+            .map((row) => map.map((pos) => (row[pos] === undefined ? '' : row[pos])))
+            .filter((row) => row.some((c) => String(c === null ? '' : c).trim() !== ''))
+            .filter((row) => !existingKeys.has(row.map((c) => String(c === null ? '' : c)).join('|')));
+          if (additions.length) {
+            existing.getRange(existing.getLastRow() + 1, 1, additions.length, additions[0].length).setValues(additions);
+          }
+          target.deleteSheet(sheet);
+          deleted.push(currentName + ' (مكرّر → ' + canonical + ')');
+          return;
+        }
+      } catch (error) { /* تجاهل */ }
+    }
+    try {
+      sheet.setName(canonical);
+      renamed.push(currentName + ' → ' + canonical);
+    } catch (error) { /* تجاهل */ }
+  });
+
+  if (renamed.length) report.push('أُعيدت تسمية: ' + renamed.join('، '));
+  if (deleted.length) report.push('حُذف: ' + deleted.join('، '));
+
+  /* 2) التبويبات القياسية بالترتيب، وبعدها أي تبويب غير معروف */
+  const ordered = [];
+  SHEET_ORDER.forEach((name) => {
+    const sheet = target.getSheetByName(name);
+    if (sheet) ordered.push(sheet);
+  });
+  const all = target.getSheets();
+  all.forEach((sheet) => { if (ordered.indexOf(sheet) < 0) ordered.push(sheet); });
+  ordered.forEach((sheet, index) => {
+    try { target.setActiveSheet(sheet); target.moveActiveSheet(index + 1); } catch (error) { /* تجاهل */ }
+  });
+
+  report.push('الترتيب: ' + ordered.map((s) => s.getName()).join(' ← '));
+  if (keptUnknown.length) report.push('أُبقيت (غير معروفة): ' + keptUnknown.join('، '));
+
+  return { report: report, renamed: renamed, deleted: deleted, keptUnknown: keptUnknown };
+}
+
+/* وصف محتويات الشيت — لمساعدتك على المراجعة */
+function describeSpreadsheet() {
+  const ss = resolveSpreadsheet();
+  const sheets = ss.getSheets().map((sheet) => {
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    let headers = [];
+    try {
+      headers = lastRow > 0 ? sheet.getRange(1, 1, 1, Math.max(1, lastCol)).getValues()[0].map((h) => String(h || '').trim()) : [];
+    } catch (error) { headers = []; }
+    return {
+      name: sheet.getName(),
+      rows: lastRow,
+      dataRows: Math.max(0, lastRow - 1),
+      cols: lastCol,
+      headers: headers,
+      empty: sheetHasNoData(sheet)
+    };
+  });
+  return sheets;
+}
+
+/* ==========================================================================
    دالة تجهيز تُشغَّل يدويًا مرة واحدة من محرر Apps Script (Run)
    تنشئ أعمدة الحذف وسنة النشر، وتُعيد تلوين الصفوف المحذوفة بالأحمر.
    ========================================================================== */
@@ -2584,6 +2988,13 @@ function setupJaleesSheets() {
       report.push(label + ': فشل - ' + (error && error.message ? error.message : String(error)));
     }
   };
+
+  /* أولًا: توحيد الأسماء وترتيب التبويبات (قبل إنشاء أي تبويب جديد) */
+  /* أولًا: توحيد الأسماء وترتيب التبويبات (قبل إنشاء أي تبويب جديد) */
+  step('تنظيم التبويبات', () => {
+    const result = organizeSheets(ss);
+    return result.report.join(' · ');
+  });
 
   step(BOOKS_SHEET, () => {
     const books = ss.getSheetByName(BOOKS_SHEET);
@@ -2659,8 +3070,18 @@ function setupJaleesSheets() {
   });
 
   step(READING_TIPS_SHEET, () => {
+    // توحيد التسمية: «نافذة قرائية» → «النوافذ القرائية» (بدون فقدان البيانات)
+    const oldSheet = ss.getSheetByName('نافذة قرائية');
+    if (oldSheet) {
+      try { oldSheet.setName(READING_TIPS_SHEET); } catch (error) { /* قد توجد تبويبة بنفس الاسم */ }
+    }
     const tips = getReadingTipsSheet(ss);
     return tips.getMaxColumns() + ' عمود';
+  });
+
+  step('ترتيب التبويبات', () => {
+    const result = organizeSheets(ss);
+    return result.report.join(' · ');
   });
 
   step(LIKES_SHEET, () => {
@@ -2681,6 +3102,11 @@ function setupJaleesSheets() {
   step(SELECTION_QUOTES_SHEET, () => {
     const selected = getSelectionQuotesSheet(ss);
     return selected.getMaxColumns() + ' عمود';
+  });
+
+  step(WEEKLY_REPORTS_SHEET, () => {
+    const weekly = getWeeklyReportsSheet(ss);
+    return weekly.getMaxColumns() + ' عمود';
   });
 
   step(BOOK_SUMMARIES_SHEET, () => {
