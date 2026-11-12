@@ -949,21 +949,36 @@ async function refreshClubBooksFromCloud() {
   if (!Array.isArray(cloudBooks) || currentMember !== member || !state) return;
 
   const merged = new Map();
-  (state.clubBooks || []).forEach((book) => {
-    if (!book || !book.id) return;
-    /* حذف الكتب القديمة المحفوظة محليًا حتى لو اختلف معرّفها عن السحابة */
-    if (deletedClubBookIds.has(String(book.id))) return;
-    if (deletedClubBookKeys.has(bookKey(book.title, book.author))) return;
-    merged.set(book.id, book);
-  });
+  const cloudIds = new Set();
+  const cloudKeys = new Set();
   cloudBooks.forEach((book) => {
     if (!book || !book.id) return;
-    const localBook = merged.get(book.id) || {};
-    const nextBook = { ...localBook, ...book };
-    /* حافظ على سنة النشر المحلية إن كانت النسخة السحابية القديمة لا تحتوي العمود بعد */
-    if (!book.year && localBook.year) nextBook.year = localBook.year;
-    merged.set(book.id, nextBook);
-    if (member.id !== 'guest') syncState.clubBooks.add(book.id);
+    cloudIds.add(String(book.id));
+    const key = bookKey(book.title, book.author);
+    if (key && key !== '|') cloudKeys.add(key);
+    merged.set(String(book.id), book);
+    if (member.id !== 'guest') syncState.clubBooks.add(String(book.id));
+  });
+  /* كتب محلية: نحتفظ بالمحذوف منها، وبما لم يصل للسحابة بعد، ونعيد رفع ما اختفى */
+  const vanished = [];
+  (state.clubBooks || []).forEach((book) => {
+    if (!book || !book.id) return;
+    const id = String(book.id);
+    const key = bookKey(book.title, book.author);
+    if (deletedClubBookIds.has(id)) return;
+    if (deletedClubBookKeys.has(key)) return;
+    if (cloudIds.has(id)) return;
+    if (key && cloudKeys.has(key)) return;
+    if (syncState.clubBooks.has(id)) {
+      /* كان مرفوعًا ثم اختفى من المكتبة — نعيده (ما لم يكن محذوفًا) */
+      vanished.push(book);
+      return;
+    }
+    merged.set(id, book);
+  });
+  vanished.forEach((book) => {
+    merged.set(String(book.id), book);
+    if (member.id !== 'guest') saveClubBookToCloud(member, book).catch(() => {});
   });
   deletedClubBookIds.forEach((id) => merged.delete(String(id)));
   /* منع تكرار الكتب: نفس العنوان والمؤلف يظهر مرة واحدة فقط */

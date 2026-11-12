@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r33';
+const CODE_VERSION = 'jalees-2026-11-10-r36';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -15,6 +15,7 @@ const PERSONAL_BOOKS_SHEET = 'كتبي الخاصة';
 const READING_LISTS_SHEET = 'القوائم القرائية';
 const SELECTION_QUOTES_SHEET = 'مختارات الاقتباسات';
 const WEEKLY_REPORTS_SHEET = 'التقارير الأسبوعية';
+const DELETED_LOG_SHEET = 'سجل المحذوفات';
 const BOOK_SUMMARIES_SHEET = 'ملخصات الأعضاء';
 
 const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
@@ -159,6 +160,55 @@ function shrinkImageLinks() {
   });
   Logger.log(`shrinkImageLinks: ${JSON.stringify(report)}`);
   return report;
+}
+
+/* ---- سجل المحذوفات: شاهد دائم للكتب المحذوفة (حتى لو ضاع صفها) ---- */
+function getDeletedLogSheet(ss) {
+  return getDataSheet(ss, DELETED_LOG_SHEET, ['id', 'type', 'title', 'author', 'deletedAt', 'deletedBy']);
+}
+
+function logDeletedItem(ss, id, type, title, author, by) {
+  const sheet = getDeletedLogSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const ids = sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
+    for (let i = 0; i < ids.length; i++) {
+      /* موجود مسبقًا — لا نكتب شيئًا (حتى لا يتكرر التعديل) */
+      if (String(ids[i][0] || '') === String(id) && String(ids[i][1] || '') === String(type)) return;
+    }
+  }
+  sheet.appendRow([String(id || ''), String(type || ''), title || '', author || '', Date.now(), by || 'مشرف']);
+}
+
+function clearDeletedLog(ss, id, type) {
+  const sheet = getDeletedLogSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const ids = sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
+  for (let i = ids.length - 1; i >= 0; i--) {
+    if (String(ids[i][0] || '') === String(id) && (!type || String(ids[i][1] || '') === String(type))) {
+      sheet.deleteRow(i + 2);
+    }
+  }
+}
+
+/* قائمة الكتب المحذوفة المسجّلة (بالمعرّف والمفتاح) */
+function deletedBookRegistry(ss) {
+  const sheet = getDeletedLogSheet(ss);
+  const ids = new Set();
+  const keys = new Set();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ids: ids, keys: keys };
+  const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  rows.forEach((row) => {
+    const type = String(row[1] || '');
+    if (type === 'bookkey') { if (row[0]) keys.add(String(row[0])); return; }
+    if (type !== 'book') return;
+    if (row[0]) ids.add(String(row[0]));
+    const key = bookKey(row[2], row[3]);
+    if (key && key !== '|') keys.add(key);
+  });
+  return { ids: ids, keys: keys };
 }
 
 /* ---- ملخصات الأعضاء للكتب التي قرؤوها ---- */
@@ -358,6 +408,17 @@ function ensureQuoteDeleteColumns(sheet) {
   if (!sheet.getRange(1, 9).getValue()) sheet.getRange(1, 9).setValue('bookAuthor');
 }
 
+/* ---- الاقتباسات: تُنشأ تلقائيًا إن ضاع التبويب ---- */
+function getQuotesSheet(ss) {
+  let sheet = ss.getSheetByName(QUOTES_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(QUOTES_SHEET);
+    sheet.appendRow(['created_at', 'author_name', 'page_number', 'book_title', 'quote_text', 'id', 'deletedAt', 'deletedBy', 'bookAuthor']);
+  }
+  ensureQuoteDeleteColumns(sheet);
+  return sheet;
+}
+
 function ensureBookDeleteColumns(sheet) {
   if (sheet.getMaxColumns() < 16) sheet.insertColumnsAfter(sheet.getMaxColumns(), 16 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('coverImage');
@@ -498,10 +559,13 @@ function normalizeEmail(value) {
 }
 
 function normalizePhone(value) {
-  return String(value || '')
+  let text = String(value || '')
     .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
     .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
     .replace(/[\s().-]/g, '');
+  /* الصيغة الدولية تُحوَّل إلى الصيغة المحلية — وإلا تفوت المطرود بصيغة أخرى */
+  text = text.replace(/^\+?00966/, '0').replace(/^\+?966/, '0');
+  return text;
 }
 
 function normalizePersonName(value) {
@@ -996,24 +1060,36 @@ function bookKey(title, author) {
   return clean(title) + '|' + clean(author);
 }
 
-/* حذف الكتب المكرّرة (نفس العنوان والمؤلف) من تبويب المكتبة */
+/* حذف الكتب المكرّرة (نفس العنوان والمؤلف) — مع الإبقاء على النسخة الحيّة */
 function dedupeClubBooks(ss) {
   const target = getBooksSheet(ss);
   const lastRow = target.getLastRow();
   if (lastRow < 2) return { removed: 0 };
-  const rows = target.getRange(2, 1, lastRow - 1, 5).getValues();
-  const seen = new Set();
-  const duplicates = [];
+  const rows = target.getRange(2, 1, lastRow - 1, 12).getValues();
+  const liveRows = new Map();
+  const removed = [];
   rows.forEach((row, index) => {
     const key = bookKey(row[3], row[4]);
     if (!key || key === '|') return;
-    if (seen.has(key)) { duplicates.push(index + 2); return; }
-    seen.add(key);
+    const rowNumber = index + 2;
+    const deleted = Boolean(row[11]);
+    if (!liveRows.has(key)) {
+      liveRows.set(key, { row: rowNumber, deleted: deleted });
+      return;
+    }
+    const kept = liveRows.get(key);
+    /* نحتفظ بالنسخة الحيّة ونتخلص من المحذوف أو المكرّر */
+    if (kept.deleted && !deleted) {
+      removed.push(kept.row);
+      liveRows.set(key, { row: rowNumber, deleted: false });
+      return;
+    }
+    removed.push(rowNumber);
   });
-  for (let i = duplicates.length - 1; i >= 0; i--) {
-    try { target.deleteRow(duplicates[i]); } catch (error) { /* تجاهل */ }
+  for (let i = removed.length - 1; i >= 0; i--) {
+    try { target.deleteRow(removed[i]); } catch (error) { /* تجاهل */ }
   }
-  return { removed: duplicates.length };
+  return { removed: removed.length };
 }
 
 function libraryBookSheets(ss) {
@@ -1131,6 +1207,11 @@ function doPost(e) {
           rowData[6], rowData[7], rowData[8], rowData[9], rowData[10],
           rowData[11], rowData[12], rowData[13], rowData[14], rowData[15]
         ]]);
+        /* إعادة إضافة كتاب كان محذوفًا تُلغي شاهد الحذف حتى يظهر في كل الأجهزة */
+        clearDeletedLog(ss, keepId, 'book');
+        if (wantedKey) clearDeletedLog(ss, wantedKey, 'bookkey');
+        const previousId = String(rows[matchIndex][0] || '');
+        if (previousId && previousId !== keepId) clearDeletedLog(ss, previousId, 'book');
         return output({ success: true, id: keepId, message: 'تم تحديث الكتاب (بدون تكرار)' });
       }
 
@@ -1187,6 +1268,9 @@ function doPost(e) {
       const sources = libraryBookSheets(ss);
 
       let touched = 0;
+      let deletedTitle = '';
+      let deletedAuthor = '';
+      const restoredKeys = [];
       for (const source of sources) {
         ensureBookDeleteColumns(source);
         const lastRow = source.getLastRow();
@@ -1200,10 +1284,33 @@ function doPost(e) {
           const row = i + 2;
           source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
           paintDeletedRow(source, row, deleting, 14);
+          if (deleting) {
+            if (!deletedTitle) { deletedTitle = String(rows[i][3] || ''); deletedAuthor = String(rows[i][4] || ''); }
+          } else {
+            /* نحفظ مفتاح الكتاب لنزيل شاهد الحذف الخاص به */
+            const rowKey = bookKey(rows[i][3], rows[i][4]);
+            if (rowKey && rowKey !== '|') restoredKeys.push(rowKey);
+          }
           touched += 1;
         }
       }
-      if (!touched) throw new Error('لم أجد الكتاب المطلوب');
+      if (deleting) {
+        /* شاهد دائم: حتى لو ضاع صف الكتاب يبقى محذوفًا في كل الأجهزة */
+        logDeletedItem(ss, bookId, 'book', deletedTitle || String(data.title || ''), deletedAuthor || String(data.author || ''), data.deletedBy || 'مشرف');
+        /* شاهد المفتاح يُشتق من صف الكتاب نفسه — حتى يتطابق مع الاسترجاع والحذف النهائي */
+        const rowKey = bookKey(deletedTitle || String(data.title || ''), deletedAuthor || String(data.author || ''));
+        if (rowKey && rowKey !== '|') {
+          logDeletedItem(ss, rowKey, 'bookkey', deletedTitle || String(data.title || ''), deletedAuthor || String(data.author || ''), data.deletedBy || 'مشرف');
+        }
+        /* مفتاح قديم أرسله المتصفح (عنوان تغيّر) لم يعد صالحًا */
+        if (data.key && rowKey && String(data.key) !== rowKey) clearDeletedLog(ss, String(data.key), 'bookkey');
+      } else {
+        /* إزالة الشاهد كاملًا — بالمعرّف وبالمفتاح — وإلا بقي الكتاب مخفيًا */
+        clearDeletedLog(ss, bookId, 'book');
+        if (data.key) clearDeletedLog(ss, String(data.key), 'bookkey');
+        restoredKeys.forEach((key) => clearDeletedLog(ss, key, 'bookkey'));
+      }
+      if (!touched && !deleting) throw new Error('لم أجد الكتاب المطلوب');
       return output({ success: true, updated: touched, message: deleting ? 'نُقل الكتاب إلى سلة المحذوفات' : 'تمت استعادة الكتاب' });
     }
 
@@ -1480,6 +1587,12 @@ function doPost(e) {
         for (let i = ids.length - 1; i >= 0; i--) {
           const rowId = (type === 'book') ? bookIdForRow(source, ids[i][0], i) : String(ids[i][0] || '');
           if (rowId === id) {
+            if (type === 'book') {
+              /* الحذف النهائي يزيل شاهد المحذوفات حتى يمكن إضافة الكتاب نفسه لاحقًا */
+              const rowKey = bookKey(ids[i][3], ids[i][4]);
+              clearDeletedLog(ss, id, 'book');
+              if (rowKey && rowKey !== '|') clearDeletedLog(ss, rowKey, 'bookkey');
+            }
             source.deleteRow(i + 2);
             deleted = true;
             return;
@@ -1573,6 +1686,18 @@ function doPost(e) {
         }
       }
       return output({ success: true, message: 'التقرير غير موجود' });
+    }
+
+    /* حذف كل التقارير الأسبوعية دفعة واحدة (المشرف) — يقبل POST و GET */
+    if (action === 'deleteAllWeeklyReports') {
+      const sheet = getWeeklyReportsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) {
+        sheet.deleteRow(row);
+        removed += 1;
+      }
+      return output({ success: true, removed: removed, message: 'تم حذف كل التقارير' });
     }
 
     if (action === 'toggleSelectionQuote') {
@@ -2365,9 +2490,7 @@ function doPost(e) {
     }
 
     if (action === 'deleteQuote' || action === 'restoreQuote') {
-      const sheet = ss.getSheetByName(QUOTES_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب الاقتباسات');
-      ensureQuoteDeleteColumns(sheet);
+      const sheet = getQuotesSheet(ss);
       const quoteId = String(data.id || '');
       if (!quoteId) throw new Error('معرّف الاقتباس مطلوب');
       const deleting = action === 'deleteQuote';
@@ -2409,8 +2532,7 @@ function doPost(e) {
     if (action && action !== 'saveQuote' && action !== 'addQuote' && action !== 'saveSharedQuote') {
       throw new Error(`إجراء غير معروف: ${action}`);
     }
-    const sheet = ss.getSheetByName(QUOTES_SHEET);
-    if (!sheet) throw new Error('لم أجد تبويب الاقتباسات');
+    const sheet = getQuotesSheet(ss);
 
     ensureQuoteDeleteColumns(sheet);
     sheet.appendRow([
@@ -2659,7 +2781,8 @@ function doGet(e) {
         return {
           id: String(row[0] || ''), title: String(row[1] || ''), description: String(row[2] || ''),
           books: Array.isArray(books) ? books : [], cover: String(row[4] || ''),
-          createdAt: row[5], createdBy: String(row[6] || '')
+          createdAt: row[5], createdBy: String(row[6] || ''),
+          deletedAt: row[7], deletedBy: String(row[8] || '')
         };
       }).filter(item => item.id && !item.deletedAt);
       lists.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
@@ -2801,6 +2924,10 @@ function doGet(e) {
       const seenKeys = new Set();
       const deletedIds = new Set();
       const deletedKeys = new Set();
+      /* الشاهد الدائم للمحذوفات (حتى لو ضاع صف الكتاب) */
+      const registry = deletedBookRegistry(ss);
+      registry.ids.forEach((id) => deletedIds.add(id));
+      registry.keys.forEach((key) => deletedKeys.add(key));
 
       /* 1) المحذوف من كل النسخ أولًا — حتى لا يظهر كتاب محذوف من نسخة أخرى */
       sources.forEach(sheet => {
@@ -3007,8 +3134,7 @@ function doGet(e) {
     }
 
     // قراءة الاقتباسات
-    const sheet = ss.getSheetByName(QUOTES_SHEET);
-    if (!sheet) throw new Error('لم أجد تبويب الاقتباسات');
+    const sheet = getQuotesSheet(ss);
     ensureQuoteDeleteColumns(sheet);
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return output({ success: true, status: 'success', data: [], deletedIds: [], deletedTexts: [] });
@@ -3525,6 +3651,17 @@ function setupJaleesSheets() {
   step(BOOK_SUMMARIES_SHEET, () => {
     const summaries = getBookSummariesSheet(ss);
     return summaries.getMaxColumns() + ' عمود';
+  });
+
+  /* تسجيل الكتب التي حُذفت قبل إنشاء «سجل المحذوفات» حتى لا تظهر في المتصفحات */
+  step('سجل المحذوفات', () => {
+    const legacy = [
+      'club-1794356579330', 'club-1794356738327', 'club-1794356822293',
+      'club-1794476475872', 'club-1793495137723', 'book-test', 'b-test',
+      'club-1794257018640'
+    ];
+    legacy.forEach((id) => { logDeletedItem(ss, id, 'book', '', '', 'مشرف'); });
+    return legacy.length + ' معرّفًا مسجّلًا';
   });
 
   step('تنظيف الكتب المكرّرة', () => {
