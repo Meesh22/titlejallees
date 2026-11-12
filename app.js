@@ -8616,7 +8616,7 @@ async function init() {
         }
         $('#verify-code').value = '';
         $('#verify-code').focus();
-        toast('أعدنا إرسال الرمز إلى بريدك', 'send');
+        toast(result.resent ? 'أعدنا إرسال الرمز نفسه إلى بريدك' : 'أرسلنا رمزًا جديدًا إلى بريدك', 'send');
       } finally {
         setBtnBusy(verifyResend, false);
       }

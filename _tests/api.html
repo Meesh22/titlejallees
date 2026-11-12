@@ -1,0 +1,265 @@
+/* اختبار شامل لأفعال الخادم (حفظ/تعديل/حذف/استرجاع/حذف نهائي) */
+(async function () {
+  const src = await (await fetch('apps-script-final.js?t=' + Date.now())).text();
+  const results = [];
+  const ok = (name, cond, extra) => results.push({ name, pass: !!cond, extra: extra === undefined ? '' : String(extra) });
+
+  let fileCounter = 0;
+  function MockSheet(name, rows, id) { this.name = name; this._rows = rows; this._id = id; }
+  MockSheet.prototype.getSheetId = function () { return this._id; };
+  MockSheet.prototype.getName = function () { return this.name; };
+  MockSheet.prototype.getLastRow = function () { return this._rows.length; };
+  MockSheet.prototype.getLastColumn = function () { return Math.max(1, (this._rows[0] || []).length); };
+  MockSheet.prototype.getMaxColumn = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxColumns = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxRows = function () { return this._rows.length; };
+  MockSheet.prototype.getDataRange = function () { const s = this; return { getValues: () => s._rows }; };
+  MockSheet.prototype.getRange = function (r, c, nr, nc) {
+    const s = this;
+    return {
+      getValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((s._rows[r - 1 + i] || [])[c - 1 + j] ?? ''); o.push(row); } return o; },
+      getValue: () => (s._rows[r - 1] || [])[c - 1] ?? '',
+      getDisplayValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(String((s._rows[r - 1 + i] || [])[c - 1 + j] ?? '')); o.push(row); } return o; },
+      setValues: (v) => { for (let i = 0; i < v.length; i++) for (let j = 0; j < v[i].length; j++) { const rr = r - 1 + i, cc = c - 1 + j; if (!s._rows[rr]) s._rows[rr] = []; s._rows[rr][cc] = v[i][j]; } },
+      setValue: (x) => { if (!s._rows[r - 1]) s._rows[r - 1] = []; s._rows[r - 1][c - 1] = x; },
+      setBackground: () => {}, setFontColor: () => {}
+    };
+  };
+  MockSheet.prototype.setName = function (n) { this.name = n; };
+  MockSheet.prototype.appendRow = function (row) { this._rows.push(row.slice()); };
+  MockSheet.prototype.deleteRow = function (r) { this._rows.splice(r - 1, 1); };
+  MockSheet.prototype.insertColumnsAfter = function () {};
+  MockSheet.prototype.setBackground = function () {};
+  MockSheet.prototype.setFontColor = function () {};
+
+  const members = new MockSheet('الأعضاء', [[
+    'id', 'name', 'email', 'passwordHash', 'salt', 'role', 'status', 'createdAt', 'lastLogin',
+    'resetCode', 'resetExpires', 'phone', 'profilePhoto', 'memberType'
+  ], ['m1', 'مشعل الحفير', 'a@b.c', 'h', 's', 'supervisor', 'active', 1, '', '', '', '0555000000', '', 'member']], 1);
+  const books = new MockSheet('المكتبة', [[
+    'id', 'memberId', 'memberName', 'title', 'author', 'category', 'coverColor', 'report', 'pages',
+    'createdAt', 'coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl', 'coverColor2'
+  ]], 2);
+  const sheets = [members, books];
+
+  const ss = {
+    getId: () => 'SHEET-ID-1',
+    getSheets: () => sheets,
+    getSheetByName: (n) => sheets.find((s) => s.name === n) || null,
+    getSheetById: (id) => sheets.find((s) => s._id === id) || null,
+    insertSheet: (n) => { const s = new MockSheet(n, [[]], 900 + sheets.length); sheets.push(s); return s; },
+    deleteSheet: (s) => { const i = sheets.indexOf(s); if (i >= 0) sheets.splice(i, 1); },
+    setActiveSheet: () => {}, moveActiveSheet: () => {}
+  };
+  const mockFile = () => ({ getId: () => 'FILE' + (++fileCounter), getUrl: () => 'https://drive.google.com/file/d/FILE/view', setSharing: () => {}, setName: () => {} });
+  const mockFolder = { getId: () => 'FOLDER1', createFile: () => mockFile() };
+  globalThis.SpreadsheetApp = { openById: () => ss, flush: () => {} };
+  globalThis.DriveApp = {
+    getFolderById: () => mockFolder,
+    getFoldersByName: () => ({ hasNext: () => true, next: () => mockFolder }),
+    createFolder: () => ({ getId: () => 'FOLDER' + fileCounter }),
+    Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' }
+  };
+  globalThis.Logger = { log: () => {} };
+  const propStore = {};
+  globalThis.PropertiesService = {
+    getScriptProperties: () => ({
+      getProperty: (k) => (k in propStore ? propStore[k] : ''),
+      setProperty: (k, v) => { propStore[k] = String(v); },
+      deleteProperty: (k) => { delete propStore[k]; }
+    })
+  };
+  const sentMails = [];
+  globalThis.Utilities = {
+    newBlob: (d, t, n) => ({ data: d, type: t, name: n }),
+    base64Decode: (s) => String(s), base64Encode: (s) => String(s),
+    getUuid: () => 'uuid-' + Math.random(), formatDate: () => '2026-01-01',
+    computeDigest: (a, s) => 'digest:' + String(s), base64EncodeWebSafe: (s) => String(s),
+    DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' }
+  };
+  globalThis.Session = { getScriptTimeZone: () => 'Asia/Riyadh', getEffectiveUser: () => ({ getEmail: () => 'owner@x.y' }) };
+  globalThis.MailApp = { sendEmail: (o) => { sentMails.push(o); }, getRemainingDailyQuota: () => 100 };
+  globalThis.ScriptApp = {};
+  globalThis.ContentService = { MimeType: { JSON: 'application/json' }, createTextOutput: (t) => ({ setMimeType: () => ({ __t: t }) }) };
+  (0, eval)(src);
+
+  const post = (action, data) => { try { return JSON.parse(doPost({ parameter: { action, data: JSON.stringify(data || {}) } }).__t); } catch (e) { return { success: false, error: String(e.message || e) }; } };
+  const get = (action, memberId) => { try { return JSON.parse(doGet({ parameter: { action, memberId: memberId || '' } }).__t); } catch (e) { return { success: false, error: String(e.message || e) }; } };
+
+  members.getRange(2, 4, 1, 2).setValues([[hashPassword('12345678', 'salt1'), 'salt1']]);
+
+  const addBook = post('saveClubBook', {
+    id: 'b1', memberId: 'm1', memberName: 'مشعل', title: 'كتاب الاختبار', author: 'مؤلف',
+    category: 'أدب', coverColor: '#112233', report: 'تقرير', pages: 100, year: 2024,
+    coverImage: 'data:image/jpeg;base64,AAAA', pdfUrl: '', coverColor2: '#445566'
+  });
+  ok('حفظ كتاب جديد', addBook.success === true, addBook.error || '');
+  const list1 = get('getClubBooks');
+  ok('الكتاب ظهر في القراءة', list1.data && list1.data.length === 1, 'عدد=' + (list1.data || []).length);
+  ok('صورة الغلاف رُفعت إلى Drive', /lh3\.googleusercontent/.test(String(((list1.data || [])[0] || {}).coverImage)), ((list1.data || [])[0] || {}).coverImage);
+
+  const dupBook = post('saveClubBook', {
+    id: 'b2', memberId: 'm1', memberName: 'مشعل', title: 'كتاب الاختبار', author: 'مؤلف',
+    category: 'أدب', coverColor: '#112233', report: '', pages: 100
+  });
+  const list2 = get('getClubBooks');
+  ok('منع تكرار الكتاب (نفس العنوان والمؤلف)', list2.data.length === 1 && dupBook.success === true, 'عدد=' + list2.data.length);
+
+  const upd = post('updateClubBook', {
+    id: 'b1', title: 'كتاب معدّل', author: 'مؤلف', category: 'أدب',
+    coverColor: '#000000', report: 'تقرير جديد', pages: 250, year: 2025,
+    coverImage: '', pdfUrl: 'https://drive/pdf', coverColor2: '#111111'
+  });
+  const list3 = get('getClubBooks');
+  ok('تعديل بيانات الكتاب', upd.success === true && list3.data[0].title === 'كتاب معدّل', (upd.error || list3.data[0].title));
+  ok('حفظ ملف PDF بعد التعديل', list3.data[0].pdfUrl === 'https://drive/pdf', list3.data[0].pdfUrl);
+  ok('حفظ لون الغلاف الثاني', list3.data[0].coverColor2 === '#111111', list3.data[0].coverColor2);
+
+  const del = post('deleteClubBook', { id: 'b1', key: bookKey('كتاب معدّل', 'مؤلف'), deletedBy: 'مشعل' });
+  const list4 = get('getClubBooks');
+  ok('حذف الكتاب (يختفي)', del.success === true && list4.data.length === 0, 'عدد=' + list4.data.length);
+  ok('تسجيل المحذوف في سجل المحذوفات', (list4.deletedIds || []).includes('b1'), (list4.deletedIds || []).join(','));
+
+  const restored = post('restoreClubBook', { id: 'b1' });
+  const list5 = get('getClubBooks');
+  ok('استرجاع الكتاب', restored.success === true && list5.data.length === 1, 'عدد=' + list5.data.length);
+  ok('إزالة المحذوف من سجل المحذوفات', !(list5.deletedIds || []).includes('b1'), (list5.deletedIds || []).join(','));
+
+  post('deleteClubBook', { id: 'b1', key: bookKey('كتاب معدّل', 'مؤلف'), deletedBy: 'مشعل' });
+  const readd = post('saveClubBook', {
+    id: 'b1-re', memberId: 'm1', memberName: 'مشعل', title: 'كتاب معدّل', author: 'مؤلف',
+    category: 'أدب', coverColor: '#112233', report: '', pages: 10
+  });
+  const list5b = get('getClubBooks');
+  ok('إعادة إضافة كتاب محذوف سابقًا تظهر', readd.success === true && list5b.data.length === 1, 'عدد=' + list5b.data.length);
+
+  const addPersonal = post('savePersonalBook', {
+    memberId: 'm1', memberName: 'مشعل', bookId: 'my-1', title: 'كتاب شخصي',
+    author: 'مؤلف', pages: 50, coverColor: '#123456', coverColor2: '#654321',
+    coverImage: 'data:image/jpeg;base64,BBBB', pdfUrl: 'https://drive/mine', createdAt: 10
+  });
+  ok('حفظ كتاب في «مكتبتي»', addPersonal.success === true, addPersonal.error || '');
+  const myBooks = get('getPersonalBooks', 'm1');
+  ok('قراءة «مكتبتي»', myBooks.data && myBooks.data.length === 1, 'عدد=' + (myBooks.data || []).length);
+  ok('حفظ صورة غلاف الكتاب الخاص', /lh3\.googleusercontent/.test(String((myBooks.data[0] || {}).coverImage)), (myBooks.data[0] || {}).coverImage);
+  ok('حفظ لون الغلاف الثاني', (myBooks.data[0] || {}).coverColor2 === '#654321', (myBooks.data[0] || {}).coverColor2);
+  const delPersonal = post('deletePersonalBook', { memberId: 'm1', bookId: 'my-1' });
+  const myBooks2 = get('getPersonalBooks', 'm1');
+  ok('حذف كتاب من «مكتبتي»', delPersonal.success === true && myBooks2.data.length === 0, 'عدد=' + myBooks2.data.length);
+
+  const like1 = post('toggleLike', { type: 'quote', id: 'q1', memberId: 'm1', memberName: 'مشعل' });
+  ok('إعجاب على اقتباس', like1.success === true && like1.liked === true && like1.likes === 1, JSON.stringify(like1));
+  const likes = get('getLikes', 'm1');
+  ok('قراءة الإعجابات', likes.quotes && likes.quotes.q1 === 1, JSON.stringify(likes.quotes));
+  const unlike = post('toggleLike', { type: 'quote', id: 'q1', memberId: 'm1' });
+  ok('إلغاء الإعجاب', unlike.success === true && unlike.liked === false && unlike.likes === 0, JSON.stringify(unlike));
+
+  const upload = post('uploadFile', { name: 'كتاب.pdf', data: 'data:application/pdf;base64,JVBERi0=' });
+  ok('رفع ملف PDF', upload.success === true && String(upload.url).indexOf('drive.google.com/file/d/') > 0, upload.url);
+
+  const week = post('saveWeeklyReport', {
+    weekNo: 203, image: 'data:image/jpeg;base64,AAAA',
+    images: ['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,BBBB'], createdAt: 20
+  });
+  ok('حفظ تقرير أسبوعي', week.success === true, week.error || '');
+  const weeks = get('getWeeklyReports');
+  ok('قراءة التقارير', weeks.data && weeks.data.length === 1, 'عدد=' + (weeks.data || []).length);
+  ok('حفظ صور التقرير المتعددة', Array.isArray((weeks.data[0] || {}).images) && weeks.data[0].images.length === 2, JSON.stringify((weeks.data[0] || {}).images));
+  const week2 = post('saveWeeklyReport', { weekNo: 203, image: 'data:image/jpeg;base64,CCCC', images: ['data:image/jpeg;base64,CCCC'], createdAt: 30 });
+  const weeks2 = get('getWeeklyReports');
+  ok('استبدال تقرير بنفس رقم الأسبوع (لا تكرار)', weeks2.data.length === 1, 'عدد=' + weeks2.data.length);
+  const weekDel = post('deleteWeeklyReport', { id: weeks2.data[0].id });
+  const weeks3 = get('getWeeklyReports');
+  ok('حذف تقرير أسبوعي', weekDel.success === true && weeks3.data.length === 0, 'عدد=' + weeks3.data.length);
+  const weekClear = get('deleteAllWeeklyReports');
+  ok('حذف كل التقارير', weekClear.success === true, JSON.stringify(weekClear));
+  const weekClearPost = post('deleteAllWeeklyReports', { by: 'مشرف' });
+  ok('حذف كل التقارير (POST — طريقة الواجهة)', weekClearPost.success === true, JSON.stringify(weekClearPost));
+
+  const sel = post('saveSelectionQuote', { id: 's1', text: 'اقتباس', book: 'كتاب', image: 'data:image/jpeg;base64,AAAA', by: 'مشعل' });
+  const sels = get('getSelectionQuotes');
+  ok('حفظ اقتباس مختار', sel.success === true && sels.data.length === 1, 'عدد=' + (sels.data || []).length);
+  const selDel = post('deleteSelectionQuote', { id: 's1' });
+  ok('حذف اقتباس مختار', selDel.success === true && get('getSelectionQuotes').data.length === 0);
+
+  const sum = post('saveBookSummary', { memberId: 'm1', memberName: 'مشعل', bookTitle: 'كتاب', bookAuthor: 'مؤلف', summary: 'ملخص', createdAt: 1 });
+  const sums = get('getBookSummaries');
+  ok('حفظ ملخص كتاب', sum.success === true && sums.data.length === 1, 'عدد=' + (sums.data || []).length);
+  const sumDel = post('deleteBookSummary', { id: sums.data[0].id });
+  ok('حذف ملخص كتاب', sumDel.success === true && get('getBookSummaries').data.length === 0);
+
+  const list = post('saveReadingList', { id: 'rl1', title: 'قائمة', description: 'وصف', books: [{ id: 'b1', title: 'كتاب' }], createdBy: 'مشعل' });
+  const lists = get('getReadingLists');
+  ok('حفظ قائمة قرائية', list.success === true && lists.data.length === 1, 'عدد=' + (lists.data || []).length);
+  const listDel = post('deleteReadingList', { id: 'rl1' });
+  ok('حذف قائمة قرائية', listDel.success === true, JSON.stringify(listDel));
+  ok('اختفت القائمة بعد الحذف', get('getReadingLists').data.length === 0, JSON.stringify(get('getReadingLists').data));
+
+  const sup = post('setSupervisorStatus', { row: 2, isSupervisor: true });
+  ok('منح إشراف', sup.success === true && sup.role === 'supervisor', JSON.stringify(sup));
+  const supOff = post('setSupervisorStatus', { row: 2, isSupervisor: false });
+  ok('إلغاء الإشراف', supOff.success === true && supOff.role === 'member', JSON.stringify(supOff));
+  const consult = post('setConsultantStatus', { row: 2, isConsultant: true });
+  ok('ترقية مستشار', consult.success === true && consult.role === 'consultant', JSON.stringify(consult));
+  const ban = post('banMember', { row: 2, banned: true });
+  ok('طرد العضو', ban.success === true && ban.banned === true, JSON.stringify(ban));
+  const unban = post('banMember', { row: 2, banned: false });
+  ok('إعادة تفعيل العضو', unban.success === true && unban.banned === false, JSON.stringify(unban));
+
+  const delBook = post('deleteClubBook', { id: 'b1', key: bookKey('كتاب معدّل', 'مؤلف'), deletedBy: 'مشعل' });
+  const trash = get('getDeletedItems');
+  ok('الكتاب يظهر في سلة المحذوفات', trash.data && trash.data.length >= 1, JSON.stringify(trash).slice(0, 300));
+  const purge = post('purgeDeletedItem', { type: 'book', id: 'b1' });
+  const trash2 = get('getDeletedItems');
+  ok('الحذف النهائي من السلة', purge.success === true && !(trash2.data || []).some((x) => x.id === 'b1'), 'عدد=' + (trash2.data || []).length);
+  const reAdd = post('saveClubBook', {
+    id: 'b1-new', memberId: 'm1', memberName: 'مشعل', title: 'كتاب معدّل', author: 'مؤلف',
+    category: 'أدب', coverColor: '#112233', report: '', pages: 100
+  });
+  const listAfterPurge = get('getClubBooks');
+  ok('يمكن إضافة الكتاب نفسه بعد الحذف النهائي', reAdd.success === true && listAfterPurge.data.length === 1, 'عدد=' + listAfterPurge.data.length);
+
+  const desc = get('describeSpreadsheet');
+  ok('فحص التبويبات', desc.success === true && Array.isArray(desc.sheets) && desc.sheets.length > 5, 'عدد=' + (desc.sheets || []).length);
+  const org = post('organizeSheets', { requesterName: 'مشعل الحفير' });
+  ok('تنظيم الشيت', org.success === true && Array.isArray(org.report), (org.report || []).length + ' سطر');
+  const orgDenied = post('organizeSheets', { requesterName: 'زائر' });
+  ok('منع غير المشرف من التنظيم', orgDenied.success === false, orgDenied.error || '');
+
+  post('banMember', { row: 2, banned: true });
+  const loginBanned = post('loginMember', { identifier: 'a@b.c', password: 'x' });
+  ok('منع دخول المطرود', loginBanned.success === false && String(loginBanned.error || '').indexOf('طرد') >= 0, loginBanned.error || JSON.stringify(loginBanned));
+
+  const reqCode = post('requestRegistrationCode', { name: 'عضو جديد الثلاثي', email: 'new@example.com', password: '12345678', phone: '0500000000' });
+  ok('طلب رمز التسجيل', reqCode.success === true, reqCode.error || '');
+  const lastMail = sentMails[sentMails.length - 1] || {};
+  const codeMatch = String(lastMail.htmlBody || '').match(/\b\d{6}\b/);
+  const code = codeMatch ? codeMatch[0] : '';
+  ok('إرسال رمز بالبريد', !!code, JSON.stringify(lastMail).slice(0, 200));
+  const verify = post('verifyRegistrationCode', { email: 'new@example.com', code: code });
+  ok('تأكيد الرمز وإنشاء الحساب', verify.success === true && verify.status === 'pending', verify.error || JSON.stringify(verify));
+  const pending = get('getPendingMembers');
+  const pendingRow = ((pending.data || []).find((x) => x.name === 'عضو جديد الثلاثي') || {}).row;
+  ok('العضو الجديد يظهر للمشرف كمنتظر', !!pendingRow, JSON.stringify(pending).slice(0, 300));
+  const accept = post('setMemberStatus', { row: pendingRow, status: 'active' });
+  ok('قبول العضو من المشرف', accept.success === true, accept.error || JSON.stringify(accept));
+  const reqDup = post('requestRegistrationCode', { name: 'عضو جديد الثلاثي', email: 'new@example.com', password: '12345678', phone: '0500000000' });
+  ok('منع تكرار نفس البريد', reqDup.success === false, reqDup.error || '');
+  post('banMember', { row: 2, banned: true });
+  const reqBanned = post('requestRegistrationCode', { name: 'مشعل الحفير', email: 'a@b.c', password: '12345678', phone: '0555000000' });
+  ok('المطرود لا يستطيع التسجيل بنفس البريد', reqBanned.success === false, reqBanned.error || '');
+  const reqBannedPhone = post('requestRegistrationCode', { name: 'مشعل الحفير', email: 'another@example.com', password: '12345678', phone: '0555000000' });
+  ok('المطرود لا يستطيع التسجيل بنفس الجوال', reqBannedPhone.success === false, reqBannedPhone.error || '');
+
+  const snapshot = () => sheets.map((s) => s.getName() + ':' + s._rows.length).join('|');
+  setupJaleesSheets();
+  const s1 = snapshot();
+  setupJaleesSheets();
+  const s2 = snapshot();
+  setupJaleesSheets();
+  const s3 = snapshot();
+  ok('الإعداد متكرر (لا يغيّر شيئًا)', s1 === s2 && s2 === s3, s1 + ' ≠ ' + s2);
+
+  const passed = results.filter((r) => r.pass).length;
+  return { passed, total: results.length, failures: results.filter((r) => !r.pass) };
+})()

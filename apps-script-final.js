@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r36';
+const CODE_VERSION = 'jalees-2026-11-10-r37';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -908,7 +908,43 @@ const MAIL_FROM = 'jjalees.com@gmail.com';
 const MAIL_NAME = 'نادي جليس القرائي';
 const MAIL_REPLY = 'jjalees.com@gmail.com';
 
+/* ---- سجل الإرسال: لتعرف الإدارة ما الذي أُرسل ولمن وهل نجح ---- */
+const MAIL_LOG_SHEET = 'سجل الإرسال';
+
+function getMailLogSheet(ss) {
+  return getDataSheet(ss, MAIL_LOG_SHEET, ['email', 'sentAt', 'status', 'detail', 'code']);
+}
+
+function logMailAttempt(ss, email, status, detail, code) {
+  try {
+    getMailLogSheet(ss).appendRow([
+      String(email || ''), Date.now(), String(status || ''), String(detail || ''), String(code || '')
+    ]);
+  } catch (error) { /* السجل لا يوقف الإرسال */ }
+}
+
+/* نسخة من كل رسالة إلى صندوق النادي — لو ما وصل الرمز للعضو يقدر المشرف يوصله */
+function mailBccAddress() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const saved = String(props.getProperty('JALEES_MAIL_BCC') || '').trim();
+    if (saved.toLowerCase() === 'off' || saved.toLowerCase() === 'none') return '';
+    if (saved) return saved;
+  } catch (error) { /* تجاهل */ }
+  return MAIL_FROM;
+}
+
 function sendCodeEmail(email, name, code, subject, intro) {
+  const plainBody = [
+    'نادي جليس القرائي',
+    '',
+    'مرحباً ' + name + '،',
+    intro,
+    '',
+    'رمزك: ' + code,
+    '',
+    'الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلب هذا الرمز، تجاهله.'
+  ].join('\n');
   const htmlBody = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
       <h2 style="margin:0 0 12px">نادي جليس القرائي</h2>
       <p>مرحباً ${name}،</p>
@@ -921,6 +957,7 @@ function sendCodeEmail(email, name, code, subject, intro) {
     subject: subject,
     name: MAIL_NAME,
     replyTo: MAIL_REPLY,
+    body: plainBody,
     htmlBody: htmlBody
   };
 
@@ -930,26 +967,59 @@ function sendCodeEmail(email, name, code, subject, intro) {
   try { owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (error) { owner = ''; }
   const from = String(MAIL_FROM || '').toLowerCase();
   const canUseFrom = Boolean(from) && Boolean(owner) && owner === from;
+  const bcc = mailBccAddress();
+  const payload = (withFrom) => {
+    const opts = { ...base };
+    if (bcc) opts.bcc = bcc;
+    if (withFrom) opts.from = MAIL_FROM;
+    return opts;
+  };
 
   try {
-    MailApp.sendEmail(canUseFrom ? { ...base, from: MAIL_FROM } : base);
-  } catch (error) {
-    MailApp.sendEmail({ to: email, subject: subject, htmlBody: htmlBody });
+    MailApp.sendEmail(payload(canUseFrom));
+    return true;
+  } catch (firstError) {
+    try {
+      MailApp.sendEmail(payload(false));
+      return true;
+    } catch (secondError) {
+      throw new Error(String((secondError && secondError.message) || (firstError && firstError.message) || 'فشل الإرسال'));
+    }
   }
 }
 
-/* تشخيص الإرسال: من الحساب المالك؟ وهل الاسم مطابق؟ */
+/* تشخيص الإرسال: من الحساب المالك؟ وهل الاسم مطابق؟ وآخر محاولات */
 function getMailStatus() {
   let owner = '';
   try { owner = String(Session.getEffectiveUser().getEmail() || ''); } catch (error) { owner = ''; }
   let quota = 0;
   try { quota = MailApp.getRemainingDailyQuota(); } catch (error) { quota = 0; }
+  const recent = [];
+  try {
+    const ss = resolveSpreadsheet();
+    const sheet = getMailLogSheet(ss);
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const rows = sheet.getRange(Math.max(2, lastRow - 19), 1, Math.min(20, lastRow - 1), 5).getValues();
+      rows.forEach((row) => {
+        recent.push({
+          email: String(row[0] || ''),
+          sentAt: Number(row[1]) || 0,
+          status: String(row[2] || ''),
+          detail: String(row[3] || ''),
+          code: String(row[4] || '')
+        });
+      });
+    }
+  } catch (error) { /* السجل غير متاح */ }
   return {
     success: true,
     owner: owner,
     configuredFrom: MAIL_FROM,
     canSendAsClub: owner.toLowerCase() === String(MAIL_FROM).toLowerCase(),
-    remainingQuota: quota
+    bcc: mailBccAddress(),
+    remainingQuota: quota,
+    recent: recent.reverse()
   };
 }
 
@@ -2020,8 +2090,18 @@ function doPost(e) {
       }
 
       const previous = readPendingRegistration(email);
-      if (previous && previous.sentAt && Date.now() - Number(previous.sentAt) < 60000) {
-        throw new Error('انتظر دقيقة قبل طلب رمز جديد');
+      if (previous && previous.sentAt && Date.now() - Number(previous.sentAt) < 60000 && previous.code) {
+        /* إعادة إرسال الرمز نفسه بدل رفض الطلب — لا يستهلك رمزًا جديدًا */
+        try {
+          sendCodeEmail(email, name, String(previous.code), 'جليس | رمز تأكيد بريدك', 'رمز تأكيد بريدك لإنشاء حسابك في جليس هو:');
+          previous.sentAt = Date.now();
+          savePendingRegistration(previous);
+          logMailAttempt(ss, email, 'sent', 'إعادة إرسال نفس الرمز', String(previous.code));
+          return output({ success: true, resent: true, message: 'أرسلنا رمز التحقق إلى بريدك' });
+        } catch (mailError) {
+          logMailAttempt(ss, email, 'failed', String(mailError && mailError.message || mailError), String(previous.code));
+          throw new Error('تعذر إرسال البريد، حاول مرة أخرى بعد قليل');
+        }
       }
 
       const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -2035,6 +2115,7 @@ function doPost(e) {
         passwordSalt,
         codeHash: hashPassword(code, codeSalt),
         codeSalt,
+        code: code,
         expiry: Date.now() + 15 * 60 * 1000,
         sentAt: Date.now(),
         attempts: 0
@@ -2048,10 +2129,12 @@ function doPost(e) {
         );
       } catch (mailError) {
         clearPendingRegistration(email);
+        logMailAttempt(ss, email, 'failed', String((mailError && mailError.message) || mailError), code);
         throw new Error('تعذر إرسال البريد، حاول مرة أخرى بعد قليل');
       }
+      logMailAttempt(ss, email, 'sent', 'رمز جديد', code);
 
-      return output({ success: true, message: 'أرسلنا رمز التحقق إلى بريدك' });
+      return output({ success: true, sentTo: email, message: 'أرسلنا رمز التحقق إلى بريدك' });
     }
 
     if (action === 'verifyRegistrationCode') {
@@ -3606,6 +3689,11 @@ function setupJaleesSheets() {
     const joinRequests = getJoinRequestsSheet(ss);
     ensureJoinRequestStatuses(joinRequests);
     return joinRequests.getMaxColumns() + ' عمود';
+  });
+
+  step(MAIL_LOG_SHEET, () => {
+    const mailLog = getMailLogSheet(ss);
+    return mailLog.getMaxColumns() + ' عمود · نسخة إلى ' + mailBccAddress();
   });
 
   step(READING_TIPS_SHEET, () => {

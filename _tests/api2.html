@@ -1,0 +1,236 @@
+/* الدفعة الثانية: بقية أفعال الخادم (مقالات، تصنيفات، استشارات، اقتباسات، تقييمات) */
+(async function () {
+  const src = await (await fetch('apps-script-final.js?t=' + Date.now())).text();
+  const results = [];
+  const ok = (name, cond, extra) => results.push({ name, pass: !!cond, extra: extra === undefined ? '' : String(extra) });
+
+  let fileCounter = 0;
+  function MockSheet(name, rows, id) { this.name = name; this._rows = rows; this._id = id; }
+  MockSheet.prototype.getSheetId = function () { return this._id; };
+  MockSheet.prototype.getName = function () { return this.name; };
+  MockSheet.prototype.getLastRow = function () { return this._rows.length; };
+  MockSheet.prototype.getLastColumn = function () { return Math.max(1, (this._rows[0] || []).length); };
+  MockSheet.prototype.getMaxColumn = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxColumns = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxRows = function () { return this._rows.length; };
+  MockSheet.prototype.getDataRange = function () { const s = this; return { getValues: () => s._rows }; };
+  MockSheet.prototype.getRange = function (r, c, nr, nc) {
+    const s = this;
+    return {
+      getValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((s._rows[r - 1 + i] || [])[c - 1 + j] ?? ''); o.push(row); } return o; },
+      getValue: () => (s._rows[r - 1] || [])[c - 1] ?? '',
+      getDisplayValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(String((s._rows[r - 1 + i] || [])[c - 1 + j] ?? '')); o.push(row); } return o; },
+      setValues: (v) => { for (let i = 0; i < v.length; i++) for (let j = 0; j < v[i].length; j++) { const rr = r - 1 + i, cc = c - 1 + j; if (!s._rows[rr]) s._rows[rr] = []; s._rows[rr][cc] = v[i][j]; } },
+      setValue: (x) => { if (!s._rows[r - 1]) s._rows[r - 1] = []; s._rows[r - 1][c - 1] = x; },
+      setBackground: () => {}, setFontColor: () => {}
+    };
+  };
+  MockSheet.prototype.setName = function (n) { this.name = n; };
+  MockSheet.prototype.appendRow = function (row) { this._rows.push(row.slice()); };
+  MockSheet.prototype.deleteRow = function (r) { this._rows.splice(r - 1, 1); };
+  MockSheet.prototype.insertColumnsAfter = function () {};
+  MockSheet.prototype.setBackground = function () {};
+  MockSheet.prototype.setFontColor = function () {};
+
+  const members = new MockSheet('الأعضاء', [[
+    'id', 'name', 'email', 'passwordHash', 'salt', 'role', 'status', 'createdAt', 'lastLogin',
+    'resetCode', 'resetExpires', 'phone', 'profilePhoto', 'memberType'
+  ], ['m1', 'مشعل الحفير', 'a@b.c', 'h', 's', 'supervisor', 'active', 1, '', '', '', '0555000000', '', 'member'],
+  ['m2', 'محمد صالح الدبيخي', 'm2@example.com', 'h2', 's2', 'member', 'active', 2, '', '', '', '05551112233', '', 'member']], 1);
+  const books = new MockSheet('المكتبة', [[
+    'id', 'memberId', 'memberName', 'title', 'author', 'category', 'coverColor', 'report', 'pages',
+    'createdAt', 'coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl', 'coverColor2'
+  ]], 2);
+  const sheets = [members, books];
+  const ss = {
+    getId: () => 'SHEET-ID-1',
+    getSheets: () => sheets,
+    getSheetByName: (n) => sheets.find((s) => s.name === n) || null,
+    getSheetById: (id) => sheets.find((s) => s._id === id) || null,
+    insertSheet: (n) => { const s = new MockSheet(n, [[]], 900 + sheets.length); sheets.push(s); return s; },
+    deleteSheet: (s) => { const i = sheets.indexOf(s); if (i >= 0) sheets.splice(i, 1); },
+    setActiveSheet: () => {}, moveActiveSheet: () => {}
+  };
+  const mockFile = () => ({ getId: () => 'FILE' + (++fileCounter), getUrl: () => 'https://drive.google.com/file/d/F/view', setSharing: () => {}, setName: () => {} });
+  const mockFolder = { getId: () => 'FOLDER1', createFile: () => mockFile() };
+  globalThis.SpreadsheetApp = { openById: () => ss, flush: () => {} };
+  globalThis.DriveApp = {
+    getFolderById: () => mockFolder,
+    getFoldersByName: () => ({ hasNext: () => true, next: () => mockFolder }),
+    createFolder: () => ({ getId: () => 'FOLDER1' }),
+    Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' }
+  };
+  globalThis.Logger = { log: () => {} };
+  const propStore = {};
+  globalThis.PropertiesService = {
+    getScriptProperties: () => ({
+      getProperty: (k) => (k in propStore ? propStore[k] : ''),
+      setProperty: (k, v) => { propStore[k] = String(v); },
+      deleteProperty: (k) => { delete propStore[k]; }
+    })
+  };
+  globalThis.Utilities = {
+    newBlob: (d, t, n) => ({ data: d, type: t, name: n }),
+    base64Decode: (s) => String(s), base64Encode: (s) => String(s),
+    getUuid: () => 'uuid-' + Math.random(), formatDate: () => '2026-01-01',
+    computeDigest: (a, s) => 'digest:' + String(s), base64EncodeWebSafe: (s) => String(s),
+    DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' }
+  };
+  globalThis.Session = { getScriptTimeZone: () => 'Asia/Riyadh', getEffectiveUser: () => ({ getEmail: () => 'owner@x.y' }) };
+  const sentMails = [];
+  globalThis.MailApp = { sendEmail: (o) => { sentMails.push(o); }, getRemainingDailyQuota: () => 100 };
+  globalThis.ScriptApp = {};
+  globalThis.ContentService = { MimeType: { JSON: 'application/json' }, createTextOutput: (t) => ({ setMimeType: () => ({ __t: t }) }) };
+  (0, eval)(src);
+
+  const post = (action, data) => { try { return JSON.parse(doPost({ parameter: { action, data: JSON.stringify(data || {}) } }).__t); } catch (e) { return { success: false, error: String(e.message || e) }; } };
+  const get = (action, memberId) => { try { return JSON.parse(doGet({ parameter: { action, memberId: memberId || '' } }).__t); } catch (e) { return { success: false, error: String(e.message || e) }; } };
+
+  members.getRange(2, 4, 1, 2).setValues([[hashPassword('12345678', 'salt1'), 'salt1']]);
+
+  const art = post('saveArticle', { id: 'a1', memberId: 'm1', memberName: 'مشعل', title: 'مقال اختباري', category: 'قراءات', body: 'نص المقال', excerpt: 'مقتطف', read: 4, createdAt: 10 });
+  ok('حفظ مقال', art.success === true, art.error || '');
+  const arts = get('getArticles');
+  ok('قراءة المقالات', (arts.data || []).some((a) => a.id === 'a1'), JSON.stringify((arts.data || []).map((a) => a.id)));
+  const artUp = post('saveArticle', { id: 'a1', memberId: 'm1', memberName: 'مشعل', title: 'مقال معدّل', category: 'قراءات', body: 'نص', excerpt: 'x', read: 5, createdAt: 10 });
+  const arts2 = get('getArticles');
+  ok('تعديل مقال', artUp.success === true && (arts2.data || []).some((a) => a.title === 'مقال معدّل'), JSON.stringify((arts2.data || []).map((a) => a.title)));
+  const artDel = post('deleteArticle', { id: 'a1', deletedBy: 'مشعل' });
+  const arts3 = get('getArticles');
+  ok('حذف مقال', artDel.success === true && !(arts3.data || []).some((a) => a.id === 'a1'), JSON.stringify((arts3.data || []).map((a) => a.id)));
+  const artRes = post('restoreArticle', { id: 'a1' });
+  const arts4 = get('getArticles');
+  ok('استرجاع مقال', artRes.success === true && (arts4.data || []).some((a) => a.id === 'a1'), JSON.stringify((arts4.data || []).map((a) => a.id)));
+
+  const catAdd = post('addLibraryCategory', { category: 'رف اختباري' });
+  ok('إضافة تصنيف', catAdd.success === true && (catAdd.categories || []).includes('رف اختباري'), JSON.stringify(catAdd.categories));
+  const catDup = post('addLibraryCategory', { category: 'رف اختباري' });
+  ok('منع تكرار التصنيف', catDup.success === true && (catDup.categories || []).filter((c) => c === 'رف اختباري').length === 1);
+  const catRen = post('renameLibraryCategory', { oldCategory: 'رف اختباري', category: 'رف معدّل' });
+  ok('تعديل اسم التصنيف', catRen.success === true && (catRen.categories || []).includes('رف معدّل'), JSON.stringify(catRen.categories));
+  const catDel = post('deleteLibraryCategory', { id: 'رف معدّل', deletedBy: 'مشرف' });
+  ok('حذف التصنيف', catDel.success === true, catDel.error || '');
+  const cats = get('getLibraryCategories');
+  ok('اختفى التصنيف المحذوف', !(cats.categories || cats.data || []).includes('رف معدّل'), JSON.stringify(cats.categories || cats.data));
+  const catRes = post('restoreLibraryCategory', { id: 'رف معدّل' });
+  ok('استرجاع التصنيف', catRes.success === true, catRes.error || JSON.stringify(catRes));
+
+  const prof = post('saveProfile', { memberId: 'm1', name: 'مشعل الحفير', role: 'supervisor', joined: '٢٠٢٤', goal: 300, lastWeekPages: 40, notifications: true });
+  ok('حفظ الملف الشخصي', prof.success === true, prof.error || '');
+  const profGet = get('getProfile', 'm1');
+  ok('قراءة الملف الشخصي', profGet.success === true && profGet.data && Number(profGet.data.goal) === 300, JSON.stringify(profGet.data));
+
+  const entry = post('saveEntry', { id: 'e1', memberId: 'm1', memberName: 'مشعل', bookId: 'bk1', bookTitle: 'كتاب', pages: 25, date: '2026-01-01', createdAt: 5 });
+  ok('حفظ سجل قراءة', entry.success === true, entry.error || '');
+  const entries = get('getEntries', 'm1');
+  ok('قراءة السجلات', (entries.data || []).some((e) => e.id === 'e1' && e.pages === 25), JSON.stringify(entries.data));
+
+  const myb = post('saveMyBook', { memberId: 'm1', memberName: 'مشعل', bookId: 'bk1', status: 'reading', currentPage: 25, createdAt: 5 });
+  ok('حفظ كتاب في مكتبتي', myb.success === true, myb.error || '');
+  const mybs = get('getMyBooks', 'm1');
+  ok('قراءة مكتبتي', (mybs.data || []).some((b) => b.bookId === 'bk1' && b.currentPage === 25), JSON.stringify(mybs.data));
+  const mybUp = post('saveMyBook', { memberId: 'm1', memberName: 'مشعل', bookId: 'bk1', status: 'finished', currentPage: 300 });
+  const mybs2 = get('getMyBooks', 'm1');
+  ok('تحديث كتاب في مكتبتي', (mybs2.data || []).some((b) => b.bookId === 'bk1' && b.status === 'finished'), JSON.stringify(mybs2.data));
+  const mybDel = post('deleteMyBook', { memberId: 'm1', bookId: 'bk1' });
+  ok('حذف كتاب من مكتبتي', mybDel.success === true, mybDel.error || '');
+  ok('اختفى من مكتبتي', !(get('getMyBooks', 'm1').data || []).some((b) => b.bookId === 'bk1'), JSON.stringify(get('getMyBooks', 'm1').data));
+
+  const mtype = post('setMemberType', { row: 3, memberType: 'friend' });
+  ok('تغيير نوع العضوية', mtype.success === true && mtype.memberType === 'friend', JSON.stringify(mtype));
+  const photo = post('setMemberPhoto', { memberId: 'm2', photo: 'data:image/jpeg;base64,AAAA' });
+  ok('حفظ صورة العضو', photo.success === true, photo.error || '');
+  const photoBad = post('setMemberPhoto', { memberId: 'm2', photo: 'نص' });
+  ok('رفض صورة غير صالحة', photoBad.success === false, photoBad.error || '');
+
+  const rating = post('saveBookRating', { id: 'r1', bookId: 'bk1', memberId: 'm1', memberName: 'مشعل', rating: 4, review: 'رائع', createdAt: 3 });
+  ok('حفظ تقييم كتاب', rating.success === true, rating.error || '');
+  const ratings = get('getBookRatings');
+  ok('قراءة التقييمات', (ratings.data || []).some((r) => r.bookId === 'bk1'), JSON.stringify(ratings.data));
+  const ratingBad = post('saveBookRating', { bookId: 'bk1', memberId: 'm1', rating: 9 });
+  ok('رفض تقييم خارج النطاق', ratingBad.success === false, ratingBad.error || '');
+
+  const consult = post('submitConsultation', { memberId: 'm2', question: 'ما أفضل طريقة لتنظيم القراءة اليومية؟' });
+  ok('طرح استشارة', consult.success === true, consult.error || '');
+  const consults = get('getConsultations');
+  ok('قراءة الاستشارات', (consults.data || []).some((c) => c.id === consult.id), JSON.stringify(consults.data));
+  const consultShort = post('submitConsultation', { memberId: 'm2', question: 'قصير' });
+  ok('رفض سؤال قصير جدًا', consultShort.success === false, consultShort.error || '');
+  const answer = post('answerConsultation', { memberId: 'm1', id: consult.id, answer: 'اقسم وقتك على فترات' });
+  ok('الإجابة على الاستشارة', answer.success === true, answer.error || '');
+  const consults2 = get('getConsultations');
+  const answered = (consults2.data || []).find((c) => c.id === consult.id);
+  ok('حُفظت الإجابة', answered && String(answered.answer || '').length > 0, JSON.stringify(answered));
+  const answerByOther = post('answerConsultation', { memberId: 'm2', id: consult.id, answer: 'محاولة أخرى' });
+  ok('منع غير المستشار من الإجابة', answerByOther.success === false, answerByOther.error || '');
+
+  const join = post('saveJoinRequest', { name: 'طالب انضمام', phone: '0509999888', note: 'أرغب بالانضمام' });
+  ok('طلب انضمام', join.success === true, join.error || '');
+  const joins = get('getJoinRequests');
+  const joinRow = ((joins.data || []).find((j) => j.name === 'طالب انضمام') || {}).row;
+  ok('قراءة طلبات الانضمام', !!joinRow, JSON.stringify(joins.data));
+  const joinStatus = post('setJoinRequestStatus', { row: joinRow, status: 'accepted', by: 'مشرف' });
+  ok('تحديث حالة الطلب', joinStatus.success === true, joinStatus.error || '');
+  const joins2 = get('getJoinRequests');
+  ok('حُفظت حالة الطلب', ((joins2.data || []).find((j) => j.name === 'طالب انضمام') || {}).status === 'accepted', JSON.stringify(joins2.data));
+
+  const resetReq = post('requestPasswordReset', { email: 'a@b.c' });
+  ok('طلب استعادة كلمة المرور', resetReq.success === true, resetReq.error || '');
+  const resetMail = sentMails[sentMails.length - 1] || {};
+  const resetCode = (String(resetMail.htmlBody || '').match(/\b\d{6}\b/) || [])[0] || '';
+  ok('وصل رمز الاستعادة', !!resetCode, JSON.stringify(resetMail).slice(0, 150));
+  const reset = post('resetPassword', { email: 'a@b.c', code: resetCode, password: 'كلمةسرجديدة' });
+  ok('تعيين كلمة المرور الجديدة', reset.success === true, reset.error || '');
+  const login = post('loginMember', { identifier: 'a@b.c', password: 'كلمةسرجديدة' });
+  ok('الدخول بكلمة المرور الجديدة', login.success === true, login.error || JSON.stringify(login));
+
+  const meeting = post('saveMeeting', { id: 'mt1', date: '2026-01-01', time: '19:00', location: 'القاعة', title: 'لقاء', notes: 'ملاحظات', pages: 30, participants: 12 });
+  ok('حفظ لقاء', meeting.success === true, meeting.error || '');
+  const meetings = get('getMeetings');
+  ok('قراءة اللقاءات', (meetings.data || []).some((m) => m.title === 'لقاء'), JSON.stringify((meetings.data || []).map((m) => m.title)));
+  const meetingDel = post('deleteMeeting', { id: 'mt1', deletedBy: 'مشرف' });
+  ok('حذف لقاء', meetingDel.success === true, meetingDel.error || '');
+  ok('اختفى اللقاء', !(get('getMeetings').data || []).some((m) => m.title === 'لقاء'), JSON.stringify(get('getMeetings').data));
+
+  const quoteSave = post('', {
+    id: 'q-77', created_at: 'اليوم', author_name: 'مشعل', page_number: '10',
+    book_title: 'كتاب', quote_text: 'اقتباس اختباري', book_author: 'مؤلف'
+  });
+  ok('حفظ اقتباس بالمسار الخاص (بدون action)', quoteSave && (quoteSave.status === 'success' || quoteSave.success === true), JSON.stringify(quoteSave));
+  const quotes = get('getQuotes');
+  ok('قراءة الاقتباسات', (quotes.data || []).some((q) => q.id === 'q-77' && q.quote_text === 'اقتباس اختباري'), JSON.stringify((quotes.data || []).map((q) => q.id)));
+  const quoteDel = post('deleteQuote', { id: 'q-77', deletedBy: 'مشرف' });
+  ok('حذف اقتباس', quoteDel && quoteDel.success === true, JSON.stringify(quoteDel));
+  const quotes2 = get('getQuotes');
+  ok('اختفى الاقتباس المحذوف', !(quotes2.data || []).some((q) => q.id === 'q-77'), JSON.stringify((quotes2.data || []).map((q) => q.id)));
+  ok('سُجّل الاقتباس المحذوف في قائمة المحذوفات', (quotes2.deletedIds || []).includes('q-77'), JSON.stringify(quotes2.deletedIds));
+  const quoteRes = post('restoreQuote', { id: 'q-77' });
+  ok('استرجاع اقتباس', quoteRes && quoteRes.success === true, JSON.stringify(quoteRes));
+  const quotes3 = get('getQuotes');
+  ok('عاد الاقتباس بعد الاسترجاع', (quotes3.data || []).some((q) => q.id === 'q-77'), JSON.stringify((quotes3.data || []).map((q) => q.id)));
+
+  const toggle = post('toggleSelectionQuote', { id: 'sel-x', on: true });
+  ok('تفعيل اقتباس مختار', toggle.success === true, JSON.stringify(toggle));
+
+  post('saveClubBook', { id: 'd1', memberId: 'm1', memberName: 'مشعل', title: 'كتاب مكرر', author: 'مؤلف', category: 'أدب', coverColor: '#111111', report: '', pages: 5 });
+  post('saveClubBook', { id: 'd2', memberId: 'm1', memberName: 'مشعل', title: 'كتاب مكرر', author: 'مؤلف', category: 'أدب', coverColor: '#111111', report: '', pages: 5 });
+  const dedupe = post('dedupeClubBooks', {});
+  ok('تنظيف التكرار', dedupe.success === true, JSON.stringify(dedupe));
+
+  const snapshot = () => sheets.map((s) => s.getName() + ':' + s._rows.length).join('|');
+  setupJaleesSheets();
+  const s1 = snapshot();
+  setupJaleesSheets();
+  const s2 = snapshot();
+  setupJaleesSheets();
+  const s3 = snapshot();
+  ok('الإعداد متكرر (لا يغيّر شيئًا)', s1 === s2 && s2 === s3, s1 + ' ≠ ' + s2);
+
+  const ver = get('getVersion');
+  ok('نسخة الخادم', ver.success === true && /^jalees-/.test(ver.version || ''), ver.version || '');
+  const mail = get('getMailStatus');
+  ok('حالة البريد', mail && typeof mail === 'object', JSON.stringify(mail).slice(0, 160));
+
+  const passed = results.filter((r) => r.pass).length;
+  return { passed, total: results.length, failures: results.filter((r) => !r.pass) };
+})()

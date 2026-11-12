@@ -1,0 +1,405 @@
+/* اختبار الدخول والتسجيل + الإرسال (تشغيل النماذج الحقيقية + الخادم الحقيقي) */
+(async function () {
+  const results = [];
+  const ok = (name, cond, extra) => results.push({ name, pass: !!cond, extra: extra === undefined ? '' : String(extra) });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const $ = (sel, root) => (root || document).querySelector(sel);
+
+  const src = await (await fetch('apps-script-final.js?t=' + Date.now())).text();
+  let fileCounter = 0;
+  function MockSheet(name, rows, id) { this.name = name; this._rows = rows; this._id = id; }
+  MockSheet.prototype.getSheetId = function () { return this._id; };
+  MockSheet.prototype.getName = function () { return this.name; };
+  MockSheet.prototype.getLastRow = function () { return this._rows.length; };
+  MockSheet.prototype.getLastColumn = function () { return Math.max(1, (this._rows[0] || []).length); };
+  MockSheet.prototype.getMaxColumn = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxColumns = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxRows = function () { return this._rows.length; };
+  MockSheet.prototype.getDataRange = function () { const s = this; return { getValues: () => s._rows }; };
+  MockSheet.prototype.getRange = function (r, c, nr, nc) {
+    const s = this;
+    return {
+      getValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((s._rows[r - 1 + i] || [])[c - 1 + j] ?? ''); o.push(row); } return o; },
+      getValue: () => (s._rows[r - 1] || [])[c - 1] ?? '',
+      getDisplayValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(String((s._rows[r - 1 + i] || [])[c - 1 + j] ?? '')); o.push(row); } return o; },
+      setValues: (v) => { for (let i = 0; i < v.length; i++) for (let j = 0; j < v[i].length; j++) { const rr = r - 1 + i, cc = c - 1 + j; if (!s._rows[rr]) s._rows[rr] = []; s._rows[rr][cc] = v[i][j]; } },
+      setValue: (x) => { if (!s._rows[r - 1]) s._rows[r - 1] = []; s._rows[r - 1][c - 1] = x; },
+      setBackground: () => {}, setFontColor: () => {}
+    };
+  };
+  MockSheet.prototype.setName = function (n) { this.name = n; };
+  MockSheet.prototype.appendRow = function (row) { this._rows.push(row.slice()); };
+  MockSheet.prototype.deleteRow = function (r) { this._rows.splice(r - 1, 1); };
+  MockSheet.prototype.insertColumnsAfter = function () {};
+  MockSheet.prototype.setBackground = function () {};
+  MockSheet.prototype.setFontColor = function () {};
+
+  const MEMBERS_HEAD = ['id', 'name', 'email', 'passwordHash', 'salt', 'role', 'status', 'createdAt', 'lastLogin',
+    'resetCode', 'resetExpires', 'phone', 'profilePhoto', 'memberType'];
+  const members = new MockSheet('الأعضاء', [MEMBERS_HEAD, []], 1);
+  const sheets = [members];
+  const ss = {
+    getId: () => 'SHEET-ID-1',
+    getSheets: () => sheets,
+    getSheetByName: (n) => sheets.find((s) => s.name === n) || null,
+    getSheetById: (id) => sheets.find((s) => s._id === id) || null,
+    insertSheet: (n) => { const s = new MockSheet(n, [[]], 900 + sheets.length); sheets.push(s); return s; },
+    deleteSheet: (s) => { const i = sheets.indexOf(s); if (i >= 0) sheets.splice(i, 1); },
+    setActiveSheet: () => {}, moveActiveSheet: () => {}
+  };
+  const mockFile = () => ({ getId: () => 'FILE' + (++fileCounter), getUrl: () => 'https://drive.google.com/file/d/F/view', setSharing: () => {}, setName: () => {} });
+  const mockFolder = { getId: () => 'FOLDER1', createFile: () => mockFile() };
+  globalThis.SpreadsheetApp = { openById: () => ss, flush: () => {} };
+  globalThis.DriveApp = {
+    getFolderById: () => mockFolder,
+    getFoldersByName: () => ({ hasNext: () => true, next: () => mockFolder }),
+    createFolder: () => ({ getId: () => 'FOLDER1' }),
+    Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' }
+  };
+  globalThis.Logger = { log: () => {} };
+  const propStore = {};
+  globalThis.PropertiesService = {
+    getScriptProperties: () => ({
+      getProperty: (k) => (k in propStore ? propStore[k] : ''),
+      setProperty: (k, v) => { propStore[k] = String(v); },
+      deleteProperty: (k) => { delete propStore[k]; }
+    })
+  };
+  globalThis.Utilities = {
+    newBlob: (d, t, n) => ({ data: d, type: t, name: n }),
+    base64Decode: (s) => String(s), base64Encode: (s) => String(s),
+    getUuid: () => 'uuid-' + Math.random(), formatDate: () => '2026-01-01',
+    computeDigest: (a, s) => 'digest:' + String(s), base64EncodeWebSafe: (s) => String(s),
+    DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' }
+  };
+  globalThis.Session = { getScriptTimeZone: () => 'Asia/Riyadh', getEffectiveUser: () => ({ getEmail: () => 'jjalees.com@gmail.com' }) };
+  const sentMails = [];
+  let failAllSends = false;
+  globalThis.MailApp = {
+    sendEmail: (o) => {
+      if (failAllSends) throw new Error('قاعدة Gmail رفضت الإرسال');
+      sentMails.push(o);
+    },
+    getRemainingDailyQuota: () => 100
+  };
+  globalThis.ScriptApp = {};
+  globalThis.ContentService = { MimeType: { JSON: 'application/json' }, createTextOutput: (t) => ({ setMimeType: () => ({ __t: t }) }) };
+  (0, eval)(src);
+
+  const originalCloudRequest = window.cloudRequest;
+  let callCount = 0;
+  window.cloudRequest = async (action, data, memberId) => {
+    callCount += 1;
+    try {
+      if (data === null || data === undefined) return JSON.parse(doGet({ parameter: { action, memberId: memberId || '' } }).__t);
+      return JSON.parse(doPost({ parameter: { action, data: JSON.stringify(data) } }).__t);
+    } catch (e) {
+      return { success: false, error: String((e && e.message) || e) };
+    }
+  };
+
+  const lsBackup = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); lsBackup[k] = localStorage.getItem(k); }
+
+  const submit = async (formSel, waitMs = 900) => {
+    const form = $(formSel);
+    if (!form) return false;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await wait(waitMs);
+    return true;
+  };
+  const waitFor = async (fn, timeout = 6000, step = 120) => {
+    const started = Date.now();
+    while (Date.now() - started < timeout) { if (fn()) return true; await wait(step); }
+    return false;
+  };
+  const errText = (id) => {
+    const el = document.getElementById(id);
+    return (el && !el.hidden) ? String(el.textContent || '').trim() : '';
+  };
+  const lastCode = () => {
+    const mail = sentMails[sentMails.length - 1] || {};
+    return (String(mail.htmlBody || '').match(/\b\d{6}\b/) || [])[0] || '';
+  };
+
+  const addMember = (row) => members.appendRow(row);
+  const PASSWORD = 'كلمةسر123';
+  const SALT = 'salt-1';
+  const PWHASH = hashPassword(PASSWORD, SALT);
+  addMember(['m1', 'مشعل الحفير', 'meshail@example.com', PWHASH, SALT, 'supervisor', 'active', 1, '', '', '', '0555000000', '', 'member']);
+  addMember(['m2', 'أحمد محمد علي', 'ahmed@example.com', PWHASH, SALT, 'member', 'active', 2, '', '', '', '05551112233', '', 'member']);
+  addMember(['m3', 'سالم عبدالله ناصر', 'salem@example.com', PWHASH, SALT, 'member', 'pending', 3, '', '', '', '05552223344', '', 'member']);
+  addMember(['m4', 'خالد فهد محمد', 'khaled@example.com', PWHASH, SALT, 'member', 'banned', 4, '', '', '', '05553334455', '', 'member']);
+  addMember(['m5', 'محمد صالح الدبيخي', 'msaleh@example.com', PWHASH, SALT, 'member', 'active', 5, '', '', '', '05554445566', '', 'member']);
+  addMember(['m6', 'عبدالله سعد علي', 'abdullah@example.com', PWHASH, SALT, 'member', 'active', 6, '', '', '', '05555556677', '', 'member']);
+  addMember(['m7', 'عبدالله سعد علي', 'abdullah2@example.com', PWHASH, SALT, 'member', 'active', 7, '', '', '', '05556667788', '', 'member']);
+  addMember(['m8', 'مرفوض التجريبي', 'rejected@example.com', PWHASH, SALT, 'member', 'rejected', 8, '', '', '', '05557778899', '', 'member']);
+
+  try {
+    /* ================= الدخول ================= */
+    showGate('login');
+    await wait(200);
+    ok('واجهة الدخول ظهرت', $('#gate') && !$('#gate').hidden && !$('#login-form').hidden);
+    $('#login-email').value = 'meshail@example.com';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 200);
+    await waitFor(() => currentMember && currentMember.id === 'm1' && $('#gate').hidden === true, 8000);
+    ok('الدخول بالبريد نجح', currentMember && currentMember.id === 'm1', currentMember ? currentMember.id : 'زائر');
+    ok('واجهة الدخول اختفت بعد النجاح', $('#gate').hidden === true);
+    const stored = (() => { try { return JSON.parse(localStorage.getItem('jalees-account-v1') || 'null'); } catch (e) { return null; } })();
+    ok('حُفظ الحساب في التخزين المحلي', !!stored && stored.id === 'm1', JSON.stringify(stored).slice(0, 140));
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'أحمد محمد علي';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 200);
+    await waitFor(() => currentMember && currentMember.id === 'm2', 8000);
+    ok('الدخول بالاسم الثلاثي نجح', currentMember && currentMember.id === 'm2', currentMember ? currentMember.id : 'زائر');
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'عبدالله سعد علي';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 1200);
+    ok('رفض الدخول باسم مكرر', currentMember === null && /أكثر من عضو/.test(errText('login-error')), errText('login-error'));
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'meshail@example.com';
+    $('#login-password').value = 'كلمةخاطئة';
+    await submit('#login-form', 1200);
+    ok('رفض كلمة المرور الخاطئة', currentMember === null && errText('login-error').length > 0, errText('login-error'));
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'ghost@example.com';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 1200);
+    ok('رفض بريد غير مسجل', currentMember === null && errText('login-error').length > 0, errText('login-error'));
+
+    showGate('login'); await wait(200);
+    const beforeCalls = callCount;
+    $('#login-email').value = 'أحمد محمد';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 600);
+    ok('رفض الاسم غير الثلاثي قبل الاتصال بالخادم', currentMember === null && callCount === beforeCalls && errText('login-error').length > 0, errText('login-error'));
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'salem@example.com';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 1200);
+    ok('رفض الدخول لحساب بانتظار الموافقة', currentMember === null && /بانتظار/.test(errText('login-error')), errText('login-error'));
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'khaled@example.com';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 1200);
+    ok('رفض الدخول لحساب مطرود', currentMember === null && /طرد/.test(errText('login-error')), errText('login-error'));
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'rejected@example.com';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 1200);
+    ok('رفض الدخول لحساب مرفوض', currentMember === null && /رفض/.test(errText('login-error')), errText('login-error'));
+
+    /* ================= التحقق من مدخلات التسجيل ================= */
+    showGate('register'); await wait(200);
+    ok('واجهة التسجيل ظهرت', !$('#register-form').hidden);
+    const regChecks = [
+      ['اسم قصير', { name: 'أحمد علي', phone: '0501234567', email: 'x@example.com', password: '12345678', confirm: '12345678' }, /الاسم الثلاثي/],
+      ['جوال خاطئ', { name: 'أحمد محمد علي', phone: '123', email: 'x@example.com', password: '12345678', confirm: '12345678' }, /جوال/],
+      ['بريد خاطئ', { name: 'أحمد محمد علي', phone: '0501234567', email: 'bad-email', password: '12345678', confirm: '12345678' }, /البريد/],
+      ['رمز قصير', { name: 'أحمد محمد علي', phone: '0501234567', email: 'x@example.com', password: '123', confirm: '123' }, /٨ أحرف/],
+      ['رمزان مختلفان', { name: 'أحمد محمد علي', phone: '0501234567', email: 'x@example.com', password: '12345678', confirm: '87654321' }, /متطابقين/]
+    ];
+    for (const [label, data, pattern] of regChecks) {
+      const before = callCount;
+      $('#register-name').value = data.name;
+      $('#register-phone').value = data.phone;
+      $('#register-email').value = data.email;
+      $('#register-password').value = data.password;
+      $('#register-confirm').value = data.confirm;
+      await submit('#register-form', 500);
+      ok('رفض: ' + label, currentMember === null && callCount === before && pattern.test(errText('register-error')), errText('register-error') || 'لا رسالة');
+    }
+
+    /* ================= تسجيل كامل ================= */
+    showGate('register'); await wait(200);
+    const NEW = { name: 'نورة عبدالله سالم', phone: '0509999888', email: 'noura@example.com', password: 'كلمةسر456', confirm: 'كلمةسر456' };
+    $('#register-name').value = NEW.name;
+    $('#register-phone').value = NEW.phone;
+    $('#register-email').value = NEW.email;
+    $('#register-password').value = NEW.password;
+    $('#register-confirm').value = NEW.confirm;
+    const before = callCount;
+    await submit('#register-form', 1200);
+    ok('طلب رمز التحقق أُرسل', callCount === before + 1 && sentMails.length > 0, 'رسائل=' + sentMails.length);
+    ok('الانتقال لشاشة التأكيد', !$('#verify-form').hidden);
+    ok('البريد معروض في شاشة التأكيد', String($('#verify-email').textContent || '').trim() === NEW.email, $('#verify-email').textContent);
+    ok('صندوق المساعدة معروض', !!document.querySelector('.verify-help'));
+
+    /* محتوى الرسالة */
+    const mail = sentMails[sentMails.length - 1] || {};
+    ok('الرسالة إلى البريد الصحيح', String(mail.to || '').toLowerCase() === NEW.email, mail.to);
+    ok('نسخة إلى صندوق النادي (BCC)', String(mail.bcc || '').toLowerCase() === 'jjalees.com@gmail.com', mail.bcc);
+    ok('نص عادي مع الرسالة (يساعد الوصول)', String(mail.body || '').length > 20, String(mail.body || '').slice(0, 60));
+    ok('اسم النادي في الرسالة', String(mail.htmlBody || '').indexOf('نادي جليس') >= 0);
+    const code = lastCode();
+    ok('وصل رمز تحقق بالبريد', !!code, code || 'لا رمز');
+
+    $('#verify-code').value = '000000';
+    await submit('#verify-form', 1000);
+    ok('رفض رمز تحقق خاطئ', errText('verify-error').length > 0, errText('verify-error'));
+
+    /* ================= إعادة إرسال الرمز (قبل تأكيد الحساب) ================= */
+    const mailsBefore = sentMails.length;
+    const resend = await window.cloudRequest('requestRegistrationCode', { name: NEW.name, phone: NEW.phone, email: NEW.email, password: NEW.password });
+    ok('إعادة الإرسال خلال دقيقة تنجح (نفس الرمز)', resend && resend.success === true && resend.resent === true, JSON.stringify(resend));
+    ok('أُرسلت رسالة ثانية فعلاً', sentMails.length === mailsBefore + 1, sentMails.length + ' vs ' + mailsBefore);
+    ok('الرمز المُعاد هو نفسه', lastCode() === code, lastCode() + ' vs ' + code);
+
+    $('#verify-code').value = code;
+    await submit('#verify-form', 1200);
+    ok('قبول رمز التحقق', !$('#pending-form').hidden, 'pending hidden=' + $('#pending-form').hidden);
+    const created = members._rows.find((r) => String(r[2]) === NEW.email);
+    ok('أُنشئ الحساب في السحابة', !!created, JSON.stringify(created));
+    ok('الحساب الجديد بحالة «بانتظار الموافقة»', created && String(created[6]) === 'pending', created ? created[6] : '');
+
+    /* ================= سجل الإرسال ================= */
+    const mailStatus = await window.cloudRequest('getMailStatus');
+    ok('حالة البريد تعرض السجل', mailStatus && Array.isArray(mailStatus.recent) && mailStatus.recent.length > 0, JSON.stringify((mailStatus.recent || []).slice(0, 2)));
+    ok('السجل يذكر البريد المُرسل', (mailStatus.recent || []).some((r) => String(r.email).toLowerCase() === NEW.email), JSON.stringify((mailStatus.recent || []).map((r) => r.email)));
+    ok('السجل يذكر الرمز (للمراجعة)', (mailStatus.recent || []).some((r) => String(r.code || '').length === 6), JSON.stringify((mailStatus.recent || []).map((r) => r.code)));
+    ok('نسخة النادي مفعّلة', mailStatus && mailStatus.bcc === 'jjalees.com@gmail.com', mailStatus && mailStatus.bcc);
+
+    /* ================= فشل الإرسال يُسجَّل ويُعرض ================= */
+    failAllSends = true;
+    const failEmail = 'fail@example.com';
+    const failRes = await window.cloudRequest('requestRegistrationCode', { name: 'تجربة فشل الإرسال', phone: '0502223334', email: failEmail, password: 'كلمةسر456' });
+    failAllSends = false;
+    ok('فشل الإرسال يعطي رسالة واضحة', failRes && failRes.success === false && /تعذر إرسال البريد/.test(failRes.error || ''), failRes && (failRes.error || JSON.stringify(failRes)));
+    const mailStatus2 = await window.cloudRequest('getMailStatus');
+    ok('سُجّل الفشل في سجل الإرسال', (mailStatus2.recent || []).some((r) => String(r.email).toLowerCase() === failEmail && r.status === 'failed'), JSON.stringify((mailStatus2.recent || []).slice(0, 3)));
+
+    /* ================= منع تكرار التسجيل ================= */
+    showGate('register'); await wait(200);
+    $('#register-name').value = NEW.name;
+    $('#register-phone').value = '0507777777';
+    $('#register-email').value = NEW.email;
+    $('#register-password').value = 'كلمةسر456';
+    $('#register-confirm').value = 'كلمةسر456';
+    await submit('#register-form', 1200);
+    ok('منع التسجيل ببريد مسجل', errText('register-error').length > 0, errText('register-error'));
+
+    showGate('register'); await wait(200);
+    $('#register-name').value = 'طرف ثالث تجريبي';
+    $('#register-phone').value = '05553334455';
+    $('#register-email').value = 'third@example.com';
+    $('#register-password').value = 'كلمةسر456';
+    $('#register-confirm').value = 'كلمةسر456';
+    await submit('#register-form', 1200);
+    ok('منع التسجيل بجوال مطرود', errText('register-error').length > 0, errText('register-error'));
+
+    /* ================= صيغ الجوال ================= */
+    const phoneVariants = ['+966509998887', '050 999 888 7', '٠٥٠٩٩٩٨٨٨٧'];
+    for (let i = 0; i < phoneVariants.length; i++) {
+      showGate('register'); await wait(200);
+      const email = 'phone' + i + '@example.com';
+      $('#register-name').value = 'تجربة الجوال رقم ' + i;
+      $('#register-phone').value = phoneVariants[i];
+      $('#register-email').value = email;
+      $('#register-password').value = 'كلمةسر456';
+      $('#register-confirm').value = 'كلمةسر456';
+      await submit('#register-form', 1000);
+      const pending = JSON.parse(propStore['pending-registration:' + email] || 'null');
+      ok('قبول صيغة جوال: ' + phoneVariants[i], !!pending && String(pending.phone) === '0509998887', pending ? String(pending.phone) : ('لا طلب — ' + errText('register-error')));
+    }
+    const bypass = await window.cloudRequest('requestRegistrationCode', { name: 'تجربة الصيغة الدولية', phone: '+9665553334455', email: 'bypass@example.com', password: 'كلمةسر456' });
+    ok('منع المطرود حتى بصيغة دولية +966', bypass && bypass.success === false && /مطرود/.test(bypass.error || ''), bypass && (bypass.error || JSON.stringify(bypass)));
+
+    /* ================= حدّ المحاولات ================= */
+    const limitEmail = 'limit@example.com';
+    await window.cloudRequest('requestRegistrationCode', { name: 'تجربة الحد الأقصى', phone: '0501112223', email: limitEmail, password: 'كلمةسر456' });
+    let attemptMsg = '';
+    for (let i = 0; i < 6; i++) {
+      const r = await window.cloudRequest('verifyRegistrationCode', { email: limitEmail, code: '000000' });
+      attemptMsg = (r && r.error) || '';
+    }
+    ok('توقّف بعد ٦ محاولات خاطئة', /تجاوزت عدد المحاولات/.test(attemptMsg), attemptMsg);
+
+    /* ================= رمز منتهي الصلاحية ================= */
+    const expiredEmail = 'expired@example.com';
+    await window.cloudRequest('requestRegistrationCode', { name: 'تجربة انتهاء الصلاحية', phone: '0505556667', email: expiredEmail, password: 'كلمةسر456' });
+    const pkey = 'pending-registration:' + expiredEmail;
+    const rec = JSON.parse(propStore[pkey] || '{}');
+    rec.expiry = Date.now() - 1000;
+    propStore[pkey] = JSON.stringify(rec);
+    const expired = await window.cloudRequest('verifyRegistrationCode', { email: expiredEmail, code: lastCode() });
+    ok('رفض رمز منتهي الصلاحية', expired && expired.success === false && /انتهت صلاحية/.test(expired.error || ''), expired && (expired.error || JSON.stringify(expired)));
+
+    const ghost = await window.cloudRequest('verifyRegistrationCode', { email: 'ghost@example.com', code: '123456' });
+    ok('رفض تأكيد لبريد بلا طلب', ghost && ghost.success === false && /لا يوجد طلب تسجيل/.test(ghost.error || ''), ghost && (ghost.error || JSON.stringify(ghost)));
+
+    /* ================= استعادة كلمة المرور ================= */
+    showGate('forgot'); await wait(200);
+    ok('واجهة الاستعادة ظهرت', !$('#forgot-form').hidden);
+    $('#forgot-email').value = 'meshail@example.com';
+    await submit('#forgot-form', 1200);
+    ok('إرسال رمز الاستعادة', !$('#reset-form').hidden, 'reset hidden=' + $('#reset-form').hidden);
+    const resetCode = lastCode();
+    ok('وصل رمز الاستعادة', !!resetCode, resetCode || 'لا رمز');
+    $('#reset-code').value = '000000';
+    $('#reset-password').value = 'رمزجديد123';
+    await submit('#reset-form', 1200);
+    ok('رفض رمز استعادة خاطئ', errText('reset-error').length > 0, errText('reset-error'));
+    $('#reset-code').value = resetCode;
+    $('#reset-password').value = 'رمزجديد123';
+    await submit('#reset-form', 1200);
+    ok('تعيين كلمة المرور الجديدة', errText('reset-error') === '' && !$('#login-form').hidden, errText('reset-error'));
+    $('#login-email').value = 'meshail@example.com';
+    $('#login-password').value = 'رمزجديد123';
+    await submit('#login-form', 200);
+    await waitFor(() => currentMember && currentMember.id === 'm1', 8000);
+    ok('الدخول بكلمة المرور الجديدة', currentMember && currentMember.id === 'm1', currentMember ? currentMember.id : 'زائر');
+
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'meshail@example.com';
+    $('#login-password').value = PASSWORD;
+    await submit('#login-form', 1200);
+    ok('كلمة المرور القديمة لم تعد تعمل', currentMember === null && errText('login-error').length > 0, errText('login-error'));
+
+    /* ================= القبول والرفض ================= */
+    const nouraRow = members._rows.findIndex((r) => String(r[2]) === NEW.email) + 1;
+    const accept = await window.cloudRequest('setMemberStatus', { row: nouraRow, status: 'active', by: 'مشرف' });
+    ok('قبول العضو من المشرف', accept && accept.success === true, JSON.stringify(accept));
+    showGate('login'); await wait(200);
+    $('#login-email').value = NEW.email;
+    $('#login-password').value = NEW.password;
+    await submit('#login-form', 200);
+    await waitFor(() => currentMember && currentMember.id !== 'guest', 8000);
+    ok('الدخول بعد القبول', currentMember && String(currentMember.name).indexOf('نورة') >= 0, currentMember ? currentMember.id + '/' + currentMember.name : 'زائر');
+
+    const reject = await window.cloudRequest('setMemberStatus', { row: nouraRow, status: 'rejected', by: 'مشرف' });
+    ok('رفض العضو من المشرف', reject && reject.success === true, JSON.stringify(reject));
+    showGate('login'); await wait(200);
+    $('#login-email').value = NEW.email;
+    $('#login-password').value = NEW.password;
+    await submit('#login-form', 1200);
+    ok('المحسوب المرفوض لا يستطيع الدخول', currentMember === null && /رفض/.test(errText('login-error')), errText('login-error'));
+
+    /* ================= الجلسة ================= */
+    showGate('login'); await wait(200);
+    $('#login-email').value = 'meshail@example.com';
+    $('#login-password').value = 'رمزجديد123';
+    await submit('#login-form', 200);
+    await waitFor(() => currentMember && currentMember.id === 'm1', 8000);
+    ok('مفتاح الجلسة محفوظ', localStorage.getItem('jalees-session-v2') === 'm1', localStorage.getItem('jalees-session-v2'));
+    ok('حساب الدخول محفوظ', String(localStorage.getItem('jalees-account-v1') || '').indexOf('meshail@example.com') >= 0, String(localStorage.getItem('jalees-account-v1')).slice(0, 120));
+
+    const passed = results.filter((r) => r.pass).length;
+    return { passed, total: results.length, failures: results.filter((r) => !r.pass) };
+  } catch (e) {
+    return { passed: results.filter((r) => r.pass).length, total: results.length, failures: results.filter((r) => !r.pass), fatal: String((e && e.stack) || e) };
+  } finally {
+    Object.keys(localStorage).forEach((k) => { if (!(k in lsBackup)) localStorage.removeItem(k); });
+    Object.keys(lsBackup).forEach((k) => localStorage.setItem(k, lsBackup[k]));
+    window.cloudRequest = originalCloudRequest;
+  }
+})()

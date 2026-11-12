@@ -36,7 +36,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=r41-20261111">
+  <link rel="stylesheet" href="app.css?v=r42-20261111">
 </head>
 <body>
 
@@ -220,6 +220,15 @@
                   <input class="input" id="verify-code" name="code" type="text" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" maxlength="6" required>
                 </div>
                 <p class="field-hint">أرسلنا الرمز إلى <strong id="verify-email" dir="ltr"></strong> — صالح ١٥ دقيقة.</p>
+                <div class="verify-help">
+                  <strong>ما وصلك الرمز؟</strong>
+                  <ul>
+                    <li>افحص مجلد <b>المهملات / الرسائل غير المرغوبة (Spam)</b> و<b>الترويجات (Promotions)</b>.</li>
+                    <li>تأكد من كتابة البريد بشكل صحيح (نرسل الرمز إلى العنوان الذي كتبته).</li>
+                    <li>أو اضغط <b>إعادة إرسال الرمز</b> — نفس الرمز يُرسل من جديد فورًا.</li>
+                    <li>وإن استمر الأمر، تواصل مع إدارة النادي ليصلك الرمز مباشرة.</li>
+                  </ul>
+                </div>
                 <p class="form-error" id="verify-error" role="alert" hidden></p>
                 <button class="btn btn-gold btn-block" type="submit">
                   <svg class="ic"><use href="#i-check"/></svg>
@@ -643,6 +652,6 @@
     <div class="noscript">هذه المساحة تحتاج تفعيل جافاسكريبت في المتصفح.</div>
   </noscript>
 
-  <script src="app.js?v=r41-20261111"></script>
+  <script src="app.js?v=r42-20261111"></script>
 </body>
 </html>
