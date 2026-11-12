@@ -85,6 +85,7 @@ const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
 let deletedQuoteTexts = new Set();
 let deletedClubBookIds = new Set();
+let deletedClubBookKeys = new Set();
 let deletedArticleIds = new Set();
 let deletedRecordedMeetingIds = new Set();
 const DEFAULT_MEETING = {
@@ -934,7 +935,10 @@ async function runCloudSync() {
 
 async function loadClubBooksFromCloud(memberId) {
   const result = await cloudRequest('getClubBooks', null, memberId);
-  if (result && result.success === true) deletedClubBookIds = new Set((result.deletedIds || []).map(String));
+  if (result && result.success === true) {
+    deletedClubBookIds = new Set((result.deletedIds || []).map(String));
+    deletedClubBookKeys = new Set((result.deletedKeys || []).map(String));
+  }
   return result && result.success === true ? result.data : [];
 }
 
@@ -945,7 +949,13 @@ async function refreshClubBooksFromCloud() {
   if (!Array.isArray(cloudBooks) || currentMember !== member || !state) return;
 
   const merged = new Map();
-  (state.clubBooks || []).forEach((book) => { if (book && book.id) merged.set(book.id, book); });
+  (state.clubBooks || []).forEach((book) => {
+    if (!book || !book.id) return;
+    /* حذف الكتب القديمة المحفوظة محليًا حتى لو اختلف معرّفها عن السحابة */
+    if (deletedClubBookIds.has(String(book.id))) return;
+    if (deletedClubBookKeys.has(bookKey(book.title, book.author))) return;
+    merged.set(book.id, book);
+  });
   cloudBooks.forEach((book) => {
     if (!book || !book.id) return;
     const localBook = merged.get(book.id) || {};
@@ -3917,6 +3927,7 @@ async function openMemberProfileSheet(name) {
   /* الصفة تُقرأ من اختيار المشرف عند القبول: عضو / صديق — وتُزامن تلقائيًا */
   const clubRoleOf = (entry) => {
     if (!entry) return '';
+    if (entry.role === 'supervisor') return 'مشرف النادي';
     if (entry.role === 'consultant') return 'مستشار';
     if (entry.memberType === 'friend') return 'صديق جليس';
     return 'عضو جليس';
@@ -3928,7 +3939,7 @@ async function openMemberProfileSheet(name) {
   const isClubChair = normalizeName(target) === normalizeName(CLUB_CHAIR_NAME);
   const joined = isSelf
     ? state.profile.joined
-    : (approved && approved.joinedAt ? String(new Date(Number(approved.joinedAt)).getFullYear()) : (member ? '٢٠٢٤' : ''));
+    : (approved && approved.joinedAt ? toAr(new Date(Number(approved.joinedAt)).getFullYear()) : (member ? '٢٠٢٤' : ''));
   const photo = isSelf
     ? (state.profile.photo || (currentMember && currentMember.photo) || '')
     : (approved && approved.photo ? approved.photo : '');

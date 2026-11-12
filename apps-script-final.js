@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r32';
+const CODE_VERSION = 'jalees-2026-11-10-r33';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -2800,6 +2800,7 @@ function doGet(e) {
       const booksById = {};
       const seenKeys = new Set();
       const deletedIds = new Set();
+      const deletedKeys = new Set();
 
       /* 1) المحذوف من كل النسخ أولًا — حتى لا يظهر كتاب محذوف من نسخة أخرى */
       sources.forEach(sheet => {
@@ -2811,7 +2812,7 @@ function doGet(e) {
           if (!row[3] || !row[11]) return;
           const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
           deletedIds.add(id);
-          deletedIds.add(bookKey(row[3], row[4]));
+          deletedKeys.add(bookKey(row[3], row[4]));
         });
       });
 
@@ -2827,7 +2828,7 @@ function doGet(e) {
           /* منع التكرار: نفس العنوان والمؤلف يظهر مرة واحدة فقط */
           const key = bookKey(row[3], row[4]);
           if (key && key !== '|') {
-            if (deletedIds.has(key)) return;
+            if (deletedKeys.has(key)) return;
             if (seenKeys.has(key)) return;
             seenKeys.add(key);
           }
@@ -2840,7 +2841,7 @@ function doGet(e) {
           };
         });
       });
-      return output({ success: true, data: Object.values(booksById), deletedIds: [...deletedIds] });
+      return output({ success: true, data: Object.values(booksById), deletedIds: [...deletedIds], deletedKeys: [...deletedKeys] });
     }
 
     if (action === 'getJoinRequests') {
