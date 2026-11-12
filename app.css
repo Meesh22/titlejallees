@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    ط¬ظ„ظٹط³ | ظ…ط³ط§ط­ط© ط§ظ„ط£ط¹ط¶ط§ط، â€” ظ‡ظˆظٹط© ط¨طµط±ظٹط© ظ…ط³طھظ…ط¯ط© ظ…ظ† ط´ط¹ط§ط± ط§ظ„ظ†ط§ط¯ظٹ
    ط£ط®ط¶ط± ط§ظ„ط؛ط§ط¨ط© آ· ظˆط±ظ‚ ط¯ط§ظپط¦ آ· ط°ظ‡ط¨ ط§ظ„ظƒطھط¨ آ· ط®ط· IBM Plex Sans Arabic + Amiri
    ========================================================================== */
@@ -2613,10 +2613,25 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   line-height: 1.3;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15), 0 4px 10px rgba(30, 58, 43, 0.18);
 }
+.my-book-cover-image { padding: 0; overflow: hidden; }
+.my-book-cover-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .my-book-body { flex: 1; min-width: 0; }
 .my-book-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.my-book-top > div { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .my-book-top h4 { font-size: 11.5px; font-weight: 700; color: var(--green-700); line-height: 1.45; }
 .my-book-top span { flex: none; font-size: 8px; color: var(--muted-2); }
+.my-book-delete {
+  flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px;
+  border: 1px solid rgba(163, 80, 59, .3); background: rgba(163, 80, 59, .09); color: var(--clay);
+  cursor: pointer;
+}
+.my-book-delete .ic { width: 13px; height: 13px; }
+.my-book-delete:hover { background: rgba(163, 80, 59, .18); }
+.my-book-own {
+  justify-self: start; margin-top: 6px; padding: 3px 9px; border-radius: 999px;
+  background: var(--green-50); border: 1px solid rgba(30, 58, 43, .18);
+  color: var(--green-700); font-size: 7px; font-weight: 800;
+}
 .my-status {
   display: inline-flex;
   align-items: center;
@@ -2872,6 +2887,57 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 }
 .ar-font-controls .font-size-btn:hover { border-color: rgba(197, 155, 99, .55); color: var(--gold-700); }
 
+/* ---------- سلة المحذوفات: تحديد متعدد ---------- */
+.trash-toolbar-actions { display: flex; align-items: center; gap: 6px; }
+.trash-bulk-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 9px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 9px; border-radius: 13px;
+  background: linear-gradient(150deg, #1E3A2B, #2A5240); color: #F8F5EE;
+}
+.trash-bulk-bar span { font-size: 9px; }
+.trash-bulk-bar b { color: #E3C393; font-size: 11px; }
+.trash-bulk-bar > div { display: flex; gap: 6px; flex-wrap: wrap; }
+.trash-bulk-bar .btn-primary { background: var(--gold); color: #14281E; border-color: transparent; }
+.trash-bulk-bar .btn-ghost.danger { color: #F0B7AE; border-color: rgba(190, 90, 75, .55); background: rgba(190, 90, 75, .18); }
+.trash-check { flex: none; display: grid; place-items: center; }
+.trash-check input { width: 17px; height: 17px; accent-color: #C59B63; cursor: pointer; }
+.deleted-item-card.is-checked { border-color: rgba(197, 155, 99, .6); background: #FDFBF6; }
+
+/* ---------- معرض صور اللقاء ---------- */
+.archive-gallery {
+  display: grid; grid-template-columns: 1fr; gap: 0; width: 100%;
+  background: var(--paper-2);
+}
+.archive-gallery.is-multi { grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; }
+.archive-gallery img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.archive-gallery:not(.is-multi) img { height: 190px; }
+.archive-gallery.is-multi img { height: 86px; }
+.archive-gallery-more {
+  position: absolute; inset-block-end: 6px; inset-inline-end: 6px;
+  padding: 3px 8px; border-radius: 999px; background: rgba(12, 24, 18, .7); color: #F3E4C6;
+  font-size: 8px; font-weight: 800;
+}
+.recorded-meeting-media { position: relative; }
+.archive-gallery-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.gallery-thumb { position: relative; width: 56px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-thumb button {
+  position: absolute; inset-block-start: 2px; inset-inline-end: 2px;
+  width: 18px; height: 18px; border-radius: 50%; border: 0;
+  background: rgba(12, 24, 18, .72); color: #fff; font-size: 11px; line-height: 1; cursor: pointer;
+}
+.archive-view-photos { margin-top: 4px; text-decoration: none; }
+.archive-photos-viewer { display: grid; gap: 10px; }
+.archive-photos-viewer img { width: 100%; height: auto; border-radius: 14px; box-shadow: 0 8px 20px rgba(0, 0, 0, .22); }
+
+/* ---------- شارة رئيس النادي ---------- */
+.member-profile-chair {
+  display: inline-block; vertical-align: middle; margin-inline-start: 6px;
+  padding: 3px 9px; border-radius: 999px;
+  background: linear-gradient(135deg, #C59B63, #9A7440); color: #14281E;
+  font-size: 8px; font-weight: 850;
+}
+
 /* ---------- تنظيم الشيت ---------- */
 .sheets-organizer { display: grid; gap: 11px; }
 .sheet-organizer-actions { display: flex; gap: 7px; flex-wrap: wrap; }
@@ -2993,6 +3059,17 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .weekly-report-grid .weekly-report-week { min-width: 24px; height: 24px; font-size: 9px; border-radius: 8px; }
 .weekly-report-prev .weekly-report-caption small { display: none; }
 .weekly-report-prev .weekly-report-media img { height: 130px; }
+.weekly-report-latest { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.weekly-report-archive-btn, .weekly-report-back { margin-top: 4px; }
+.weekly-report-media { aspect-ratio: 9 / 16; overflow: hidden; background: var(--paper-2); }
+.weekly-report-media img { width: 100%; height: 100%; object-fit: cover; }
+.weekly-report-media.is-multi { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.weekly-report-media.is-multi img { height: 100%; }
+.weekly-report-card .weekly-report-caption { padding: 9px 10px 11px; }
+.weekly-report-card .weekly-report-caption strong { font-size: 10.5px; }
+.weekly-report-card .weekly-report-caption small { font-size: 7.5px; color: var(--muted-2); }
+.weekly-report-card .weekly-report-delete { inset-block-end: auto; inset-block-start: 8px; inset-inline-end: 8px; }
+.weekly-report-grid .weekly-report-card { border-radius: 14px; }
 
 /* ---------- صور الاقتباسات المختارة ---------- */
 .selection-quote-card {

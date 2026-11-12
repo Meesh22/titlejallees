@@ -790,6 +790,7 @@ async function saveClubBookToCloud(member, book) {
     author: book.author,
     category: book.category,
     coverColor: book.coverColor,
+    coverColor2: book.coverColor2 || '',
     coverImage: book.coverImage || '',
     pdfUrl: book.pdfUrl || '',
     report: book.report || '',
@@ -820,6 +821,7 @@ async function updateClubBookToCloud(book) {
     author: book.author,
     category: book.category,
     coverColor: book.coverColor || '',
+    coverColor2: book.coverColor2 || '',
     report: book.report || '',
     pages: book.pages || 0,
     year: book.year || '',
@@ -947,7 +949,17 @@ async function refreshClubBooksFromCloud() {
     if (member.id !== 'guest') syncState.clubBooks.add(book.id);
   });
   deletedClubBookIds.forEach((id) => merged.delete(String(id)));
-  state.clubBooks = [...merged.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  /* منع تكرار الكتب: نفس العنوان والمؤلف يظهر مرة واحدة فقط */
+  const seenBookKeys = new Set();
+  state.clubBooks = [...merged.values()]
+    .filter((book) => {
+      const key = bookKey(book.title, book.author);
+      if (!key || key === '|') return true;
+      if (seenBookKeys.has(key)) return false;
+      seenBookKeys.add(key);
+      return true;
+    })
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   if (member.id !== 'guest') {
     persistSyncState(member.id);
@@ -990,6 +1002,8 @@ async function savePersonalBookToCloud(book) {
     author: book.author || '',
     pages: Number(book.pages) || 0,
     coverColor: book.coverColor || '',
+    coverColor2: book.coverColor2 || '',
+    coverImage: book.coverImage || '',
     pdfUrl: book.pdfUrl || '',
     createdAt: book.createdAt || Date.now()
   });
@@ -1378,22 +1392,21 @@ function renderRecordedMeetings(root, meetings) {
   }
 
   list.innerHTML = visible.map((item) => {
-    const videoUrl = /^https?:\/\//i.test(String(item.videoUrl || '').trim()) ? String(item.videoUrl).trim() : '';
-    const image = item.image
-      ? `<img src="${esc(item.image)}" alt="صورة لقاء ${esc(item.title)}" loading="lazy">`
-      : `<div class="recorded-meeting-placeholder"><svg class="ic"><use href="#i-calendar"/></svg></div>`;
+    const gallery = Array.isArray(item.images) ? item.images.filter(Boolean) : [];
+    const photos = gallery.length ? gallery : (item.image ? [item.image] : []);
     const dateLabel = item.recordedAt ? meetingDateLabel(item.recordedAt) : '';
-    const play = videoUrl
-      ? `<a class="recorded-meeting-play" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer" aria-label="مشاهدة ${esc(item.title)}"><svg class="ic"><use href="#i-play"/></svg></a>`
-      : '';
     const type = meetingArchiveTypeOf(item);
+    const galleryMarkup = photos.length
+      ? `<div class="archive-gallery${photos.length > 1 ? ' is-multi' : ''}">
+          ${photos.slice(0, 5).map((src, index) => `<img src="${esc(imageThumb(src, 420))}" alt="صورة ${toAr(index + 1)} من ${esc(item.title)}" loading="lazy" decoding="async">`).join('')}
+          ${photos.length > 5 ? `<span class="archive-gallery-more">+${toAr(photos.length - 5)}</span>` : ''}
+        </div>`
+      : '<div class="recorded-meeting-placeholder"><svg class="ic"><use href="#i-calendar"/></svg></div>';
 
     return `
       <article class="recorded-meeting-card${type ? ' has-type' : ''}">
         <div class="recorded-meeting-media">
-          ${image}
-          ${play}
-          ${item.duration ? `<span class="recorded-meeting-duration">${esc(item.duration)}</span>` : ''}
+          ${galleryMarkup}
           ${type ? `<span class="recorded-meeting-type">${esc(type)}</span>` : ''}
         </div>
         <div class="recorded-meeting-content">
@@ -1405,13 +1418,31 @@ function renderRecordedMeetings(root, meetings) {
           <h3>${esc(item.title || 'لقاء جليس')}</h3>
           ${item.description ? `<p class="recorded-meeting-description">${esc(item.description)}</p>` : ''}
           ${item.speaker ? `<div class="recorded-meeting-speaker"><svg class="ic"><use href="#i-user"/></svg>${esc(item.speaker)}</div>` : ''}
-          <div class="recorded-meeting-actions">
-            ${videoUrl ? `<a class="btn btn-sm btn-primary" href="${esc(videoUrl)}" target="_blank" rel="noopener noreferrer">شاهد التسجيل <svg class="ic"><use href="#i-play"/></svg></a>` : ''}
-            ${isSupervisor() ? `<button class="icon-btn recorded-meeting-delete" type="button" data-action="delete-recorded-meeting" data-id="${esc(item.id)}" aria-label="حذف اللقاء"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
-          </div>
+          ${photos.length > 1 ? `<button class="btn btn-sm btn-ghost archive-view-photos" type="button" data-action="view-archive-photos" data-id="${esc(item.id)}"><svg class="ic"><use href="#i-article"/></svg> عرض الصور (${toAr(photos.length)})</button>` : ''}
+          ${isSupervisor() ? `<button class="icon-btn recorded-meeting-delete" type="button" data-action="delete-recorded-meeting" data-id="${esc(item.id)}" aria-label="حذف اللقاء"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
         </div>
       </article>`;
   }).join('');
+}
+
+function openArchivePhotosViewer(id) {
+  const record = (state.recordedMeetings || []).find((item) => String(item.id) === String(id));
+  if (!record) { toast('تعذر فتح الصور', 'info'); return; }
+  const gallery = Array.isArray(record.images) ? record.images.filter(Boolean) : (record.image ? [record.image] : []);
+  if (!gallery.length) { toast('لا توجد صور لهذا اللقاء', 'info'); return; }
+  openSheet(`
+    <div class="sheet-head reading-window-viewer-head">
+      <div>
+        <h2>${esc(record.title || 'صور اللقاء')}</h2>
+        <p>${toAr(gallery.length)} صورة</p>
+      </div>
+      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+        <svg class="ic"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div class="archive-photos-viewer">
+      ${gallery.map((src, index) => `<img src="${esc(src)}" alt="صورة ${toAr(index + 1)}" loading="lazy" decoding="async">`).join('')}
+    </div>`, null, { fullscreen: true });
 }
 
 function openMeetingArchiveSheet() {
@@ -1443,7 +1474,7 @@ function openMeetingArchiveSheet() {
 function openRecordedMeetingComposer() {
   if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
   openSheet(`
-    ${sheetHead('إضافة لقاء إلى الأرشيف', 'ضع اللقاء السابق مع صوره ومعلوماته — رابط التسجيل اختياري')}
+    ${sheetHead('إضافة لقاء إلى الأرشيف', 'سجّل لقاءً سابقًا بعنوانه وصوره التي أُخذت أثناءه')}
     <form id="recorded-meeting-form" class="meeting-form" novalidate>
       <div class="field">
         <label for="recorded-type">قسم الأرشيف</label>
@@ -1458,63 +1489,60 @@ function openRecordedMeetingComposer() {
         <div class="field"><label for="recorded-speaker">مقدّم اللقاء / الضيف</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدّم اللقاء"></div>
       </div>
       <div class="field"><label for="recorded-location">المكان</label><input class="input" id="recorded-location" maxlength="140" placeholder="مثال: قاعة النادي — القصيم"></div>
-      <div class="meeting-form-row">
-        <div class="field"><label for="recorded-views">عدد الحضور</label><input class="input" id="recorded-views" type="number" min="0" value="0"></div>
-        <div class="field"><label for="recorded-duration">مدة التسجيل</label><input class="input" id="recorded-duration" maxlength="20" placeholder="مثال: 1:35:55"></div>
-      </div>
-      <div class="field"><label for="recorded-video-url">رابط التسجيل (اختياري)</label><input class="input" id="recorded-video-url" type="url" placeholder="https://…"></div>
+      <div class="field"><label for="recorded-views">عدد الحضور</label><input class="input" id="recorded-views" type="number" min="0" value="0"></div>
       <div class="field">
-        <label for="recorded-image-input">صور اللقاء</label>
-        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة اللقاء</span><small>تظهر كغلاف للقاء في الأرشيف</small></label>
-        <input id="recorded-image-input" class="meeting-file-input" type="file" accept="image/*">
-        <div id="recorded-image-preview-wrap" class="meeting-image-preview-wrap" hidden><img id="recorded-image-preview" alt="معاينة صورة اللقاء"><button type="button" class="meeting-image-remove" id="recorded-image-remove" aria-label="إزالة الصورة">×</button></div>
+        <label>صور اللقاء</label>
+        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صور اللقاء</span><small>يمكنك اختيار عدة صور دفعة واحدة (حتى ١٢ صورة)</small></label>
+        <input id="recorded-image-input" class="meeting-file-input" type="file" accept="image/*" multiple>
+        <div id="recorded-gallery" class="archive-gallery-picker"></div>
         <small id="recorded-image-status" class="meeting-image-status"></small>
       </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> نشر في أرشيف النادي</button>
     </form>`, (root) => {
-    let imageData = '';
+    let galleryImages = [];
     const fileInput = root.querySelector('#recorded-image-input');
-    const previewWrap = root.querySelector('#recorded-image-preview-wrap');
-    const preview = root.querySelector('#recorded-image-preview');
+    const gallery = root.querySelector('#recorded-gallery');
     const status = root.querySelector('#recorded-image-status');
 
-    fileInput.addEventListener('change', async () => {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) return;
-      status.textContent = 'جارٍ تجهيز الصورة…';
-      try {
-        imageData = await compressMeetingImage(file);
-        preview.src = imageData;
-        previewWrap.hidden = false;
-        status.textContent = 'الصورة جاهزة';
-      } catch (error) {
-        imageData = '';
-        fileInput.value = '';
-        previewWrap.hidden = true;
-        status.textContent = error.message;
-      }
-    });
+    const renderGallery = () => {
+      if (!gallery) return;
+      gallery.innerHTML = galleryImages.map((item, index) => `
+        <span class="gallery-thumb">
+          <img src="${esc(item)}" alt="صورة ${toAr(index + 1)}">
+          <button type="button" data-gallery-remove="${index}" aria-label="إزالة الصورة">×</button>
+        </span>`).join('');
+      gallery.querySelectorAll('[data-gallery-remove]').forEach((button) => {
+        button.addEventListener('click', () => {
+          galleryImages.splice(Number(button.dataset.galleryRemove), 1);
+          renderGallery();
+        });
+      });
+    };
 
-    root.querySelector('#recorded-image-remove').addEventListener('click', () => {
-      imageData = '';
-      fileInput.value = '';
-      preview.removeAttribute('src');
-      previewWrap.hidden = true;
-      status.textContent = '';
+    fileInput.addEventListener('change', async () => {
+      const files = [...(fileInput.files || [])].slice(0, 12);
+      if (!files.length) return;
+      status.textContent = 'جارٍ تجهيز الصور…';
+      for (const file of files) {
+        try {
+          galleryImages.push(await compressMeetingImage(file));
+        } catch (error) {
+          /* تجاهل الصورة الفاشلة */
+        }
+      }
+      renderGallery();
+      status.textContent = galleryImages.length
+        ? `${toAr(galleryImages.length)} صورة جاهزة — ستظهر كلها في صفحة اللقاء`
+        : 'تعذر تجهيز الصور';
     });
 
     root.querySelector('#recorded-meeting-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!isSupervisor()) { toast('إضافة التسجيلات للمشرفين فقط', 'info'); return; }
+      if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
       const title = root.querySelector('#recorded-title').value.trim();
       const recordedAt = readYMD('recorded-date');
-      const videoUrl = root.querySelector('#recorded-video-url').value.trim();
       if (!title || !recordedAt) {
         toast('أكمل العنوان والتاريخ', 'info');
-        return;
-      }
-      if (videoUrl && !/^https?:\/\//i.test(videoUrl)) {
-        toast('رابط التسجيل غير صحيح', 'info');
         return;
       }
 
@@ -1525,9 +1553,10 @@ function openRecordedMeetingComposer() {
         recordedAt,
         speaker: root.querySelector('#recorded-speaker').value.trim(),
         views: Number(root.querySelector('#recorded-views').value) || 0,
-        duration: root.querySelector('#recorded-duration').value.trim(),
-        videoUrl,
-        image: imageData,
+        duration: '',
+        videoUrl: '',
+        image: galleryImages[0] || '',
+        images: galleryImages.slice(),
         type: root.querySelector('#recorded-type').value,
         location: root.querySelector('#recorded-location').value.trim(),
         createdAt: Date.now(),
@@ -1633,7 +1662,7 @@ function renderMeetingCard() {
     ? `object-position:${clamp(Number(meeting.imagePosX) || 50, 0, 100)}% ${clamp(Number(meeting.imagePosY) || 50, 0, 100)}%;transform:scale(${(clamp(Number(meeting.imageScale) || 100, 100, 300) / 100).toFixed(2)})`
     : '';
   const imageMarkup = meeting.image
-    ? `<img class="meeting-poster" style="${cropStyle}" src="${esc(meeting.image)}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy">`
+    ? `<img class="meeting-poster" style="${cropStyle}" src="${esc(imageThumb(meeting.image, 700))}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy" decoding="async">`
     : `<div class="meeting-poster-placeholder"><svg class="ic"><use href="#i-calendar"/></svg><span>لقاء جليس القادم</span></div>`;
 
   root.innerHTML = `
@@ -2013,10 +2042,25 @@ async function refreshApprovedMembersCache() {
     const result = await cloudRequest('getApprovedMembers');
     if (result && result.success === true && Array.isArray(result.data)) {
       cacheApprovedMembers(result.data);
+      syncProfileRole(result.data);
       return result.data;
     }
   } catch (error) { /* تجاهل */ }
   return [];
+}
+
+/* مزامنة صفتي (عضو/صديق) مع اختيار المشرف عند القبول */
+function syncProfileRole(approved) {
+  if (!state || !currentMember || currentMember.id === 'guest' || !Array.isArray(approved)) return;
+  const record = approved.find((item) => normalizeName(item.name) === normalizeName(currentMember.name));
+  if (!record) return;
+  const role = record.role === 'supervisor' ? 'مشرف' : (record.role === 'consultant' ? 'مستشار' : 'عضو');
+  const memberType = record.memberType === 'friend' ? 'friend' : 'member';
+  if (state.profile.role === role && state.profile.memberType === memberType) return;
+  state.profile.role = role;
+  state.profile.memberType = memberType;
+  saveState();
+  renderProfile();
 }
 
 /* ترحيل بيانات النسخة القديمة — فقط للعضو الذي يطابق اسمه اسم الملف الشخصي المحفوظ. */
@@ -2322,16 +2366,64 @@ function weekNumber() {
 /* --------------------------------------------------------------------------
    4. قوالب مشتركة
    -------------------------------------------------------------------------- */
-function coverHTML(book) {
+/* صورة مصغّرة أخفّ للقوائم — لا نحمّل الصورة بالحجم الكامل في كل مكان */
+function imageThumb(url, width = 480) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/lh3\.googleusercontent\.com/i.test(raw)) return raw.replace(/=w\d+/, `=w${width}`);
+  return raw;
+}
+
+/* درجة أفتح من لون hex — لوني غلاف الكتاب */
+function shadeHex(hex, ratio = 0.32) {
+  const value = String(hex || '').trim();
+  const match = value.match(/^#?([0-9a-f]{6})$/i);
+  if (!match) return null;
+  const num = parseInt(match[1], 16);
+  const mix = (channel) => Math.round(channel + (255 - channel) * ratio);
+  const r = mix((num >> 16) & 255);
+  const g = mix((num >> 8) & 255);
+  const b = mix(num & 255);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+}
+
+/* لونا غلاف الكتاب — موحّدان على كل الأجهزة */
+function bookCoverColors(book) {
+  const source = book || {};
+  if (source.coverColor) {
+    return {
+      start: source.coverColor,
+      end: source.coverColor2 || shadeHex(source.coverColor, 0.3) || '#3D5A4C'
+    };
+  }
+  return {
+    start: source.c1 || '#1E3A2B',
+    end: source.c2 || '#3D5A4C'
+  };
+}
+
+/* مفتاح الكتاب — العنوان + المؤلف (لمنع التكرار) */
+function bookKey(title, author) {
+  const clean = (value) => String(value || '')
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return `${clean(title)}|${clean(author)}`;
+}
+
+function coverHTML(book, thumbWidth = 480) {
   if (book.coverImage) {
     return `
       <div class="cover cover-image" aria-label="غلاف ${esc(book.title)}">
-        <img class="cover-image-source" src="${esc(book.coverImage)}" alt="غلاف كتاب ${esc(book.title)}" loading="lazy">
+        <img class="cover-image-source" src="${esc(imageThumb(book.coverImage, thumbWidth))}" alt="غلاف كتاب ${esc(book.title)}" loading="lazy" decoding="async">
         <span class="cover-frame" aria-hidden="true"></span>
       </div>`;
   }
-  const coverStart = book.c1 || book.coverColor || '#1E3A2B';
-  const coverEnd = book.c2 || book.coverColor2 || '#3D5A4C';
+  const { start: coverStart, end: coverEnd } = bookCoverColors(book);
   return `
     <div class="cover" style="background:linear-gradient(150deg, ${coverStart}, ${coverEnd})">
       <span class="cover-frame" aria-hidden="true"></span>
@@ -2347,7 +2439,8 @@ function coverHTML(book) {
 function avatarHTML(name, color, cls = 'avatar-mini', photo = '') {
   const resolvedPhoto = memberPhoto(name, photo);
   const safePhoto = /^data:image\/(?:jpeg|png|webp);base64,/i.test(String(resolvedPhoto || '')) ? String(resolvedPhoto) : '';
-  return `<span class="${cls}" style="background:linear-gradient(135deg, ${color}, #14291D)">${safePhoto ? `<img class="avatar-photo-image" src="${esc(safePhoto)}" alt="صورة ${esc(name)}">` : esc(initials(name))}</span>`;
+  const src = safePhoto ? safePhoto : (resolvedPhoto ? imageThumb(resolvedPhoto, 120) : '');
+  return `<span class="${cls}" style="background:linear-gradient(135deg, ${color}, #14291D)">${src ? `<img class="avatar-photo-image" src="${esc(src)}" alt="صورة ${esc(name)}" loading="lazy" decoding="async">` : esc(initials(name))}</span>`;
 }
 
 function articleAuthorPhoto(article) {
@@ -3207,6 +3300,35 @@ function openAddBook() {
           pdfStatus.textContent = error.message || 'تعذر رفع الملف';
         }
       }
+
+      /* منع التكرار: لو الكتاب موجود بنفس العنوان والمؤلف نُحدّثه بدل إضافته */
+      const key = bookKey(title, author);
+      const existing = (state.clubBooks || []).find((book) => bookKey(book.title, book.author) === key);
+      if (existing) {
+        openConfirm({
+          title: 'الكتاب موجود مسبقًا',
+          text: `«${title}» موجود بالفعل في مكتبة النادي. هل تريد تحديث بياناته بدل إضافته مرة أخرى؟`,
+          confirmLabel: 'تحديث الكتاب',
+          danger: false,
+          onConfirm: async () => {
+            const updated = {
+              ...existing, title, author, category, report, pages, year, coverColor,
+              coverImage: finalCover || existing.coverImage || '',
+              coverColor2: shadeHex(color, 0.3) || existing.coverColor2 || '',
+              pdfUrl: pdfUrl || existing.pdfUrl || '',
+              updatedAt: Date.now()
+            };
+            state.clubBooks = (state.clubBooks || []).map((book) => (String(book.id) === String(existing.id) ? updated : book));
+            await saveState();
+            closeSheet();
+            renderLibrary();
+            renderHome();
+            const result = await updateClubBookToCloud(updated);
+            toast(result && result.success !== false ? 'تم تحديث الكتاب' : 'حُفظ محليًا وتعذّرت المزامنة', result && result.success !== false ? 'check' : 'info');
+          }
+        });
+        return;
+      }
       const newBook = {
         id: `club-${Date.now()}`,
         title,
@@ -3217,7 +3339,7 @@ function openAddBook() {
         year,
         coverColor: color,
         coverImage: finalCover,
-        coverColor2: '#14291D',
+        coverColor2: shadeHex(color, 0.3) || '#14291D',
         pdfUrl,
         createdAt: Date.now(),
         memberId: currentMember.id,
@@ -3348,6 +3470,7 @@ function openEditClubBook(bookId) {
         pages: Number(root.querySelector('#edit-club-book-pages').value) || 0,
         year: Number(root.querySelector('#edit-club-book-year').value) || '',
         coverColor: root.querySelector('#edit-club-book-color').value,
+        coverColor2: shadeHex(root.querySelector('#edit-club-book-color').value, 0.3) || '#14291D',
         coverImage: imageData,
         pdfUrl,
         updatedAt: Date.now()
@@ -3400,7 +3523,20 @@ function openAddMyBook() {
         </select>
       </div>
       <div class="field">
-        <label for="my-book-color">لون الغلاف</label>
+        <label for="my-book-cover">صورة غلاف الكتاب (اختياري)</label>
+        <label class="meeting-upload" for="my-book-cover">
+          <svg class="ic"><use href="#i-article"/></svg><span>اختر صورة الغلاف</span>
+          <small>تظهر في مكتبتك وتنتقل معك إلى كل أجهزتك</small>
+        </label>
+        <input id="my-book-cover" class="meeting-file-input" type="file" accept="image/*">
+        <div id="my-book-cover-preview-wrap" class="meeting-image-preview-wrap" hidden>
+          <img id="my-book-cover-preview" alt="معاينة غلاف الكتاب">
+          <button type="button" class="meeting-image-remove" id="my-book-cover-remove" aria-label="إزالة الصورة">×</button>
+        </div>
+        <small id="my-book-cover-status" class="meeting-image-status"></small>
+      </div>
+      <div class="field">
+        <label for="my-book-color">لون الغلاف (إذا لم تختر صورة)</label>
         <input class="input" id="my-book-color" type="color" value="#1E3A2B">
       </div>
       <div class="field">
@@ -3412,6 +3548,36 @@ function openAddMyBook() {
         <svg class="ic"><use href="#i-plus"/></svg> أضف إلى مكتبتي
       </button>
     </form>`, (root) => {
+    /* صورة غلاف الكتاب */
+    let coverData = '';
+    const coverInput = root.querySelector('#my-book-cover');
+    const coverWrap = root.querySelector('#my-book-cover-preview-wrap');
+    const coverPreview = root.querySelector('#my-book-cover-preview');
+    const coverStatus = root.querySelector('#my-book-cover-status');
+    if (coverInput) coverInput.addEventListener('change', async () => {
+      const file = coverInput.files && coverInput.files[0];
+      if (!file) return;
+      coverStatus.textContent = 'جارٍ تجهيز الصورة…';
+      try {
+        coverData = await compressMeetingImage(file);
+        coverPreview.src = coverData;
+        coverWrap.hidden = false;
+        coverStatus.textContent = 'الصورة جاهزة.';
+      } catch (error) {
+        coverData = '';
+        coverWrap.hidden = true;
+        coverStatus.textContent = error.message || 'تعذر قراءة الصورة';
+      }
+    });
+    const coverRemove = root.querySelector('#my-book-cover-remove');
+    if (coverRemove) coverRemove.addEventListener('click', () => {
+      coverData = '';
+      coverInput.value = '';
+      coverPreview.removeAttribute('src');
+      coverWrap.hidden = true;
+      coverStatus.textContent = '';
+    });
+
     root.querySelector('#add-my-book-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const title = root.querySelector('#my-book-title').value.trim();
@@ -3451,8 +3617,10 @@ function openAddMyBook() {
         category: 'مكتبتي',
         pages,
         c1: color,
-        c2: '#14291D',
+        c2: shadeHex(color, 0.3) || '#14291D',
         coverColor: color,
+        coverColor2: shadeHex(color, 0.3) || '#14291D',
+        coverImage: coverData || '',
         pdfUrl,
         rating: 0,
         available: 0,
@@ -3540,16 +3708,27 @@ function renderMyBooks() {
     const pdf = book.pdfUrl
       ? `<a class="btn btn-sm btn-ghost my-book-pdf" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer" style="margin-top:8px"><svg class="ic"><use href="#i-article"/></svg> فتح ملف PDF</a>`
       : '';
+    const cover = bookCoverColors(book);
+    const isPersonal = (state.personalBooks || []).some((entry) => String(entry.id) === String(book.id));
+    const coverMarkup = book.coverImage
+      ? `<div class="my-book-cover my-book-cover-image"><img src="${esc(imageThumb(book.coverImage, 320))}" alt="غلاف ${esc(book.title)}" loading="lazy" decoding="async"></div>`
+      : `<div class="my-book-cover" style="background:linear-gradient(150deg, ${cover.start}, ${cover.end})">${esc(book.title)}</div>`;
     return `
       <article class="my-book">
-        <div class="my-book-cover" style="background:linear-gradient(150deg, ${book.c1}, ${book.c2})">${esc(book.title)}</div>
+        ${coverMarkup}
         <div class="my-book-body">
           <div class="my-book-top">
-            <h4>${esc(book.title)}</h4>
-            <span>${esc(book.author)}</span>
+            <div>
+              <h4>${esc(book.title)}</h4>
+              <span>${esc(book.author)}</span>
+            </div>
+            <button class="my-book-delete" type="button" data-action="remove-book" data-id="${esc(book.id)}" aria-label="إزالة ${esc(book.title)} من مكتبتي" title="إزالة من مكتبتي فقط">
+              <svg class="ic"><use href="#i-trash"/></svg>
+            </button>
           </div>
           <span class="my-status ${item.status}">${STATUS_LABEL[item.status]}</span>
           ${progress}${finished}${want}${pdf}
+          ${isPersonal ? '<span class="my-book-own">كتاب خاص بك</span>' : ''}
         </div>
       </article>`;
   }).join('');
@@ -3672,7 +3851,10 @@ function renderProfile() {
   const streak = streakDays();
 
   $('#profile-name').textContent = state.profile.name;
-  $('#profile-role').textContent = `${state.profile.role} · منذ ${state.profile.joined}`;
+  const profileRole = state.profile.memberType === 'friend'
+    ? 'صديق'
+    : (state.profile.role === 'consultant' ? 'مستشار' : (state.profile.role === 'supervisor' ? 'مشرف' : 'عضو'));
+  $('#profile-role').textContent = `${profileRole} · منذ ${state.profile.joined}`;
   setAvatarContent($('#profile-avatar'), state.profile.name, state.profile.photo || (currentMember && currentMember.photo));
   const photoButton = $('#profile-photo-change');
   if (photoButton) photoButton.hidden = isGuest();
@@ -3707,6 +3889,9 @@ function updateHeaderAvatar() {
   }
 }
 
+/* رئيس النادي */
+const CLUB_CHAIR_NAME = 'محمد صالح الدبيخي';
+
 async function openMemberProfileSheet(name) {
   const target = String(name || '').trim();
   if (!target) return;
@@ -3720,9 +3905,18 @@ async function openMemberProfileSheet(name) {
   } catch (error) {}
   const isSelf = currentMember && normalizeName(currentMember.name) === normalizeName(target);
   const profileName = isSelf ? state.profile.name : target;
+  /* الصفة تُقرأ من اختيار المشرف عند القبول: عضو / صديق — وتُزامن تلقائيًا */
+  const clubRoleOf = (entry) => {
+    if (!entry) return '';
+    if (entry.role === 'consultant') return 'مستشار';
+    if (entry.memberType === 'friend') return 'صديق جليس';
+    return 'عضو جليس';
+  };
   const role = isSelf
-    ? state.profile.role
-    : (approved && approved.role === 'supervisor' ? 'مشرف' : (member ? (member.role || 'عضو') : 'عضو'));
+    ? (state.profile.role === 'consultant' ? 'مستشار' : (state.profile.memberType === 'friend' ? 'صديق جليس' : 'عضو جليس'))
+    : (approved ? clubRoleOf(approved) : (member ? (member.role === 'consultant' ? 'مستشار' : 'عضو جليس') : 'عضو جليس'));
+  /* رئيس النادي: محمد صالح الدبيخي فقط */
+  const isClubChair = normalizeName(target) === normalizeName(CLUB_CHAIR_NAME);
   const joined = isSelf
     ? state.profile.joined
     : (approved && approved.joinedAt ? String(new Date(Number(approved.joinedAt)).getFullYear()) : (member ? '٢٠٢٤' : ''));
@@ -3746,7 +3940,7 @@ async function openMemberProfileSheet(name) {
       </div>
       <div class="member-profile-hero">
         ${avatarHTML(profileName, color, 'member-profile-avatar', photo)}
-        <h2>${esc(profileName)}</h2>
+        <h2>${esc(profileName)}${isClubChair ? ' <span class="member-profile-chair">رئيس النادي</span>' : ''}</h2>
         <p>${esc(role)}${joined ? ` · منذ ${esc(joined)}` : ''}</p>
       </div>
       <div class="member-profile-stats">
@@ -3992,7 +4186,7 @@ function openBookSheet(id) {
   openSheet(`
     ${sheetHead('تفاصيل الكتاب', book.category || 'من مكتبة جليس')}
     <section class="book-detail-hero">
-      <div class="book-sheet-cover">${coverHTML(book)}</div>
+      <div class="book-sheet-cover">${coverHTML(book, 420)}</div>
       <div class="book-detail-hero-info">
         <span class="chip chip-soft">${esc(book.category || 'مكتبة جليس')}</span>
         <h2>${esc(book.title)}</h2>
@@ -4357,7 +4551,7 @@ async function createArticleShareCard(article) {
   context.textAlign = 'right';
   context.fillStyle = '#F8F5EE';
   context.font = '700 30px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('مقال من مجلة جليس الإلكترونية', 1090, 69);
+  context.fillText('مقال من مدونة جليس الإلكترونية', 1090, 69);
 
   context.fillStyle = '#9A7440';
   context.font = '700 23px "IBM Plex Sans Arabic", sans-serif';
@@ -5595,10 +5789,11 @@ function openBookSummaryComposer() {
 }
 
 /* ===== التقرير الأسبوعي ===== */
+/* ===== التقارير الأسبوعية: صور بملء شاشة الجوال ===== */
 async function openWeeklyReportSheet() {
   weeklyReportsMode = 'recent';
   openSheet(`
-    ${sheetHead('التقرير الأسبوعي', 'تقارير النادي الأسبوعية — أحدث تقرير أولًا')}
+    ${sheetHead('التقارير الأسبوعية', 'تقارير النادي الأسبوعية — أحدث ٣ تقارير أولًا')}
     <div id="weekly-report" class="weekly-report"><div class="recorded-meetings-loading">جارٍ تحميل التقارير…</div></div>`);
   await loadWeeklyReports();
 }
@@ -5622,25 +5817,26 @@ function weeklyRangeLabel(report) {
   return from && to ? `من ${from} إلى ${to}` : (from || '');
 }
 
-function weeklyReportCardHTML(report, big = false) {
+function weeklyReportImages(report) {
+  const list = Array.isArray(report.images) ? report.images.filter(Boolean) : [];
+  return list.length ? list : (report.image ? [report.image] : []);
+}
+
+function weeklyReportCardHTML(report) {
   const label = weeklyReportLabel(report);
-  const range = weeklyRangeLabel(report);
-  const title = String(report.title || '').trim();
-  const stats = [];
-  if (Number(report.pages) > 0) stats.push(`${toAr(report.pages)} صفحة`);
-  if (Number(report.participants) > 0) stats.push(`${toAr(report.participants)} مشارك`);
+  const images = weeklyReportImages(report);
   return `
-    <article class="weekly-report-card${big ? ' is-latest' : ''}">
+    <article class="weekly-report-card">
       <button class="weekly-report-open" type="button" data-action="open-weekly-report" data-id="${esc(report.id)}" aria-label="عرض ${esc(label)}">
-        <span class="weekly-report-media">
-          ${report.image ? `<img src="${esc(report.image)}" alt="${esc(title || label)}" loading="lazy">` : '<span class="weekly-report-placeholder"></span>'}
+        <span class="weekly-report-media${images.length > 1 ? ' is-multi' : ''}">
+          ${images.length
+            ? images.slice(0, 2).map((src, index) => `<img src="${esc(imageThumb(src, 520))}" alt="${esc(label)} — صورة ${toAr(index + 1)}" loading="lazy" decoding="async">`).join('')
+            : '<span class="weekly-report-placeholder"></span>'}
           <span class="weekly-report-week">${toAr(report.weekNo)}</span>
-          ${big ? '<span class="weekly-report-tag">أحدث تقرير</span>' : ''}
         </span>
         <span class="weekly-report-caption">
-          <strong>${esc(title || label)}</strong>
-          <small>${esc(range || label)}</small>
-          ${stats.length ? `<span class="weekly-report-stats">${stats.map((item) => `<i>${esc(item)}</i>`).join('')}</span>` : ''}
+          <strong>${esc(report.title || label)}</strong>
+          <small>${esc(weeklyRangeLabel(report) || label)}</small>
         </span>
       </button>
       ${isSupervisor() ? `<button class="weekly-report-delete" type="button" data-action="delete-weekly-report" data-id="${esc(report.id)}" aria-label="حذف ${esc(label)}"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
@@ -5658,7 +5854,6 @@ function renderWeeklyReports() {
         <strong>${toAr(reports.length)} تقرير أسبوعي</strong>
       </div>
       <div class="weekly-report-tools">
-        ${reports.length > 3 ? `<button class="btn btn-sm btn-ghost" type="button" data-action="weekly-archive">${weeklyReportsMode === 'archive' ? 'آخر ثلاثة أسابيع' : 'كل الأسابيع'}</button>` : ''}
         ${isSupervisor() && reports.length ? `<button class="btn btn-sm btn-ghost danger" type="button" data-action="weekly-clear">حذف الكل</button>` : ''}
         ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-weekly-report"><svg class="ic"><use href="#i-plus"/></svg> إضافة</button>` : ''}
       </div>
@@ -5668,34 +5863,36 @@ function renderWeeklyReports() {
     return;
   }
   if (weeklyReportsMode === 'archive') {
-    box.innerHTML = toolbar + `<div class="weekly-report-grid">${reports.map((report) => weeklyReportCardHTML(report)).join('')}</div>`;
+    box.innerHTML = toolbar
+      + `<div class="weekly-report-grid">${reports.map((report) => weeklyReportCardHTML(report)).join('')}</div>`
+      + `<button class="btn btn-ghost btn-block weekly-report-back" type="button" data-action="weekly-archive">رجوع لآخر ٣ تقارير</button>`;
     return;
   }
-  const [latest, ...previous] = reports.slice(0, 3);
+  const latest = reports.slice(0, 3);
   box.innerHTML = toolbar
-    + `<div class="weekly-report-latest">${weeklyReportCardHTML(latest, true)}</div>`
-    + (previous.length ? `
-      <div class="weekly-report-prev-block">
-        <span class="weekly-report-prev-label">الأسابيع السابقة</span>
-        <div class="weekly-report-prev">${previous.map((report) => weeklyReportCardHTML(report)).join('')}</div>
-      </div>` : '');
+    + `<div class="weekly-report-latest">${latest.map((report) => weeklyReportCardHTML(report)).join('')}</div>`
+    + (reports.length > 3
+      ? `<button class="btn btn-ghost btn-block weekly-report-archive-btn" type="button" data-action="weekly-archive">انظر إلى التقارير السابقة (${toAr(reports.length - 3)})</button>`
+      : '');
 }
 
 function openWeeklyReportViewer(id) {
   const report = weeklyReportsCache.find((item) => String(item.id) === String(id));
   if (!report) { toast('تعذر فتح التقرير', 'info'); return; }
+  const images = weeklyReportImages(report);
+  const range = weeklyRangeLabel(report);
   openSheet(`
     <div class="sheet-head reading-window-viewer-head">
       <div>
         <h2>${esc(weeklyReportLabel(report))}</h2>
-        <p>${esc(weeklyRangeLabel(report))}</p>
+        ${range ? `<p>${esc(range)}</p>` : ''}
       </div>
       <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
         <svg class="ic"><use href="#i-close"/></svg>
       </button>
     </div>
-    <div class="reading-window-viewer">
-      <img class="reading-window-viewer-image" src="${esc(report.image)}" alt="${esc(weeklyReportLabel(report))}">
+    <div class="archive-photos-viewer">
+      ${images.map((src, index) => `<img src="${esc(src)}" alt="${esc(weeklyReportLabel(report))} — ${toAr(index + 1)}" loading="lazy" decoding="async">`).join('')}
     </div>`, null, { fullscreen: true });
 }
 
@@ -5703,97 +5900,94 @@ function openWeeklyReportComposer() {
   if (!isSupervisor()) { toast('إضافة التقارير للمشرفين فقط', 'info'); return; }
   const nextNo = weeklyReportsCache.reduce((max, report) => Math.max(max, Number(report.weekNo) || 0), 0) + 1;
   openSheet(`
-    ${sheetHead('إضافة تقرير أسبوعي', 'الصورة تُعرض كما هي — ورقم الأسبوع المسجّل نفسه يستبدل صورته')}
+    ${sheetHead('إضافة تقرير أسبوعي', 'رقم الأسبوع وصور التقرير (صور بمقاس شاشة الجوال)')}
     <form id="weekly-report-form" novalidate>
       <div class="field">
         <label for="weekly-no">رقم الأسبوع</label>
         <input class="input" id="weekly-no" type="number" min="1" max="9999" value="${nextNo}" required>
       </div>
       <div class="field">
-        <label for="weekly-title">عنوان الأسبوع</label>
-        <input class="input" id="weekly-title" maxlength="90" placeholder="مثال: أسبوع القراءة والمشاركة">
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="weekly-pages">الصفحات المقروءة</label>
-          <input class="input" id="weekly-pages" type="number" min="0" max="999999" placeholder="0">
-        </div>
-        <div class="field">
-          <label for="weekly-participants">عدد المشاركين</label>
-          <input class="input" id="weekly-participants" type="number" min="0" max="9999" placeholder="0">
-        </div>
-      </div>
-      <div class="field">
-        <label for="weekly-notes">ملاحظات</label>
-        <textarea class="input" id="weekly-notes" rows="3" maxlength="500" placeholder="أبرز ما جرى في الأسبوع…"></textarea>
-      </div>
-      <div class="field">
-        <label>تاريخ بداية الأسبوع (سنة / شهر / يوم)</label>
-        ${dateYMDField('weekly-date', 'بداية الأسبوع')}
-      </div>
-      <div class="quote-dropzone" id="weekly-dropzone">
-        <svg class="ic"><use href="#i-article"/></svg>
-        <strong>أسقط صورة التقرير هنا</strong>
-        <span>تُحفظ كاملة بدون قص</span>
-        <button type="button" class="btn btn-sm btn-ghost" id="weekly-pick">أو اختر صورة</button>
-        <input type="file" id="weekly-image" accept="image/*" hidden>
+        <label>صور التقرير</label>
+        <label class="meeting-upload" for="weekly-image"><svg class="ic"><use href="#i-article"/></svg><span>اختر صور التقرير</span><small>يمكنك اختيار عدة صور (حتى ١٢ صورة) — تظهر كما هي</small></label>
+        <input id="weekly-image" class="meeting-file-input" type="file" accept="image/*" multiple>
+        <div id="weekly-gallery" class="archive-gallery-picker"></div>
         <small id="weekly-status" class="meeting-image-status"></small>
       </div>
-      <div class="field" id="weekly-preview-wrap" hidden><img id="weekly-preview" class="selection-preview" alt="معاينة التقرير"></div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> حفظ التقرير</button>
     </form>`, (root) => {
-    let imageData = '';
+    let galleryImages = [];
+    const fileInput = root.querySelector('#weekly-image');
+    const gallery = root.querySelector('#weekly-gallery');
     const status = root.querySelector('#weekly-status');
-    const previewWrap = root.querySelector('#weekly-preview-wrap');
-    const preview = root.querySelector('#weekly-preview');
-    const handleFile = async (file) => {
-      status.textContent = 'جارٍ تجهيز الصورة…';
-      try {
-        imageData = await prepareUploadImage(file);
-        preview.src = imageData;
-        previewWrap.hidden = false;
-        status.textContent = 'الصورة جاهزة — اضغط حفظ التقرير.';
-      } catch (error) {
-        imageData = '';
-        previewWrap.hidden = true;
-        status.textContent = error.message || 'تعذر قراءة الصورة';
-      }
+
+    const renderGallery = () => {
+      if (!gallery) return;
+      gallery.innerHTML = galleryImages.map((item, index) => `
+        <span class="gallery-thumb">
+          <img src="${esc(item)}" alt="صورة ${toAr(index + 1)}">
+          <button type="button" data-gallery-remove="${index}" aria-label="إزالة الصورة">×</button>
+        </span>`).join('');
+      gallery.querySelectorAll('[data-gallery-remove]').forEach((button) => {
+        button.addEventListener('click', () => {
+          galleryImages.splice(Number(button.dataset.galleryRemove), 1);
+          renderGallery();
+        });
+      });
     };
-    bindImageDropzone(root.querySelector('#weekly-dropzone'), root.querySelector('#weekly-image'), handleFile);
-    const pick = root.querySelector('#weekly-pick');
-    const input = root.querySelector('#weekly-image');
-    if (pick && input) pick.addEventListener('click', () => input.click());
+
+    fileInput.addEventListener('change', async () => {
+      const files = [...(fileInput.files || [])].slice(0, 12);
+      if (!files.length) return;
+      status.textContent = 'جارٍ تجهيز الصور…';
+      for (const file of files) {
+        try {
+          galleryImages.push(await compressMeetingImage(file));
+        } catch (error) {
+          /* تجاهل الصورة الفاشلة */
+        }
+      }
+      renderGallery();
+      status.textContent = galleryImages.length
+        ? `${toAr(galleryImages.length)} صورة جاهزة`
+        : 'تعذر تجهيز الصور';
+    });
 
     root.querySelector('#weekly-report-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const weekNo = Number(root.querySelector('#weekly-no').value) || 0;
-      const weekStart = readYMD('weekly-date');
       if (!weekNo) { toast('أدخل رقم الأسبوع', 'info'); return; }
-      if (!weekStart) { toast('حدّد تاريخ بداية الأسبوع', 'info'); return; }
-      if (!imageData) { toast('أضف صورة التقرير أولًا', 'info'); return; }
-      const weekEnd = toISO(addDays(fromISO(weekStart), 6));
+      if (!galleryImages.length) { toast('أضف صورة واحدة على الأقل', 'info'); return; }
       const result = await cloudRequest('saveWeeklyReport', {
         weekNo,
-        weekStart,
-        weekEnd,
-        title: root.querySelector('#weekly-title').value.trim(),
-        pages: Number(root.querySelector('#weekly-pages').value) || 0,
-        participants: Number(root.querySelector('#weekly-participants').value) || 0,
-        notes: root.querySelector('#weekly-notes').value.trim(),
-        image: imageData,
+        weekStart: '',
+        weekEnd: '',
+        image: galleryImages[0],
+        images: galleryImages.slice(),
         createdAt: Date.now(),
         by: (currentMember && currentMember.name) || 'مشرف'
       });
-      if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر حفظ التقرير'), 'info'); return; }
-      toast(result.replaced ? `تم تحديث تقرير الأسبوع ${toAr(weekNo)}` : `تم إضافة الأسبوع ${toAr(weekNo)}`, 'check');
+      if (!result || result.success !== true) {
+        toast(cleanServerError(result, 'تعذر حفظ التقرير'), 'info');
+        return;
+      }
+      /* تحقّق: هل حُفظت كل الصور؟ (تحتاج الخادم r27+) */
+      let stored = 0;
+      try {
+        const check = await cloudRequest('getWeeklyReports');
+        const saved = (check && check.data && Array.isArray(check.data)) ? check.data.find((item) => String(item.id) === String(result.id)) : null;
+        if (saved) stored = weeklyReportImages(saved).length;
+      } catch (error) { stored = 0; }
       closeSheet();
       setTimeout(() => openWeeklyReportSheet(), 340);
+      if (stored && stored < galleryImages.length) {
+        toast('حُفظت صورة واحدة فقط — انشر الخادم المحدّث (r27) لحفظ كل صور التقرير', 'info');
+      } else {
+        toast('تم حفظ التقرير', 'check');
+      }
     });
   });
 }
 
-/* ===== اقتباسات مختارات النادي ===== */
-/* ===== مختارات النادي: اقتباسات + نوافذ قرائية + قوائم قرائية مختارة ===== */
 const SELECTIONS_TABS = [
   { key: 'quotes', label: 'اقتباسات' },
   { key: 'windows', label: 'نوافذ قرائية' },
@@ -5849,7 +6043,7 @@ function selectionQuoteCardHTML(item) {
   return `
     <article class="selection-quote-card${hasImage ? ' has-image' : ''}">
       ${hasImage
-        ? `<img class="selection-quote-image" src="${esc(item.image)}" alt="اقتباس مختار${item.book ? ` من ${esc(item.book)}` : ''}" loading="lazy">`
+        ? `<img class="selection-quote-image" src="${esc(imageThumb(item.image, 520))}" alt="اقتباس مختار${item.book ? ` من ${esc(item.book)}` : ''}" loading="lazy" decoding="async">`
         : `<blockquote class="selection-quote-text"><p>«${esc(item.text || '')}»</p><footer>${esc(item.book || '')}${item.bookAuthor ? ` — ${esc(item.bookAuthor)}` : ''}${item.authorName ? ` · ${esc(item.authorName)}` : ''}</footer></blockquote>`}
       ${isSupervisor() ? `<button class="selection-quote-delete" type="button" data-action="delete-selection-quote" data-id="${esc(item.id)}">حذف</button>` : ''}
     </article>`;
@@ -6155,7 +6349,7 @@ async function loadReadingTips(container) {
         <button class="reading-window-card-open" type="button" data-action="open-reading-window" data-id="${esc(tip.id)}" aria-label="عرض ${esc(tip.title || 'نافذة قرائية')}">
           <span class="reading-window-card-media">
             ${tip.image
-              ? `<img class="reading-window-card-image" src="${esc(tip.image)}" alt="${esc(tip.title || 'نافذة قرائية')}" loading="lazy">`
+              ? `<img class="reading-window-card-image" src="${esc(imageThumb(tip.image, 520))}" alt="${esc(tip.title || 'نافذة قرائية')}" loading="lazy" decoding="async">`
               : '<span class="reading-window-card-quote" aria-hidden="true">“</span>'}
             <span class="reading-window-card-tag">${tip.image ? 'نافذة مصوّرة' : 'نصيحة نصية'}</span>
           </span>
@@ -6348,12 +6542,6 @@ function openMoreSheet() {
       <button class="more-item" type="button" data-action="view-join-requests">
         <span class="more-icon"><svg class="ic"><use href="#i-users"/></svg></span>
         <div class="more-body"><strong>طلبات الانضمام</strong><p>مراجعة طلبات الزوار والموافقة عليها</p></div>
-        <svg class="ic chev"><use href="#i-chevron-left"/></svg>
-      </button>` : ''}
-      ${isSupervisor() ? `
-      <button class="more-item" type="button" data-action="organize-sheets">
-        <span class="more-icon"><svg class="ic"><use href="#i-library"/></svg></span>
-        <div class="more-body"><strong>تنظيم الشيت</strong><p>توحيد أسماء التبويبات وحذف المكرّر والفارغ</p></div>
         <svg class="ic chev"><use href="#i-chevron-left"/></svg>
       </button>` : ''}
       ${isSupervisor() ? `
@@ -6588,9 +6776,10 @@ function renderDeletedItems(root, items) {
   if (!list) return;
   if (!items.length) {
     list.innerHTML = emptyHTML('check', 'سلة المحذوفات فارغة', 'العناصر المحذوفة تبقى محفوظة هنا ويمكن استعادتها.');
+    root.dataset.trashCount = '0';
     return;
   }
-  const labels = { quote: 'اقتباس', book: 'كتاب', shelf: 'رف تصنيف', article: 'مقال', recording: 'لقاء مسجل' };
+  const labels = { quote: 'اقتباس', book: 'كتاب', shelf: 'رف تصنيف', article: 'مقال', recording: 'لقاء' };
   const icons = { quote: 'quote', book: 'book', shelf: 'library', article: 'article', recording: 'play' };
   list.innerHTML = items.map((item) => {
     const title = item.title || item.id || 'عنصر محذوف';
@@ -6603,9 +6792,13 @@ function renderDeletedItems(root, items) {
       ? new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(new Date(Number(item.deletedAt)))
       : '';
     const icon = icons[item.type] || 'library';
+    const key = `${item.type}:${item.id}`;
     return `
-      <article class="deleted-item-card">
+      <article class="deleted-item-card" data-trash-key="${esc(key)}">
         <div class="deleted-item-head">
+          <label class="trash-check">
+            <input type="checkbox" data-trash-check value="${esc(key)}" aria-label="تحديد ${esc(title)}">
+          </label>
           <span class="deleted-item-icon"><svg class="ic"><use href="#i-${icon}"/></svg></span>
           <div class="deleted-item-body">
             <small>${esc(labels[item.type] || 'عنصر')}</small>
@@ -6620,19 +6813,47 @@ function renderDeletedItems(root, items) {
         </div>
       </article>`;
   }).join('');
+  root.dataset.trashCount = String(items.length);
+  updateTrashBulkBar(root, items);
+}
+
+function selectedTrashKeys(root) {
+  return [...root.querySelectorAll('[data-trash-check]:checked')].map((input) => input.value);
+}
+
+function updateTrashBulkBar(root, items) {
+  const bar = root.querySelector('#trash-bulk-bar');
+  if (!bar) return;
+  const selected = selectedTrashKeys(root);
+  const keys = new Set((items || []).map((item) => `${item.type}:${item.id}`));
+  const valid = selected.filter((key) => keys.has(key));
+  bar.hidden = valid.length === 0;
+  const count = bar.querySelector('#trash-selected-count');
+  if (count) count.textContent = toAr(valid.length);
 }
 
 function openTrashSheet() {
   if (!isSupervisor()) { toast('سلة المحذوفات للمشرفين فقط', 'info'); return; }
   openSheet(`
-    ${sheetHead('سلة المحذوفات', 'الحذف هنا قابل للاستعادة ولا يحذف البيانات نهائيًا')}
+    ${sheetHead('سلة المحذوفات', 'حدّد عدة عناصر ثم استعدِها أو احذفها دفعة واحدة')}
     <div class="trash-toolbar">
       <span>السلة مشتركة بين مشرفي النادي</span>
-      <button class="icon-btn" type="button" id="refresh-trash" aria-label="تحديث سلة المحذوفات">
-        <svg class="ic"><use href="#i-refresh"/></svg>
-      </button>
+      <div class="trash-toolbar-actions">
+        <button class="btn btn-sm btn-ghost" type="button" id="trash-select-all">تحديد الكل</button>
+        <button class="icon-btn" type="button" id="refresh-trash" aria-label="تحديث سلة المحذوفات">
+          <svg class="ic"><use href="#i-refresh"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="trash-bulk-bar" class="trash-bulk-bar" hidden>
+      <span>محدَّد: <b id="trash-selected-count">٠</b></span>
+      <div>
+        <button class="btn btn-sm btn-primary" type="button" data-action="bulk-restore"><svg class="ic"><use href="#i-refresh"/></svg> استعادة</button>
+        <button class="btn btn-sm btn-ghost danger" type="button" data-action="bulk-purge"><svg class="ic"><use href="#i-trash"/></svg> حذف نهائي</button>
+      </div>
     </div>
     <div id="deleted-items-list" class="deleted-items-list"><p class="deleted-items-loading">جارٍ التحميل…</p></div>`, async (root) => {
+    let currentItems = [];
     const refresh = async () => {
       const list = root.querySelector('#deleted-items-list');
       if (!list) return;
@@ -6647,25 +6868,39 @@ function openTrashSheet() {
         list.innerHTML = emptyHTML('info', 'نسخة Apps Script قديمة', 'انشر النسخة المحدّثة من الكود لتفعيل سلة المحذوفات.');
         return;
       }
-      renderDeletedItems(root, result.data);
+      currentItems = result.data;
+      renderDeletedItems(root, currentItems);
     };
     const refreshButton = root.querySelector('#refresh-trash');
     if (refreshButton) refreshButton.addEventListener('click', refresh);
+
+    const selectAll = root.querySelector('#trash-select-all');
+    if (selectAll) selectAll.addEventListener('click', () => {
+      const boxes = [...root.querySelectorAll('[data-trash-check]')];
+      const allChecked = boxes.every((box) => box.checked);
+      boxes.forEach((box) => { box.checked = !allChecked; });
+      updateTrashBulkBar(root, currentItems);
+    });
+
+    root.querySelector('#deleted-items-list').addEventListener('change', (event) => {
+      if (event.target.matches('[data-trash-check]')) updateTrashBulkBar(root, currentItems);
+    });
+
     await refresh();
   });
 }
 
-async function restoreDeletedItem(type, encodedId) {
-  if (!isSupervisor()) { toast('الاستعادة للمشرفين فقط', 'info'); return; }
+async function restoreDeletedItem(type, encodedId, silent = false) {
+  if (!isSupervisor()) { toast('الاستعادة للمشرفين فقط', 'info'); return false; }
   let id = encodedId || '';
   try { id = decodeURIComponent(id); } catch (error) {}
   const actions = { quote: 'restoreQuote', book: 'restoreClubBook', shelf: 'restoreLibraryCategory', article: 'restoreArticle', recording: 'restoreRecordedMeeting' };
   const action = actions[type];
-  if (!action) return;
+  if (!action) return false;
   const result = await cloudRequest(action, { id });
   if (!result || result.success === false) {
-    toast(result && result.error ? result.error : 'تعذرت الاستعادة', 'info');
-    return;
+    if (!silent) toast(result && result.error ? result.error : 'تعذرت الاستعادة', 'info');
+    return false;
   }
 
   if (type === 'quote') {
@@ -6687,8 +6922,11 @@ async function restoreDeletedItem(type, encodedId) {
     if (Array.isArray(meetings)) state.recordedMeetings = meetings;
   }
   renderHome();
-  openTrashSheet();
-  toast('تمت الاستعادة بنجاح', 'check');
+  if (!silent) {
+    openTrashSheet();
+    toast('تمت الاستعادة بنجاح', 'check');
+  }
+  return true;
 }
 
 function openMeetingSheet(id = '') {
@@ -7354,7 +7592,11 @@ async function handleGlobalClick(event) {
       closeSheet();
       openBookSummariesSheet();
       break;
+    case 'view-archive-photos':
+      openArchivePhotosViewer(id);
+      break;
     case 'organize-sheets':
+      /* الإزالة من قائمة المزيد — يبقى الإجراء متاحًا من الخادم مباشرة */
       openSheetsOrganizer();
       break;
     case 'weekly-report':
@@ -7542,6 +7784,58 @@ async function handleGlobalClick(event) {
     case 'restore-deleted':
       restoreDeletedItem(actionEl.dataset.type, id);
       break;
+    case 'bulk-restore': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const trashRoot = document.getElementById('sheet-root');
+      const keys = trashRoot ? selectedTrashKeys(trashRoot) : [];
+      if (!keys.length) { toast('حدّد عنصرًا واحدًا على الأقل', 'info'); break; }
+      openConfirm({
+        title: 'استعادة العناصر المحدّدة',
+        text: `سيتم استعادة ${toAr(keys.length)} عنصر إلى أماكنها.`,
+        confirmLabel: 'استعادة',
+        danger: false,
+        onConfirm: async () => {
+          let done = 0;
+          for (const key of keys) {
+            const split = key.split(':');
+            const type = split.shift();
+            const itemId = split.join(':');
+            const result = await restoreDeletedItem(type, itemId, true);
+            if (result) done += 1;
+          }
+          toast(`تمت استعادة ${toAr(done)} عنصر`, 'check');
+          const refreshButton = document.getElementById('refresh-trash');
+          if (refreshButton) refreshButton.click();
+        }
+      });
+      break;
+    }
+    case 'bulk-purge': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const trashRoot = document.getElementById('sheet-root');
+      const keys = trashRoot ? selectedTrashKeys(trashRoot) : [];
+      if (!keys.length) { toast('حدّد عنصرًا واحدًا على الأقل', 'info'); break; }
+      openConfirm({
+        title: 'حذف نهائي',
+        text: `سيُحذف ${toAr(keys.length)} عنصر نهائيًا ولا يمكن استعادته.`,
+        confirmLabel: 'حذف نهائي',
+        danger: true,
+        onConfirm: async () => {
+          let done = 0;
+          for (const key of keys) {
+            const split = key.split(':');
+            const type = split.shift();
+            const itemId = split.join(':');
+            const result = await cloudRequest('purgeDeletedItem', { type, id: itemId, by: (currentMember && currentMember.name) || 'مشرف' });
+            if (result && result.success === true) done += 1;
+          }
+          toast(`تم حذف ${toAr(done)} عنصر نهائيًا`, 'trash');
+          const refreshButton = document.getElementById('refresh-trash');
+          if (refreshButton) refreshButton.click();
+        }
+      });
+      break;
+    }
     case 'purge-deleted': {
       if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
       const type = actionEl.dataset.type;
@@ -7750,14 +8044,16 @@ async function handleGlobalClick(event) {
       break;
     case 'remove-book': {
       const book = getBook(id);
+      const personal = (state.personalBooks || []).some((item) => String(item.id) === String(id));
       openConfirm({
-        title: 'إزالة من مكتبتي',
-        text: `سيُزال «${book ? book.title : 'الكتاب'}» من مكتبتك، ويبقى متاحاً في مكتبة النادي.`,
-        confirmLabel: 'إزالة',
+        title: 'إزالة من مكتبتي فقط',
+        text: personal
+          ? `سيُزال «${book ? book.title : 'الكتاب'}» من مكتبتك فقط، ولن يعود على أجهزتك الأخرى.`
+          : `سيُزال «${book ? book.title : 'الكتاب'}» من مكتبتك فقط، ويبقى متاحاً في مكتبة النادي كما هو.`,
+        confirmLabel: 'إزالة من مكتبتي',
         onConfirm: () => {
           state.myBooks = state.myBooks.filter((item) => item.bookId !== id);
-          /* إذا كان كتابًا خاصًا بمكتبتي، نحذفه من السحابة أيضًا */
-          const personal = (state.personalBooks || []).some((item) => String(item.id) === String(id));
+          /* كتابي الخاص: يُزال من مكتبتي في كل الأجهزة (لا يُحذف من مكتبة النادي) */
           if (personal) {
             state.personalBooks = state.personalBooks.filter((item) => String(item.id) !== String(id));
             deletePersonalBookFromCloud(id).catch(() => {});
@@ -7767,14 +8063,14 @@ async function handleGlobalClick(event) {
           renderLibrary();
           renderHome();
           renderProfile();
-          // Delete from cloud sheet so it does not reappear on another device
+          // Remove from cloud sheet so it does not reappear on another device
           if (currentMember && currentMember.id !== 'guest') {
             cloudRequest('deleteMyBook', { memberId: currentMember.id, bookId: id }).catch(() => {});
             // Also remove from sync cache so it is not re-uploaded
             syncState.myBooks.forEach((key) => { if (key.includes(String(id))) syncState.myBooks.delete(key); });
             persistSyncState(currentMember.id);
           }
-          toast('أُزيل الكتاب من مكتبتك', 'trash');
+          toast('أُزيل الكتاب من مكتبتك فقط', 'trash');
         }
       });
       break;

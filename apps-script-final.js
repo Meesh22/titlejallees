@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r21';
+const CODE_VERSION = 'jalees-2026-11-10-r28';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -56,7 +56,7 @@ function storeImage(value, prefix) {
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
-  return `https://lh3.googleusercontent.com/d/${file.getId()}=w1400`;
+  return `https://lh3.googleusercontent.com/d/${file.getId()}=w800`;
 }
 
 /* ---- ملفات عامة (صور وملفات PDF): تُرفع إلى Drive ويُخزَّن رابط ---- */
@@ -99,6 +99,68 @@ function storePdf(value, prefix) {
   return `https://drive.google.com/file/d/${file.getId()}/view`;
 }
 
+/* رفع قائمة صور (معرض صور اللقاء) إلى Drive وإرجاع روابطها كـ JSON */
+function storeImageList(list, prefix) {
+  if (!Array.isArray(list) || !list.length) return '';
+  const urls = [];
+  list.slice(0, 12).forEach((value) => {
+    try {
+      const url = storeImage(value, prefix);
+      if (url) urls.push(url);
+    } catch (error) { /* تجاهل الصورة الفاشلة */ }
+  });
+  return urls.length ? JSON.stringify(urls) : '';
+}
+
+/* قراءة روابط معرض الصور من خلية JSON */
+function parseImageList(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  if (raw.charAt(0) === '[') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string' && item) : [];
+    } catch (error) { return []; }
+  }
+  return [raw];
+}
+
+/* تصغير روابط الصور القديمة (w1400 → w800) لتقليل حجم الشيت وسرعة التحميل */
+function shrinkImageLinks() {
+  const ss = resolveSpreadsheet();
+  const report = { updated: 0, sheets: 0 };
+  const jobs = [
+    { sheet: getMembersSheet(ss), column: 13 },
+    { sheet: ss.getSheetByName(BOOKS_SHEET), column: 11 },
+    { sheet: getMeetingsSheet(ss), column: 7 },
+    { sheet: getRecordedMeetingsSheet(ss), column: 9 },
+    { sheet: getReadingTipsSheet(ss), column: 4 },
+    { sheet: getPersonalBooksSheet(ss), column: 8 },
+    { sheet: getSelectionQuotesSheet(ss), column: 10 },
+    { sheet: getWeeklyReportsSheet(ss), column: 5 }
+  ];
+  jobs.forEach((job) => {
+    const sheet = job.sheet;
+    if (!sheet) return;
+    report.sheets += 1;
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const range = sheet.getRange(2, job.column, lastRow - 1, 1);
+    const values = range.getValues();
+    let changed = 0;
+    values.forEach((row, index) => {
+      const value = String(row[0] || '');
+      if (!/lh3\.googleusercontent\.com\/d\/[^=]+=w1400/.test(value)) return;
+      const next = value.replace(/=w1400$/, '=w800');
+      range.getRange(index + 1, 1, 1, 1).setValue(next);
+      changed += 1;
+    });
+    report.updated += changed;
+  });
+  Logger.log(`shrinkImageLinks: ${JSON.stringify(report)}`);
+  return report;
+}
+
 /* ---- ملخصات الأعضاء للكتب التي قرؤوها ---- */
 function getBookSummariesSheet(ss) {
   return getDataSheet(ss, BOOK_SUMMARIES_SHEET, [
@@ -121,13 +183,14 @@ function getSelectionQuotesSheet(ss) {
 function getWeeklyReportsSheet(ss) {
   const sheet = getDataSheet(ss, WEEKLY_REPORTS_SHEET, [
     'id', 'weekNo', 'weekStart', 'weekEnd', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy',
-    'title', 'pages', 'participants', 'notes'
+    'title', 'pages', 'participants', 'notes', 'images'
   ]);
-  if (sheet.getMaxColumns() < 13) sheet.insertColumnsAfter(sheet.getMaxColumns(), 13 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 14) sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 10).getValue()) sheet.getRange(1, 10).setValue('title');
   if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('pages');
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('participants');
   if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('notes');
+  if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('images');
   return sheet;
 }
 
@@ -151,10 +214,14 @@ function getLikesSheet(ss) {
 
 /* ---- كتب العضو الخاصة (تنتقل بين الأجهزة) ---- */
 function getPersonalBooksSheet(ss) {
-  return getDataSheet(ss, PERSONAL_BOOKS_SHEET, [
+  const sheet = getDataSheet(ss, PERSONAL_BOOKS_SHEET, [
     'memberId', 'memberName', 'bookId', 'title', 'author', 'pages',
-    'coverColor', 'pdfUrl', 'createdAt'
+    'coverColor', 'pdfUrl', 'createdAt', 'coverColor2', 'coverImage'
   ]);
+  if (sheet.getMaxColumns() < 11) sheet.insertColumnsAfter(sheet.getMaxColumns(), 11 - sheet.getMaxColumns());
+  if (!sheet.getRange(1, 10).getValue()) sheet.getRange(1, 10).setValue('coverColor2');
+  if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('coverImage');
+  return sheet;
 }
 
 /* ترحيل الصور القديمة المخزّنة كنص طويل (base64) إلى Drive — تُشغَّل يدويًا مرة واحدة */
@@ -273,12 +340,13 @@ function getRecordedMeetingsSheet(ss) {
   let sheet = target.getSheetByName(RECORDED_MEETINGS_SHEET);
   if (!sheet) sheet = target.insertSheet(RECORDED_MEETINGS_SHEET);
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy', '', '', 'type', 'location']);
+    sheet.appendRow(['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy', '', '', 'type', 'location', 'images']);
   }
   ensureRecordedMeetingDeleteColumns(sheet);
-  if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 16) sheet.insertColumnsAfter(sheet.getMaxColumns(), 16 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('type');
   if (!sheet.getRange(1, 15).getValue()) sheet.getRange(1, 15).setValue('location');
+  if (!sheet.getRange(1, 16).getValue()) sheet.getRange(1, 16).setValue('images');
   return sheet;
 }
 
@@ -291,12 +359,13 @@ function ensureQuoteDeleteColumns(sheet) {
 }
 
 function ensureBookDeleteColumns(sheet) {
-  if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 16) sheet.insertColumnsAfter(sheet.getMaxColumns(), 16 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('coverImage');
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('deletedAt');
   if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('deletedBy');
   if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('year');
   if (!sheet.getRange(1, 15).getValue()) sheet.getRange(1, 15).setValue('pdfUrl');
+  if (!sheet.getRange(1, 16).getValue()) sheet.getRange(1, 16).setValue('coverColor2');
 }
 
 function ensureArticleDeleteColumns(sheet) {
@@ -829,8 +898,109 @@ function getLibraryCategoriesSheet(ss) {
   return sheet;
 }
 
+/* مخطط أعمدة كل تبويبة — نستخدمه لاكتشاف التبويبات المكرّرة */
+const SHEET_SIGNATURES = [
+  { name: 'الأعضاء', headers: ['id', 'name', 'email', 'passwordHash'] },
+  { name: 'الاقتباسات', headers: ['quote_text', 'author_name'] },
+  { name: 'المقالات', headers: ['excerpt', 'read', 'body'] },
+  { name: 'تقييمات الكتب', headers: ['bookId', 'rating', 'review'] },
+  { name: 'تصنيفات المكتبة', headers: ['category', 'booksSnapshot'] },
+  { name: 'طلبات الانضمام', headers: ['name', 'phone', 'decidedBy'] },
+  { name: 'استشارات الأعضاء', headers: ['question', 'answer'] },
+  { name: 'الملفات الشخصية', headers: ['memberId', 'goal', 'notifications'] },
+  { name: 'سجلات القراءة', headers: ['bookTitle', 'pages', 'date'] },
+  { name: 'مكتبات الأعضاء', headers: ['bookId', 'currentPage', 'status'] },
+  { name: 'كتبي الخاصة', headers: ['bookId', 'pages', 'coverColor'] },
+  { name: 'المكتبة', headers: ['title', 'author', 'category', 'coverColor'] },
+  { name: 'النوافذ القرائية', headers: ['title', 'body', 'image'] },
+  { name: 'أرشيف النادي', headers: ['duration', 'videoUrl'] },
+  { name: 'التقارير الأسبوعية', headers: ['weekNo', 'weekStart'] },
+  { name: 'الإعجابات', headers: ['targetId', 'memberName'] },
+  { name: 'مختارات الاقتباسات', headers: ['quoteText', 'authorName'] },
+  { name: 'القوائم القرائية', headers: ['books', 'cover'] },
+  { name: 'ملخصات الأعضاء', headers: ['bookTitle', 'summary'] }
+];
+
+function sheetHeaderList(sheet) {
+  try {
+    if (!sheet || sheet.getLastRow() < 1) return [];
+    const cols = Math.max(1, sheet.getMaxColumn());
+    return sheet.getRange(1, 1, 1, cols).getValues()[0].map((h) => String(h || '').trim());
+  } catch (error) {
+    return [];
+  }
+}
+
+/* هل هذا التبويب نسخة من تبويب معروف؟ (نكتشفه من أعمدة رأسه) */
+function detectSheetByHeaders(sheet) {
+  const headers = sheetHeaderList(sheet);
+  if (!headers.length) return '';
+  for (let i = 0; i < SHEET_SIGNATURES.length; i++) {
+    const signature = SHEET_SIGNATURES[i];
+    const found = signature.headers.every((name) => headers.indexOf(name) >= 0);
+    if (found) return signature.name;
+  }
+  return '';
+}
+
+/* تبويبة المكتبة — تُنشأ تلقائيًا إن كانت مفقودة (إصلاح ذاتي) */
+function getBooksSheet(ss) {
+  const target = resolveSpreadsheet(ss);
+  let sheet = target.getSheetByName(BOOKS_SHEET);
+  if (!sheet) {
+    /* ربما أُعيدت تسميته أثناء التنظيم — نبحث بمخطط الأعمدة */
+    const all = target.getSheets();
+    sheet = all.find((item) => detectSheetByHeaders(item) === BOOKS_SHEET) || null;
+    if (sheet) {
+      try { sheet.setName(BOOKS_SHEET); } catch (error) { /* تجاهل */ }
+    } else {
+      sheet = target.insertSheet(BOOKS_SHEET);
+      sheet.appendRow([
+        'id', 'memberId', 'memberName', 'title', 'author', 'category', 'coverColor',
+        'report', 'pages', 'createdAt', 'coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl', 'coverColor2'
+      ]);
+    }
+  }
+  ensureBookDeleteColumns(sheet);
+  return sheet;
+}
+
+/* مفتاح الكتاب — العنوان + المؤلف (لمنع التكرار) */
+function bookKey(title, author) {
+  const clean = (value) => String(value || '')
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return clean(title) + '|' + clean(author);
+}
+
+/* حذف الكتب المكرّرة (نفس العنوان والمؤلف) من تبويب المكتبة */
+function dedupeClubBooks(ss) {
+  const target = getBooksSheet(ss);
+  const lastRow = target.getLastRow();
+  if (lastRow < 2) return { removed: 0 };
+  const rows = target.getRange(2, 1, lastRow - 1, 5).getValues();
+  const seen = new Set();
+  const duplicates = [];
+  rows.forEach((row, index) => {
+    const key = bookKey(row[3], row[4]);
+    if (!key || key === '|') return;
+    if (seen.has(key)) { duplicates.push(index + 2); return; }
+    seen.add(key);
+  });
+  for (let i = duplicates.length - 1; i >= 0; i--) {
+    try { target.deleteRow(duplicates[i]); } catch (error) { /* تجاهل */ }
+  }
+  return { removed: duplicates.length };
+}
+
 function libraryBookSheets(ss) {
-  return [ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID)]
+  const target = resolveSpreadsheet(ss);
+  return [getBooksSheet(target), target.getSheetById(OLD_BOOKS_SHEET_ID)]
     .filter((sheet, index, list) => sheet && list.indexOf(sheet) === index);
 }
 
@@ -907,8 +1077,7 @@ function doPost(e) {
     }
 
     if (action === 'saveClubBook') {
-      const sheet = ss.getSheetByName(BOOKS_SHEET);
-      if (!sheet) throw new Error('لم أجد تبويب المكتبة');
+      const sheet = getBooksSheet(ss);
       ensureBookDeleteColumns(sheet);
 
       const bookId = String(data.id || '');
@@ -916,23 +1085,45 @@ function doPost(e) {
       const sources = [oldSheet, sheet]
         .filter((source, index, list) => source && list.indexOf(source) === index);
 
-      for (const source of sources) {
-        const lastRow = source.getLastRow();
-        if (lastRow < 2 || !bookId) continue;
-        const ids = source.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
-        if (ids.some(row => String(row[0]) === bookId)) {
-          return output({ success: true, message: 'الكتاب موجود مسبقًا' });
-        }
-      }
-
-      sheet.appendRow([
+      /* منع التكرار: نبحث بالمعرّف أولًا، ثم بالعنوان+المؤلف */
+      const wantedKey = bookKey(data.title, data.author);
+      const rowData = [
         data.id || '', data.memberId || '', data.memberName || '',
         data.title || '', data.author || '', data.category || '',
         data.coverColor || '', data.report || '', data.pages || 0,
         data.createdAt || Date.now(), storeImage(data.coverImage, 'book'),
-        '', '', data.year || '', data.pdfUrl || ''
-      ]);
-      return output({ success: true, message: 'تم حفظ الكتاب' });
+        '', '', data.year || '', data.pdfUrl || '', data.coverColor2 || ''
+      ];
+
+      for (const source of sources) {
+        const lastRow = source.getLastRow();
+        if (lastRow < 2) continue;
+        const rows = source.getRange(2, 1, lastRow - 1, 5).getValues();
+        let matchIndex = -1;
+        for (let i = 0; i < rows.length; i++) {
+          if (bookId && String(rows[i][0] || '') === bookId) { matchIndex = i; break; }
+          if (wantedKey && bookKey(rows[i][3], rows[i][4]) === wantedKey) { matchIndex = i; break; }
+        }
+        if (matchIndex < 0) continue;
+        const row = matchIndex + 2;
+        ensureBookDeleteColumns(source);
+        const keepId = String(rows[matchIndex][0] || rowData[0]);
+        source.getRange(row, 1, 1, rowData.length).setValues([[
+          keepId, rowData[1], rowData[2], rowData[3], rowData[4], rowData[5],
+          rowData[6], rowData[7], rowData[8], rowData[9], rowData[10],
+          rowData[11], rowData[12], rowData[13], rowData[14], rowData[15]
+        ]]);
+        return output({ success: true, id: keepId, message: 'تم تحديث الكتاب (بدون تكرار)' });
+      }
+
+      sheet.appendRow(rowData);
+      return output({ success: true, id: rowData[0], message: 'تم حفظ الكتاب' });
+    }
+
+    /* تنظيف الكتب المكرّرة في الشيت (نفس العنوان والمؤلف) */
+    if (action === 'dedupeClubBooks') {
+      const result = dedupeClubBooks(ss);
+      return output({ success: true, removed: result.removed, message: 'تم حذف ' + result.removed + ' كتاب مكرر' });
     }
 
     if (action === 'updateClubBook') {
@@ -941,8 +1132,7 @@ function doPost(e) {
       const coverImage = storeImage(data.coverImage, 'book');
 
       const oldSheet = ss.getSheetById(OLD_BOOKS_SHEET_ID);
-      const sources = [ss.getSheetByName(BOOKS_SHEET), oldSheet]
-        .filter((source, index, list) => source && list.indexOf(source) === index);
+      const sources = libraryBookSheets(ss);
 
       for (const source of sources) {
         const lastRow = source.getLastRow();
@@ -960,6 +1150,7 @@ function doPost(e) {
         source.getRange(row, 11).setValue(coverImage);
         source.getRange(row, 14).setValue(data.year || '');
         source.getRange(row, 15).setValue(data.pdfUrl || '');
+        source.getRange(row, 16).setValue(data.coverColor2 || '');
         return output({ success: true, message: 'تم تحديث بيانات الكتاب' });
       }
 
@@ -970,8 +1161,7 @@ function doPost(e) {
       const bookId = String(data.id || '');
       if (!bookId) throw new Error('معرّف الكتاب مطلوب');
       const deleting = action === 'deleteClubBook';
-      const sources = [ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID)]
-        .filter((source, index, list) => source && list.indexOf(source) === index);
+      const sources = libraryBookSheets(ss);
 
       for (const source of sources) {
         ensureBookDeleteColumns(source);
@@ -1221,7 +1411,7 @@ function doPost(e) {
       else if (type === 'article') sources.push(getArticlesSheet(ss));
       else if (type === 'recording') sources.push(getRecordedMeetingsSheet(ss));
       else if (type === 'shelf') sources.push(getLibraryCategoriesSheet(ss));
-      else if (type === 'book') sources.push(ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID));
+      else if (type === 'book') sources.push.apply(sources, libraryBookSheets(ss));
       else if (type === 'summary') sources.push(getBookSummariesSheet(ss));
       else if (type === 'consultation') sources.push(getConsultationsSheet(ss));
       else if (type === 'list') sources.push(getReadingListsSheet(ss));
@@ -1306,7 +1496,8 @@ function doPost(e) {
       const rowData = [
         reportId, weekNo, String(data.weekStart || ''), String(data.weekEnd || ''),
         image, Date.now(), data.by || 'مشرف', '', '',
-        data.title || '', Number(data.pages) || 0, Number(data.participants) || 0, data.notes || ''
+        data.title || '', Number(data.pages) || 0, Number(data.participants) || 0, data.notes || '',
+        storeImageList(data.images, 'weekly')
       ];
       if (target) {
         sheet.getRange(target, 1, 1, rowData.length).setValues([rowData]);
@@ -1433,7 +1624,8 @@ function doPost(e) {
       if (!memberId || !bookId) throw new Error('بيانات الكتاب ناقصة');
       const rowData = [
         memberId, data.memberName || '', bookId, data.title || '', data.author || '',
-        Number(data.pages) || 0, data.coverColor || '', data.pdfUrl || '', data.createdAt || Date.now()
+        Number(data.pages) || 0, data.coverColor || '', data.pdfUrl || '', data.createdAt || Date.now(),
+        data.coverColor2 || '', storeImage(data.coverImage, 'mybook')
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -2025,7 +2217,7 @@ function doPost(e) {
         recordId, data.title || '', data.description || '', data.recordedAt || '',
         data.speaker || '', Number(data.views) || 0, data.duration || '',
         data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || '',
-        '', '', data.type || '', data.location || ''
+        '', '', data.type || '', data.location || '', storeImageList(data.images, 'recording')
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -2262,7 +2454,7 @@ function doGet(e) {
       const sheet = getPersonalBooksSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2 || !memberId) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
       const mine = rows.filter(row => String(row[0] || '') === memberId).map(row => ({
         id: String(row[2] || ''),
         bookId: String(row[2] || ''),
@@ -2271,7 +2463,9 @@ function doGet(e) {
         pages: Number(row[5]) || 0,
         coverColor: String(row[6] || ''),
         pdfUrl: String(row[7] || ''),
-        createdAt: row[8] || null
+        createdAt: row[8] || null,
+        coverColor2: String(row[9] || ''),
+        coverImage: String(row[10] || '')
       })).filter(item => item.id);
       return output({ success: true, data: mine });
     }
@@ -2350,13 +2544,14 @@ function doGet(e) {
       const sheet = getWeeklyReportsSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
       const reports = rows.filter(row => row[0] && !row[7]).map(row => ({
         id: String(row[0]), weekNo: Number(row[1]) || 0,
         weekStart: dateKeyOf(row[2]), weekEnd: dateKeyOf(row[3]),
         image: String(row[4]), createdAt: row[5],
         title: String(row[9] || ''), pages: Number(row[10]) || 0,
-        participants: Number(row[11]) || 0, notes: String(row[12] || '')
+        participants: Number(row[11]) || 0, notes: String(row[12] || ''),
+        images: parseImageList(row[13])
       }));
       reports.sort((a, b) => b.weekNo - a.weekNo);
       return output({ success: true, data: reports });
@@ -2535,27 +2730,30 @@ function doGet(e) {
     }
 
     if (action === 'getClubBooks') {
-      const sources = [
-        ss.getSheetById(OLD_BOOKS_SHEET_ID),
-        ss.getSheetByName(BOOKS_SHEET)
-      ].filter((sheet, index, list) => sheet && list.indexOf(sheet) === index);
+      const sources = libraryBookSheets(ss);
 
       const booksById = {};
+      const seenKeys = new Set();
       const deletedIds = new Set();
       sources.forEach(sheet => {
         ensureBookDeleteColumns(sheet);
         const lastRow = sheet.getLastRow();
         if (lastRow < 2) return;
-        const rows = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
+        const rows = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
         rows.forEach((row, index) => {
           if (!row[3]) return;
           const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
           if (row[11]) { deletedIds.add(id); return; }
+          /* منع التكرار: نفس العنوان والمؤلف يظهر مرة واحدة فقط */
+          const key = bookKey(row[3], row[4]);
+          if (key && key !== '|' && seenKeys.has(key)) return;
+          if (key && key !== '|') seenKeys.add(key);
           booksById[id] = {
             id, memberId: row[1], memberName: row[2], title: row[3],
             author: row[4], category: row[5], coverColor: row[6],
             report: row[7], pages: row[8], createdAt: row[9],
-            coverImage: row[10] || '', year: row[13] || '', pdfUrl: row[14] || ''
+            coverImage: row[10] || '', year: row[13] || '', pdfUrl: row[14] || '',
+            coverColor2: row[15] || ''
           };
         });
       });
@@ -2629,7 +2827,7 @@ function doGet(e) {
       const sheet = getRecordedMeetingsSheet(ss);
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return output({ success: true, data: [], deletedIds: [] });
-      const rows = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
+      const rows = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
       const recordings = [];
       const deletedIds = [];
       rows.forEach(row => {
@@ -2639,7 +2837,7 @@ function doGet(e) {
           id: row[0], title: row[1], description: row[2], recordedAt: row[3],
           speaker: row[4], views: Number(row[5]) || 0, duration: row[6],
           videoUrl: row[7], image: row[8], createdAt: row[9], createdBy: row[10],
-          type: row[13] || '', location: row[14] || ''
+          type: row[13] || '', location: row[14] || '', images: parseImageList(row[15])
         });
       });
       recordings.sort((a, b) => {
@@ -2667,8 +2865,7 @@ function doGet(e) {
         });
       }
 
-      [ss.getSheetByName(BOOKS_SHEET), ss.getSheetById(OLD_BOOKS_SHEET_ID)]
-        .filter((sheet, index, list) => sheet && list.indexOf(sheet) === index)
+      libraryBookSheets(ss)
         .forEach(sheet => {
           ensureBookDeleteColumns(sheet);
           const lastRow = sheet.getLastRow();
@@ -2855,6 +3052,32 @@ function sheetHasNoData(sheet) {
   }
 }
 
+/* دمج بيانات تبويب في آخر (مطابقة الأعمدة بالاسم) */
+function mergeSheetInto(destination, source) {
+  try {
+    const sourceRows = source.getDataRange().getValues();
+    const targetRows = destination.getDataRange().getValues();
+    if (!sourceRows.length) return 0;
+    const targetHeaders = (targetRows[0] || []).map((h) => String(h || '').trim());
+    const sourceHeaders = (sourceRows[0] || []).map((h) => String(h || '').trim());
+    const map = sourceHeaders.map((h, index) => {
+      const pos = targetHeaders.indexOf(h);
+      return pos >= 0 ? pos : index;
+    });
+    const existingKeys = new Set(targetRows.slice(1).map((row) => row.map((c) => String(c === null ? '' : c)).join('|')));
+    const additions = sourceRows.slice(1)
+      .map((row) => map.map((pos) => (row[pos] === undefined ? '' : row[pos])))
+      .filter((row) => row.some((c) => String(c === null ? '' : c).trim() !== ''))
+      .filter((row) => !existingKeys.has(row.map((c) => String(c === null ? '' : c)).join('|')));
+    if (additions.length) {
+      destination.getRange(destination.getLastRow() + 1, 1, additions.length, additions[0].length).setValues(additions);
+    }
+    return additions.length;
+  } catch (error) {
+    return 0;
+  }
+}
+
 function organizeSheets(ss) {
   const target = resolveSpreadsheet(ss);
   const report = [];
@@ -2867,22 +3090,11 @@ function organizeSheets(ss) {
 
   sheets.slice().forEach((sheet) => {
     const currentName = sheet.getName();
-    /* تبويبة المكتبة القديمة تُقرأ بمعرّفها — نُبقيها باسم واضح ولا ندمجها */
-    if (sheet.getSheetId() === OLD_BOOKS_SHEET_ID) {
-      try {
-        if (currentName !== 'المكتبة — نسخة قديمة') {
-          sheet.setName('المكتبة — نسخة قديمة');
-          renamed.push(currentName + ' → المكتبة — نسخة قديمة');
-        }
-      } catch (error) { /* تجاهل */ }
-      return;
-    }
     if (isJunkSheetName(currentName)) {
       if (sheetHasNoData(sheet)) {
         target.deleteSheet(sheet);
         deleted.push(currentName + ' (فارغ)');
       } else {
-        /* فيه بيانات — ننقله لمسمّى واضح بدل حذفه */
         try {
           sheet.setName('أرشيف — ' + currentName);
           renamed.push(currentName + ' → أرشيف — ' + currentName);
@@ -2890,38 +3102,25 @@ function organizeSheets(ss) {
       }
       return;
     }
-    const canonical = canonicalSheetName(currentName);
+    /* الاسم القياسي: من الاسم نفسه أو من مخطط الأعمدة (للتكرارات ذات الأسماء الملخبطة) */
+    const canonical = canonicalSheetName(currentName) || detectSheetByHeaders(sheet);
     if (!canonical) {
+      /* تبويب مجهول وفارغ — نحذفه */
+      if (sheetHasNoData(sheet)) {
+        target.deleteSheet(sheet);
+        deleted.push(currentName + ' (فارغ)');
+        return;
+      }
       keptUnknown.push(currentName);
       return;
     }
     if (canonical === currentName) return;
-    /* توجد تبويبة قياسية بنفس الاسم؟ ندمج البيانات ثم نحذف المكرّر */
     const existing = target.getSheetByName(canonical);
     if (existing && existing.getSheetId() !== sheet.getSheetId()) {
-      try {
-        const sourceRows = sheet.getDataRange().getValues();
-        const targetRows = existing.getDataRange().getValues();
-        if (sourceRows.length > 1) {
-          const targetHeaders = (targetRows[0] || []).map((h) => String(h || '').trim());
-          const sourceHeaders = (sourceRows[0] || []).map((h) => String(h || '').trim());
-          const map = sourceHeaders.map((h, index) => {
-            const pos = targetHeaders.indexOf(h);
-            return pos >= 0 ? pos : index;
-          });
-          const existingKeys = new Set(targetRows.slice(1).map((row) => row.map((c) => String(c === null ? '' : c)).join('|')));
-          const additions = sourceRows.slice(1)
-            .map((row) => map.map((pos) => (row[pos] === undefined ? '' : row[pos])))
-            .filter((row) => row.some((c) => String(c === null ? '' : c).trim() !== ''))
-            .filter((row) => !existingKeys.has(row.map((c) => String(c === null ? '' : c)).join('|')));
-          if (additions.length) {
-            existing.getRange(existing.getLastRow() + 1, 1, additions.length, additions[0].length).setValues(additions);
-          }
-          target.deleteSheet(sheet);
-          deleted.push(currentName + ' (مكرّر → ' + canonical + ')');
-          return;
-        }
-      } catch (error) { /* تجاهل */ }
+      const added = mergeSheetInto(existing, sheet);
+      target.deleteSheet(sheet);
+      deleted.push(currentName + ' (مكرّر → ' + canonical + (added ? ' · ' + added + ' صف' : '') + ')');
+      return;
     }
     try {
       sheet.setName(canonical);
@@ -2932,7 +3131,15 @@ function organizeSheets(ss) {
   if (renamed.length) report.push('أُعيدت تسمية: ' + renamed.join('، '));
   if (deleted.length) report.push('حُذف: ' + deleted.join('، '));
 
-  /* 2) التبويبات القياسية بالترتيب، وبعدها أي تبويب غير معروف */
+  /* 2) ضمان وجود تبويب المكتبة (الأساسي) */
+  if (!target.getSheetByName(BOOKS_SHEET)) {
+    try {
+      getBooksSheet(target);
+      report.push('أُنشئ: ' + BOOKS_SHEET);
+    } catch (error) { /* تجاهل */ }
+  }
+
+  /* 3) التبويبات القياسية بالترتيب، وبعدها أي تبويب غير معروف */
   const ordered = [];
   SHEET_ORDER.forEach((name) => {
     const sheet = target.getSheetByName(name);
@@ -2976,6 +3183,44 @@ function describeSpreadsheet() {
    دالة تجهيز تُشغَّل يدويًا مرة واحدة من محرر Apps Script (Run)
    تنشئ أعمدة الحذف وسنة النشر، وتُعيد تلوين الصفوف المحذوفة بالأحمر.
    ========================================================================== */
+/* إصلاح رؤوس الأعمدة التالفة (تكرار أو نصوص مشوّهة) */
+function repairSheetHeaders(ss) {
+  const target = resolveSpreadsheet(ss);
+  const fixes = [];
+  const apply = (name, headers) => {
+    const sheet = target.getSheetByName(name);
+    if (!sheet) return;
+    try {
+      const current = sheetHeaderList(sheet);
+      const width = Math.max(current.length, headers.length);
+      const changed = headers.some((h, i) => String(current[i] || '') !== h);
+      if (!changed) return;
+      const row = [];
+      for (let i = 0; i < width; i++) row.push(headers[i] || '');
+      sheet.getRange(1, 1, 1, width).setValues([row]);
+      fixes.push(name);
+    } catch (error) { /* تجاهل */ }
+  };
+  apply(QUOTES_SHEET, ['created_at', 'author_name', 'page_number', 'book_title', 'quote_text', 'id', 'deletedAt', 'deletedBy', 'bookAuthor']);
+  apply(ARTICLES_SHEET, ['id', 'memberId', 'memberName', 'title', 'category', 'body', 'excerpt', 'read', 'createdAt', 'deletedAt', 'deletedBy']);
+  apply(MEETINGS_SHEET, ['id', 'title', 'description', 'date', 'time', 'location', 'image', 'createdAt', 'createdBy', 'imagePosX', 'imagePosY', 'imageScale']);
+  apply(RECORDED_MEETINGS_SHEET, ['id', 'title', 'description', 'recordedAt', 'speaker', 'views', 'duration', 'videoUrl', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy', 'type', 'location', 'images']);
+  apply(SELECTION_QUOTES_SHEET, ['id', 'text', 'book', 'bookAuthor', 'authorName', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy', 'image', 'quoteId']);
+  apply(BOOK_SUMMARIES_SHEET, ['id', 'memberId', 'memberName', 'bookTitle', 'bookAuthor', 'summary', 'createdAt', 'deletedAt', 'deletedBy']);
+  apply(READING_LISTS_SHEET, ['id', 'title', 'description', 'books', 'cover', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy']);
+  apply(WEEKLY_REPORTS_SHEET, ['id', 'weekNo', 'weekStart', 'weekEnd', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy', 'title', 'pages', 'participants', 'notes']);
+  apply(LIKES_SHEET, ['type', 'targetId', 'memberId', 'memberName', 'createdAt']);
+  apply(PERSONAL_BOOKS_SHEET, ['memberId', 'memberName', 'bookId', 'title', 'author', 'pages', 'coverColor', 'pdfUrl', 'createdAt', 'coverColor2', 'coverImage']);
+  apply(READING_TIPS_SHEET, ['id', 'title', 'body', 'image', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy']);
+  apply(CONSULTATIONS_SHEET, ['id', 'memberId', 'memberName', 'question', 'askedAt', 'answer', 'answeredById', 'answeredBy', 'answeredAt']);
+  apply(ENTRIES_SHEET, ['id', 'memberId', 'memberName', 'bookId', 'bookTitle', 'pages', 'date', 'createdAt']);
+  apply(PROFILES_SHEET, ['memberId', 'name', 'role', 'joined', 'goal', 'lastWeekPages', 'notifications']);
+  apply(BOOK_RATINGS_SHEET, ['id', 'bookId', 'memberId', 'memberName', 'rating', 'review', 'createdAt']);
+  apply(LIBRARY_CATEGORIES_SHEET, ['category', 'deletedAt', 'deletedBy', 'booksSnapshot']);
+  apply(JOIN_REQUESTS_SHEET, ['name', 'phone', 'note', 'ts', 'status', 'decidedAt', 'decidedBy']);
+  return fixes;
+}
+
 function setupJaleesSheets() {
   const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
   const report = [];
@@ -2990,17 +3235,29 @@ function setupJaleesSheets() {
   };
 
   /* أولًا: توحيد الأسماء وترتيب التبويبات (قبل إنشاء أي تبويب جديد) */
-  /* أولًا: توحيد الأسماء وترتيب التبويبات (قبل إنشاء أي تبويب جديد) */
+  /* أولًا: إصلاح رؤوس الأعمدة (حتى نكتشف التكرارات بمخطط الأعمدة) */
+  step('إصلاح رؤوس الأعمدة', () => {
+    const fixed = repairSheetHeaders(ss);
+    return fixed.length ? fixed.join('، ') : 'سليمة';
+  });
+
+  /* ثانيًا: توحيد الأسماء وترتيب التبويبات */
   step('تنظيم التبويبات', () => {
     const result = organizeSheets(ss);
     return result.report.join(' · ');
   });
 
+  step('إصلاح رؤوس الأعمدة (مرة أخرى بعد التنظيم)', () => {
+    const fixed = repairSheetHeaders(ss);
+    return fixed.length ? fixed.join('، ') : 'سليمة';
+  });
+
   step(BOOKS_SHEET, () => {
-    const books = ss.getSheetByName(BOOKS_SHEET);
-    if (!books) return 'غير موجود';
-    ensureBookDeleteColumns(books);
-    books.getRange(1, 11, 1, 5).setValues([['coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl']]);
+    const books = getBooksSheet(ss);
+    books.getRange(1, 1, 1, 16).setValues([[
+      'id', 'memberId', 'memberName', 'title', 'author', 'category', 'coverColor',
+      'report', 'pages', 'createdAt', 'coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl', 'coverColor2'
+    ]]);
     repaintDeletedRows(books, 12, 14);
     return books.getMaxColumns() + ' عمود';
   });
@@ -3112,6 +3369,16 @@ function setupJaleesSheets() {
   step(BOOK_SUMMARIES_SHEET, () => {
     const summaries = getBookSummariesSheet(ss);
     return summaries.getMaxColumns() + ' عمود';
+  });
+
+  step('تنظيف الكتب المكرّرة', () => {
+    const result = dedupeClubBooks(ss);
+    return result.removed ? 'حُذف ' + result.removed + ' مكرر' : 'لا تكرار';
+  });
+
+  step('تصغير روابط الصور', () => {
+    const result = shrinkImageLinks();
+    return result.updated + ' رابط مصغّر';
   });
 
   step('الحفظ النهائي', () => {
