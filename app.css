@@ -2919,8 +2919,14 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 }
 .recorded-meeting-media { position: relative; }
 .archive-gallery-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.gallery-thumb { position: relative; width: 56px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.gallery-thumb { position: relative; width: 56px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); cursor: pointer; }
 .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-thumb.is-first { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(197, 155, 99, .35); }
+.gallery-first {
+  position: absolute; inset-block-end: 0; inset-inline: 0;
+  padding: 2px 0; text-align: center; background: rgba(197, 155, 99, .92); color: #14281E;
+  font-size: 6.5px; font-weight: 850;
+}
 .gallery-thumb button {
   position: absolute; inset-block-start: 2px; inset-inline-end: 2px;
   width: 18px; height: 18px; border-radius: 50%; border: 0;

@@ -817,6 +817,7 @@ async function saveArticleToCloud(member, article) {
 async function updateClubBookToCloud(book) {
   return cloudRequest('updateClubBook', {
     id: book.id,
+    key: bookKey(book.title, book.author),
     title: book.title,
     author: book.author,
     category: book.category,
@@ -1505,18 +1506,7 @@ function openRecordedMeetingComposer() {
     const status = root.querySelector('#recorded-image-status');
 
     const renderGallery = () => {
-      if (!gallery) return;
-      gallery.innerHTML = galleryImages.map((item, index) => `
-        <span class="gallery-thumb">
-          <img src="${esc(item)}" alt="صورة ${toAr(index + 1)}">
-          <button type="button" data-gallery-remove="${index}" aria-label="إزالة الصورة">×</button>
-        </span>`).join('');
-      gallery.querySelectorAll('[data-gallery-remove]').forEach((button) => {
-        button.addEventListener('click', () => {
-          galleryImages.splice(Number(button.dataset.galleryRemove), 1);
-          renderGallery();
-        });
-      });
+      bindGalleryPicker(gallery, galleryImages, renderGallery);
     };
 
     fileInput.addEventListener('change', async () => {
@@ -1532,7 +1522,7 @@ function openRecordedMeetingComposer() {
       }
       renderGallery();
       status.textContent = galleryImages.length
-        ? `${toAr(galleryImages.length)} صورة جاهزة — ستظهر كلها في صفحة اللقاء`
+        ? `${toAr(galleryImages.length)} صورة جاهزة — اضغط على الصورة لتجعلها الأولى`
         : 'تعذر تجهيز الصور';
     });
 
@@ -5789,6 +5779,33 @@ function openBookSummaryComposer() {
 }
 
 /* ===== التقرير الأسبوعي ===== */
+/* ===== منتقي الصور: ترتيب الصور — الأولى هي التي تظهر أولاً ===== */
+function bindGalleryPicker(gallery, images, onChange) {
+  if (!gallery) return;
+  gallery.innerHTML = images.map((item, index) => `
+    <span class="gallery-thumb${index === 0 ? ' is-first' : ''}" data-gallery-index="${index}" title="اضغط على الصورة لتجعلها الأولى">
+      <img src="${esc(item)}" alt="صورة ${toAr(index + 1)}">
+      ${index === 0 ? '<span class="gallery-first">الأولى</span>' : ''}
+      <button type="button" data-gallery-remove="${index}" aria-label="إزالة الصورة">×</button>
+    </span>`).join('');
+  gallery.querySelectorAll('[data-gallery-remove]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      images.splice(Number(button.dataset.galleryRemove), 1);
+      onChange();
+    });
+  });
+  gallery.querySelectorAll('[data-gallery-index]').forEach((thumb) => {
+    thumb.addEventListener('click', () => {
+      const index = Number(thumb.dataset.galleryIndex);
+      if (index <= 0) return;
+      const moved = images.splice(index, 1)[0];
+      images.unshift(moved);
+      onChange();
+    });
+  });
+}
+
 /* ===== التقارير الأسبوعية: صور بملء شاشة الجوال ===== */
 async function openWeeklyReportSheet() {
   weeklyReportsMode = 'recent';
@@ -5921,18 +5938,7 @@ function openWeeklyReportComposer() {
     const status = root.querySelector('#weekly-status');
 
     const renderGallery = () => {
-      if (!gallery) return;
-      gallery.innerHTML = galleryImages.map((item, index) => `
-        <span class="gallery-thumb">
-          <img src="${esc(item)}" alt="صورة ${toAr(index + 1)}">
-          <button type="button" data-gallery-remove="${index}" aria-label="إزالة الصورة">×</button>
-        </span>`).join('');
-      gallery.querySelectorAll('[data-gallery-remove]').forEach((button) => {
-        button.addEventListener('click', () => {
-          galleryImages.splice(Number(button.dataset.galleryRemove), 1);
-          renderGallery();
-        });
-      });
+      bindGalleryPicker(gallery, galleryImages, renderGallery);
     };
 
     fileInput.addEventListener('change', async () => {
@@ -5948,7 +5954,7 @@ function openWeeklyReportComposer() {
       }
       renderGallery();
       status.textContent = galleryImages.length
-        ? `${toAr(galleryImages.length)} صورة جاهزة`
+        ? `${toAr(galleryImages.length)} صورة جاهزة — اضغط على الصورة لتجعلها الأولى`
         : 'تعذر تجهيز الصور';
     });
 
@@ -8174,7 +8180,7 @@ async function handleGlobalClick(event) {
         text: `سيختفي «${book.title}» من مكتبة النادي ويمكن استعادته لاحقًا من سلة المحذوفات.`,
         confirmLabel: 'نقل للسلة',
         onConfirm: async () => {
-          const result = await cloudRequest('deleteClubBook', { id, deletedBy: currentMember.name });
+          const result = await cloudRequest('deleteClubBook', { id, key: bookKey(book.title, book.author), deletedBy: currentMember.name });
           if (!result || result.success === false) {
             toast('تعذر نقل الكتاب إلى سلة المحذوفات؛ لم نحذفه من الموقع.', 'info');
             return;

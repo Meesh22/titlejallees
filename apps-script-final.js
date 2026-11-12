@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r28';
+const CODE_VERSION = 'jalees-2026-11-10-r30';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -1134,27 +1134,32 @@ function doPost(e) {
       const oldSheet = ss.getSheetById(OLD_BOOKS_SHEET_ID);
       const sources = libraryBookSheets(ss);
 
+      let touched = 0;
       for (const source of sources) {
         const lastRow = source.getLastRow();
         if (lastRow < 2) continue;
-        const ids = source.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
-        const matchIndex = ids.findIndex((row, index) => bookIdForRow(source, row[0], index) === bookId);
-        if (matchIndex < 0) continue;
+        const rows = source.getRange(2, 1, lastRow - 1, 5).getValues();
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const rowId = bookIdForRow(source, rows[i][0], i);
+          const sameId = rowId === bookId;
+          const sameKey = data.key ? bookKey(rows[i][3], rows[i][4]) === String(data.key) : false;
+          if (!sameId && !sameKey) continue;
 
-        const row = matchIndex + 2;
-        ensureBookDeleteColumns(source);
-        source.getRange(row, 4, 1, 6).setValues([[
-          data.title || '', data.author || '', data.category || '',
-          data.coverColor || '', data.report || '', Number(data.pages) || 0
-        ]]);
-        source.getRange(row, 11).setValue(coverImage);
-        source.getRange(row, 14).setValue(data.year || '');
-        source.getRange(row, 15).setValue(data.pdfUrl || '');
-        source.getRange(row, 16).setValue(data.coverColor2 || '');
-        return output({ success: true, message: 'تم تحديث بيانات الكتاب' });
+          const row = i + 2;
+          ensureBookDeleteColumns(source);
+          source.getRange(row, 4, 1, 6).setValues([[
+            data.title || '', data.author || '', data.category || '',
+            data.coverColor || '', data.report || '', Number(data.pages) || 0
+          ]]);
+          source.getRange(row, 11).setValue(coverImage);
+          source.getRange(row, 14).setValue(data.year || '');
+          source.getRange(row, 15).setValue(data.pdfUrl || '');
+          source.getRange(row, 16).setValue(data.coverColor2 || '');
+          touched += 1;
+        }
       }
-
-      throw new Error('لم أجد الكتاب المطلوب في المكتبة');
+      if (!touched) throw new Error('لم أجد الكتاب المطلوب في المكتبة');
+      return output({ success: true, updated: touched, message: 'تم تحديث بيانات الكتاب' });
     }
 
     if (action === 'deleteClubBook' || action === 'restoreClubBook') {
@@ -1163,19 +1168,25 @@ function doPost(e) {
       const deleting = action === 'deleteClubBook';
       const sources = libraryBookSheets(ss);
 
+      let touched = 0;
       for (const source of sources) {
         ensureBookDeleteColumns(source);
         const lastRow = source.getLastRow();
         if (lastRow < 2) continue;
-        const ids = source.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
-        const matchIndex = ids.findIndex((row, index) => bookIdForRow(source, row[0], index) === bookId);
-        if (matchIndex < 0) continue;
-        const row = matchIndex + 2;
-        source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
-        paintDeletedRow(source, row, deleting, 14);
-        return output({ success: true, message: deleting ? 'نُقل الكتاب إلى سلة المحذوفات' : 'تمت استعادة الكتاب' });
+        const rows = source.getRange(2, 1, lastRow - 1, 5).getValues();
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const rowId = bookIdForRow(source, rows[i][0], i);
+          const sameId = rowId === bookId;
+          const sameKey = data.key ? bookKey(rows[i][3], rows[i][4]) === String(data.key) : false;
+          if (!sameId && !sameKey) continue;
+          const row = i + 2;
+          source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
+          paintDeletedRow(source, row, deleting, 14);
+          touched += 1;
+        }
       }
-      throw new Error('لم أجد الكتاب المطلوب');
+      if (!touched) throw new Error('لم أجد الكتاب المطلوب');
+      return output({ success: true, updated: touched, message: deleting ? 'نُقل الكتاب إلى سلة المحذوفات' : 'تمت استعادة الكتاب' });
     }
 
     if (action === 'saveJoinRequest') {
@@ -2735,19 +2746,37 @@ function doGet(e) {
       const booksById = {};
       const seenKeys = new Set();
       const deletedIds = new Set();
+
+      /* 1) المحذوف من كل النسخ أولًا — حتى لا يظهر كتاب محذوف من نسخة أخرى */
       sources.forEach(sheet => {
         ensureBookDeleteColumns(sheet);
+        const lastRow = sheet.getLastRow();
+        if (lastRow < 2) return;
+        const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+        rows.forEach((row, index) => {
+          if (!row[3] || !row[11]) return;
+          const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
+          deletedIds.add(id);
+          deletedIds.add(bookKey(row[3], row[4]));
+        });
+      });
+
+      /* 2) ثم بقية الكتب */
+      sources.forEach(sheet => {
         const lastRow = sheet.getLastRow();
         if (lastRow < 2) return;
         const rows = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
         rows.forEach((row, index) => {
           if (!row[3]) return;
           const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
-          if (row[11]) { deletedIds.add(id); return; }
+          if (row[11]) return;
           /* منع التكرار: نفس العنوان والمؤلف يظهر مرة واحدة فقط */
           const key = bookKey(row[3], row[4]);
-          if (key && key !== '|' && seenKeys.has(key)) return;
-          if (key && key !== '|') seenKeys.add(key);
+          if (key && key !== '|') {
+            if (deletedIds.has(key)) return;
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
+          }
           booksById[id] = {
             id, memberId: row[1], memberName: row[2], title: row[3],
             author: row[4], category: row[5], coverColor: row[6],
@@ -3078,6 +3107,62 @@ function mergeSheetInto(destination, source) {
   }
 }
 
+/* دمج كتب: يكمل الحقول الفارغة من النسخة الأخرى (الملف/PDF/التقرير) */
+function mergeBooksSheetInto(destination, source) {
+  const destRows = destination.getDataRange().getValues();
+  const destHeaders = (destRows[0] || []).map((h) => String(h || '').trim());
+  const srcRows = source.getDataRange().getValues();
+  const srcHeaders = (srcRows[0] || []).map((h) => String(h || '').trim());
+  const destTitle = destHeaders.indexOf('title');
+  const destAuthor = destHeaders.indexOf('author');
+  const srcTitle = srcHeaders.indexOf('title');
+  const srcAuthor = srcHeaders.indexOf('author');
+  if (destTitle < 0 || destAuthor < 0 || srcTitle < 0 || srcAuthor < 0) return { added: 0 };
+
+  const byKey = new Map();
+  destRows.slice(1).forEach((row, index) => {
+    const key = bookKey(row[destTitle], row[destAuthor]);
+    if (key && key !== '|') byKey.set(key, index + 2);
+  });
+
+  let completed = 0;
+  const additions = [];
+  srcRows.slice(1).forEach((row) => {
+    const key = bookKey(row[srcTitle], row[srcAuthor]);
+    const existingRow = byKey.get(key);
+    if (existingRow !== undefined) {
+      const values = destination.getRange(existingRow, 1, 1, destHeaders.length).getValues()[0].slice();
+      let changed = false;
+      destHeaders.forEach((header, index) => {
+        const sourceIndex = srcHeaders.indexOf(header);
+        if (sourceIndex < 0) return;
+        const sourceValue = row[sourceIndex];
+        const empty = values[index] === undefined || values[index] === null || String(values[index]).trim() === '';
+        if (empty && sourceValue !== undefined && sourceValue !== null && String(sourceValue).trim() !== '') {
+          values[index] = sourceValue;
+          changed = true;
+        }
+      });
+      if (changed) {
+        destination.getRange(existingRow, 1, 1, values.length).setValues([values]);
+        completed += 1;
+      }
+      return;
+    }
+    additions.push(row);
+  });
+
+  if (additions.length) {
+    const mapped = additions.map((row) => destHeaders.map((header, index) => {
+      const sourceIndex = srcHeaders.indexOf(header);
+      if (sourceIndex >= 0) return row[sourceIndex];
+      return row[index] !== undefined ? row[index] : '';
+    }));
+    destination.getRange(destination.getLastRow() + 1, 1, mapped.length, destHeaders.length).setValues(mapped);
+  }
+  return { added: additions.length, completed: completed };
+}
+
 function organizeSheets(ss) {
   const target = resolveSpreadsheet(ss);
   const report = [];
@@ -3117,7 +3202,14 @@ function organizeSheets(ss) {
     if (canonical === currentName) return;
     const existing = target.getSheetByName(canonical);
     if (existing && existing.getSheetId() !== sheet.getSheetId()) {
-      const added = mergeSheetInto(existing, sheet);
+      let added = 0;
+      if (canonical === BOOKS_SHEET) {
+        const result = mergeBooksSheetInto(existing, sheet);
+        added = result.added;
+        if (result.completed) report.push('اكتملت بيانات ' + result.completed + ' كتاب في ' + canonical);
+      } else {
+        added = mergeSheetInto(existing, sheet);
+      }
       target.deleteSheet(sheet);
       deleted.push(currentName + ' (مكرّر → ' + canonical + (added ? ' · ' + added + ' صف' : '') + ')');
       return;
