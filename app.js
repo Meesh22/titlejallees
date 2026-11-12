@@ -148,8 +148,8 @@ function getLocalSharedQuotes() {
       if (Array.isArray(parsed)) stored = parsed;
     }
   } catch (e) {}
-  /* ندمج كل المصادر ثم نرتّب بحيث يظهر الأحدث أولاً */
-  return mergeQuoteLists(stored, QUOTE_SEED.map((q) => ({ ...q })), collectAllMemberQuotes());
+  /* الشيت هو المصدر: لا اقتباسات مضمّنة في التطبيق */
+  return mergeQuoteLists(stored, collectAllMemberQuotes());
 }
 
 function saveLocalSharedQuotes(quotes) {
@@ -538,63 +538,19 @@ const ARTICLE_CATEGORIES = [
   'أخرى'
 ];
 
-const ARTICLE_SEED = [
-  {
-    id: 'a1', title: 'كيف نقرأ الكتاب الواحد ثلاث مرات؟', category: 'قراءة', read: 5,
-    ...seedAuthor('m27'), time: 'قبل ٣ ساعات',
-    excerpt: 'ليست إعادة القراءة تكراراً… بل اكتشافاً لطبقات لم نرها في المرة الأولى.',
-    body: 'أول قراءة هي قراءة الاكتشاف. نندفع مع الصفحات لنعرف ماذا سيحدث، ونلتقط الفكرة العامة، ونغلق الكتاب وقد صار لنا رأي أولي… لكنه رأي متعجل.\n\nالقراءة الثانية هي قراءة الخريطة. نعود إلى الفصول التي أحببناها، ونتوقف عند الجمل التي مررنا عليها سريعاً، ونبدأ في رؤية كيف بُني الكتاب: أين يكرر المؤلف فكرته؟ وأين يخالف نفسه؟\n\nأما القراءة الثالثة فهي قراءة الحوار. نقرأ ونحن نكتب على الهامش، نسأل الكاتب، ونعترض، ونربط بما قرأناه في كتب أخرى. عندها يتوقف الكتاب عن كونه نصاً خارجياً، ويصبح جزءاً من تفكيرنا.\n\nليست كل الكتب تستحق ثلاث قراءات، لكن أجملها يستحق أن يعود إليه القارئ بعد سنة، فيجده مختلفاً… لا لأن الكتاب تغيّر، بل لأننا تغيّرنا.'
-  },
-  {
-    id: 'a2', title: 'القراءة البطيئة: حين يصير التأمل جزءاً من الكتاب', category: 'قراءة', read: 4,
-    ...seedAuthor('m19'), time: 'أمس',
-    excerpt: 'في زمن يعدّ الصفحات، قد تكون أجمل قراءة هي التي نتوقف فيها أكثر مما نتقدم.',
-    body: 'كبرتُ على فكرة أن القراءة إنجاز: عدد الكتب، عدد الصفحات، قائمة تنتهي ثم تبدأ أخرى. ثم اكتشفت أن بعض الكتب لا تريد منك أن تصل إلى صفحتها الأخيرة بسرعة.\n\nالقراءة البطيئة ليست بطئاً في الفهم، بل هي سماح للجملة بأن تعمل داخلك. تعيد قراءة الفقرة، تغلق الكتاب، تمشي قليلاً، ثم تعود.\n\nجرّب أن تقرأ عشر صفحات فقط في جلسة واحدة، وأن تكتب بعدها ثلاثة أسطر عمّا تغيّر فيك. ستكتشف أن ما بقي معك أكبر مما توقعت.\n\nالكتب العظيمة لا تُقاس بعدد الصفحات التي أنهيناها، بل بعدد المرات التي عُدنا فيها إلى جملة واحدة.'
-  },
-  {
-    id: 'a3', title: 'من هامش الكتاب: لماذا نكتب على الصفحات؟', category: 'تجارب', read: 3,
-    ...seedAuthor('m30'), color: '#C59B63', time: 'قبل يومين',
-    excerpt: 'الهامش مساحة خاصة بين الكاتب والقارئ… فيها نعترف بما لم نفهمه، ونحتفظ بما أدهشنا.',
-    body: 'أول كتاب كتبت على هوامشه كنت أظن أنني أفسده. ثم صار الهامش هو المكان الذي أعود إليه قبل أن أعيد قراءة الكتاب نفسه.\n\nنكتب في الهامش لأن الذاكرة لا تحفظ كل شيء. نكتب لنقول لأنفسنا في المستقبل: هنا توقفت، وهذه الفكرة أشبهتني، وهذا السؤال ما زال بلا جواب.\n\nبعض الهوامش تصير مقالات، وبعضها يصير اقتباساً نشاركه، وبعضها يبقى سراً صغيراً بيننا وبين الصفحة.\n\nالكتاب الذي لا أثر لنا فيه، ربما لم نقرأه بالطريقة التي تستحق.'
-  },
-  {
-    id: 'a4', title: 'جليس… حين تصير القراءة مجلساً', category: 'النادي', read: 4,
-    ...seedAuthor('m3'), time: 'قبل ٤ أيام',
-    excerpt: 'لم نكن نبحث عن نادٍ للقراءة، كنا نبحث عن مكان يجتمع فيه الناس على السؤال نفسه.',
-    body: 'بدأت الحكاية بجلسة صغيرة، كتاب واحد، وعدد محدود من الكراسي. لم يكن هناك عنوان كبير ولا شعار، فقط رغبة في أن نقرأ ثم نتحدث.\n\nفي جليس تعلمت أن القراءة الجماعية لا تلغي القراءة الفردية، بل تضيء زوايا لم أرها وحدي. كل عضو يقرأ الكتاب بعينه، وحين نجتمع يصبح لدينا عشر عيون.\n\nأجمل ما في المجلس هو الصمت الذي يسبق السؤال، ثم الضحك حين يكتشف أحدنا أنه فهم الجملة بشكل مختلف تماماً.\n\nجليس ليس مكاناً نذهب إليه لننهي الكتب، بل لنبدأ الحديث عنها.'
-  }
-];
-
-const QUOTE_SEED = [
-  {
-    id: 'q1', text: 'خير جليس في الزمان كتاب', book: 'ديوان المتنبي', page: '',
-    ...seedAuthor('m27'), time: 'قبل ساعتين', likes: 18
-  },
-  {
-    id: 'q2', text: 'القراءة ليست هروباً من الحياة، بل عودة إليها بعينين أكثر اتساعاً.', book: 'الأيام', page: '٢٤',
-    ...seedAuthor('m9'), time: 'قبل ٥ ساعات', likes: 24
-  },
-  {
-    id: 'q3', text: 'ما أجمل أن تكتشف أن الكتاب الذي تأخرت في قراءته كان ينتظرك في الوقت المناسب.', book: 'وحي القلم', page: '١١٢',
-    ...seedAuthor('m30'), color: '#C59B63', time: 'أمس', likes: 12
-  },
-  {
-    id: 'q4', text: 'نحن نقرأ لنعرف أننا لسنا وحدنا في هذا العالم.', book: 'موسم الهجرة إلى الشمال', page: '',
-    ...seedAuthor('m15'), time: 'أمس', likes: 31
-  },
-  {
-    id: 'q5', text: 'في كل كتاب زاوية جديدة للعالم… وفي كل قارئ عالم جديد للكتاب.', book: 'حياة في الإدارة', page: '٨٨',
-    ...seedAuthor('m25'), time: 'قبل يومين', likes: 9
-  },
-  {
-    id: 'q6', text: 'الصفحات القليلة التي نقرأها كل يوم تصنع فارقاً لا نراه اليوم، لكننا نراه بعد سنة.', book: 'العادات الذرية', page: '',
-    ...seedAuthor('m22'), time: 'قبل ٣ أيام', likes: 27
-  }
-];
 
 /* --------------------------------------------------------------------------
    2. حالة التطبيق والتخزين المحلي
    -------------------------------------------------------------------------- */
+
+/* بيانات كانت مضمّنة في التطبيق قديمًا — الشيت هو المصدر الوحيد الآن،
+   فنمسحها من التخزين المحلي عند أول تشغيل. */
+const LEGACY_SEED_IDS = new Set(['a1', 'a2', 'a3', 'a4', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6']);
+
+function isLegacySeedItem(item) {
+  return Boolean(item && item.id && LEGACY_SEED_IDS.has(String(item.id)));
+}
+
 function createInitialState(member) {
   return {
     memberId: member ? member.id : null,
@@ -607,16 +563,17 @@ function createInitialState(member) {
       notifications: true,
       photo: member ? String(member.photo || '') : ''
     },
-    /* كل عضو يبدأ بسجل فارغ — التقدم يُبنى من قراءاته الفعلية. */
+    /* كل عضو يبدأ بسجل فارغ — Progress يُبنى من قراءاته الفعلية.
+       الاقتباسات والمقالات تأتي من الشيت المشترك فقط (لا بيانات مضمّنة). */
     entries: [],
     myBooks: [],
-    quotes: QUOTE_SEED.map((q) => ({ ...q })),
+    quotes: [],
     savedQuotes: [],
     likedQuotes: [],
     likedArticles: [],
     likeCounts: { quotes: {}, articles: {} },
     quoteFilter: 'all',
-    articles: ARTICLE_SEED.map((a) => ({ ...a })),
+    articles: [],
     savedArticles: [],
     seenQuotes: 0,
     seenArticles: 0,
@@ -939,7 +896,7 @@ async function loadClubBooksFromCloud(memberId) {
     deletedClubBookIds = new Set((result.deletedIds || []).map(String));
     deletedClubBookKeys = new Set((result.deletedKeys || []).map(String));
   }
-  return result && result.success === true ? result.data : [];
+  return result && result.success === true && Array.isArray(result.data) ? result.data : null;
 }
 
 async function refreshClubBooksFromCloud() {
@@ -959,7 +916,9 @@ async function refreshClubBooksFromCloud() {
     merged.set(String(book.id), book);
     if (member.id !== 'guest') syncState.clubBooks.add(String(book.id));
   });
-  /* كتب محلية: نحتفظ بالمحذوف منها، وبما لم يصل للسحابة بعد، ونعيد رفع ما اختفى */
+  /* الشيت هو المصدر القياسي:
+     - كتاب محلي لم يصل الشيت بعد (جديد) → نُبقيه ليُرفع لاحقًا
+     - كتاب كان مرفوعًا ثم اختفى من الشيت → يختفي من الموقع (حُذف أو ضاع) */
   const vanished = [];
   (state.clubBooks || []).forEach((book) => {
     if (!book || !book.id) return;
@@ -970,15 +929,14 @@ async function refreshClubBooksFromCloud() {
     if (cloudIds.has(id)) return;
     if (key && cloudKeys.has(key)) return;
     if (syncState.clubBooks.has(id)) {
-      /* كان مرفوعًا ثم اختفى من المكتبة — نعيده (ما لم يكن محذوفًا) */
       vanished.push(book);
       return;
     }
     merged.set(id, book);
   });
   vanished.forEach((book) => {
-    merged.set(String(book.id), book);
-    if (member.id !== 'guest') saveClubBookToCloud(member, book).catch(() => {});
+    /* ما عدا ذلك: ليس في الشيت = ليس في الموقع */
+    syncState.clubBooks.delete(String(book.id));
   });
   deletedClubBookIds.forEach((id) => merged.delete(String(id)));
   /* منع تكرار الكتب: نفس العنوان والمؤلف يظهر مرة واحدة فقط */
@@ -1286,33 +1244,28 @@ async function refreshArticlesFromCloud() {
     }
   }
 
-  /* Merge cloud articles + local seed articles, dedupe by id, handle deletions */
+  /* الشيت هو المصدر القياسي: لا مقالات مضمّنة ولا مقالات محلية قديمة */
   const merged = new Map();
-  /* Keep seed articles */
-  ARTICLE_SEED.forEach((s) => { merged.set(s.id, { ...s }); });
-  /* Add/update cloud articles */
+  /* المقالات القادمة من الشيت */
   mapped.forEach((a) => {
     if (!a.id) return;
     merged.set(a.id, a);
     if (member.id !== 'guest') syncState.articles.add(a.id);
   });
-  /* Keep local non-seed articles that are NOT in cloud only if they're new (just created, not yet synced) */
+  /* مقالات محلية لم تصل الشيت بعد (جديدة ونтриفع) — نُبقيها فقط */
   (state.articles || []).forEach((a) => {
     if (!a || !a.id) return;
-    if (ARTICLE_SEED.some((s) => s.id === a.id)) return; // already handled
-    if (cloudIds.has(a.id)) return; // already in cloud
-    // Keep only if it's a brand-new local article (not yet uploaded) - check syncState
+    if (cloudIds.has(a.id)) return;
     if (!syncState.articles.has(a.id) && isMine(a)) {
-      merged.set(a.id, a); // keep unsynced local article
+      merged.set(a.id, a);
     }
-    // otherwise it was deleted from cloud -> drop it
+    /* ما عدا ذلك: حُذف من الشيت = يختفي من الموقع */
   });
 
   deletedArticleIds.forEach((id) => merged.delete(String(id)));
 
-  /* Sort newest first */
+  /* الأحدث أولاً */
   state.articles = [...merged.values()].sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0));
-  if (state.articles.length === 0) state.articles = ARTICLE_SEED.map((a) => ({ ...a }));
 
   if (member.id !== 'guest') {
     persistSyncState(member.id);
@@ -2186,8 +2139,11 @@ async function loadStateFor(member) {
     myBooks: Array.isArray(parsed.myBooks) ? parsed.myBooks : [],
     clubBooks: Array.isArray(parsed.clubBooks) ? parsed.clubBooks : [],
     personalBooks: Array.isArray(parsed.personalBooks) ? parsed.personalBooks : [],
-    quotes: mergeQuoteLists(getLocalSharedQuotes(), Array.isArray(parsed.quotes) ? parsed.quotes : []),
-    articles: Array.isArray(parsed.articles) && parsed.articles.length ? parsed.articles : base.articles,
+    quotes: mergeQuoteLists(
+      getLocalSharedQuotes(),
+      (Array.isArray(parsed.quotes) ? parsed.quotes : []).filter((q) => !isLegacySeedItem(q))
+    ),
+    articles: (Array.isArray(parsed.articles) ? parsed.articles : []).filter((a) => !isLegacySeedItem(a)),
     savedQuotes: Array.isArray(parsed.savedQuotes) ? parsed.savedQuotes : [],
     likedQuotes: Array.isArray(parsed.likedQuotes) ? parsed.likedQuotes : [],
     savedArticles: Array.isArray(parsed.savedArticles) ? parsed.savedArticles : [],
@@ -5110,23 +5066,304 @@ function openArticleComposer() {
   });
 }
 
+/* ============================================================================
+   التنبيهات: تغذية داخل الموقع + إشعار فعلي على جوال المشرف
+   ============================================================================ */
+const notifyState = { items: [], unread: 0, lastSeenId: '', timer: null, permission: 'default' };
+
+const NOTIFY_ICONS = {
+  register: 'user', join: 'user', consultation: 'chat', article: 'article',
+  book: 'book', weekly: 'calendar', archive: 'library', window: 'quote',
+  selection: 'quote', summary: 'book', member: 'user'
+};
+
+function notifyTimeAgo(ts) {
+  const diff = Date.now() - (Number(ts) || 0);
+  if (!diff || diff < 0) return 'الآن';
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'الآن';
+  if (minutes < 60) return `قبل ${toAr(minutes)} دقيقة`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `قبل ${toAr(hours)} ساعة`;
+  const days = Math.floor(hours / 24);
+  return `قبل ${toAr(days)} يوم`;
+}
+
+function updateNotifyBadge() {
+  const dot = document.querySelector('.notif-dot');
+  const button = document.querySelector('[data-action="notifications"]');
+  if (button) button.setAttribute('aria-label', notifyState.unread ? `التنبيهات (${notifyState.unread} جديد)` : 'التنبيهات');
+  if (dot) dot.style.display = notifyState.unread > 0 ? '' : 'none';
+  const counter = document.getElementById('notify-count');
+  if (counter) {
+    counter.textContent = notifyState.unread > 99 ? '99+' : toAr(notifyState.unread);
+    counter.hidden = notifyState.unread === 0;
+  }
+}
+
+function showSystemNotification(item) {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const options = {
+      body: String(item.body || ''),
+      icon: 'logo-icon.png?v=1',
+      badge: 'logo-icon.png?v=1',
+      tag: 'jalees-' + String(item.id || ''),
+      data: { link: item.link || '' }
+    };
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        if (reg && reg.showNotification) reg.showNotification(String(item.title || 'جليس'), options);
+        else new Notification(String(item.title || 'جليس'), options);
+      }).catch(() => {});
+    } else {
+      new Notification(String(item.title || 'جليس'), options);
+    }
+  } catch (error) { /* المتصفح لا يدعم */ }
+}
+
+async function loadNotifications(silent = false) {
+  if (!currentMember || currentMember.id === 'guest') return null;
+  const result = await cloudRequest('getNotifications');
+  if (!result || result.success !== true || !Array.isArray(result.data)) return null;
+  notifyState.items = result.data;
+  notifyState.unread = Number(result.unread) || 0;
+
+  /* إشعار جديد أثناء التصفح */
+  const fresh = result.data.filter((item) => item && !item.read && item.id !== notifyState.lastSeenId);
+  if (!silent && notifyState.lastSeenId && fresh.length) {
+    const newest = fresh[0];
+    toast(newest.title + ' — ' + String(newest.body || '').slice(0, 70), 'bell');
+    showSystemNotification(newest);
+  }
+  if (result.data.length) notifyState.lastSeenId = String(result.data[0].id || '');
+  updateNotifyBadge();
+  return result;
+}
+
+function startNotificationPolling() {
+  if (notifyState.timer) clearInterval(notifyState.timer);
+  notifyState.timer = setInterval(() => {
+    if (document.hidden && notifyState.permission !== 'granted') return;
+    loadNotifications(true).catch(() => {});
+  }, 30000);
+}
+
+function notificationItemHTML(item) {
+  const icon = NOTIFY_ICONS[item.type] || 'bell';
+  return `<article class="notif-item${item.read ? '' : ' is-new'}" data-notif-id="${esc(String(item.id || ''))}">
+    <span class="notif-icon"><svg class="ic"><use href="#i-${esc(icon)}"/></svg></span>
+    <div class="notif-body">
+      <strong>${esc(String(item.title || 'تنبيه'))}</strong>
+      <p>${esc(String(item.body || ''))}</p>
+      <small>${esc(notifyTimeAgo(item.createdAt))}</small>
+    </div>
+  </article>`;
+}
+
 function openNotificationsSheet() {
   openSheet(`
     ${sheetHead('التنبيهات', 'آخر ما يحدث في مجلس جليس')}
-    <div class="notif-list">
-      <div class="notif-item">
-        <span class="notif-icon"><svg class="ic"><use href="#i-calendar"/></svg></span>
-        <div class="notif-body"><strong>جلسة الأسبوع</strong><p>مناقشة كتاب «ابني حبيبي» الثلاثاء القادم، ٨:٠٠ م.</p><small>قبل ساعة</small></div>
+    <div class="notify-toolbar">
+      <span id="notify-summary">جارٍ التحميل…</span>
+      <div class="notify-toolbar-actions">
+        <button class="btn btn-sm btn-ghost" type="button" id="notify-permission-btn">فعّل تنبيهات الجوال</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="notify-read-all">تعليم الكل كمقروء</button>
+        ${isSupervisor() ? '<button class="btn btn-sm btn-ghost" type="button" id="notify-settings-btn">إعدادات الإرسال</button>' : ''}
       </div>
-      <div class="notif-item">
-        <span class="notif-icon"><svg class="ic"><use href="#i-heart"/></svg></span>
-        <div class="notif-body"><strong>اقتباسك أعجب الأعضاء</strong><p>حصل اقتباسك عن «وحي القلم» على ١٢ إعجاباً.</p><small>أمس</small></div>
+    </div>
+    <div class="notif-list" id="notify-list"><p class="notif-loading">جارٍ التحميل…</p></div>`, async (root) => {
+    const list = root.querySelector('#notify-list');
+    const summary = root.querySelector('#notify-summary');
+    const paint = (data) => {
+      const items = data || [];
+      if (!items.length) {
+        list.innerHTML = emptyHTML('bell', 'لا تنبيهات بعد', 'سيصلك هنا إشعار فور حدوث أي جديد في النادي.');
+        summary.textContent = 'لا يوجد جديد';
+        return;
+      }
+      const unread = items.filter((i) => !i.read).length;
+      summary.textContent = unread ? `${toAr(unread)} تنبيه جديد` : `${toAr(items.length)} تنبيه`;
+      list.innerHTML = items.map(notificationItemHTML).join('');
+    };
+
+    const result = await loadNotifications();
+    paint(result && result.data ? result.data : notifyState.items);
+
+    const permissionBtn = root.querySelector('#notify-permission-btn');
+    if (permissionBtn) {
+      const refreshPermission = () => {
+        const p = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+        notifyState.permission = p;
+        permissionBtn.textContent = p === 'granted' ? 'تنبيهات الجوال مفعّلة ✅' : (p === 'denied' ? 'التنبيهات محظورة من المتصفح' : 'فعّل تنبيهات الجوال');
+        permissionBtn.disabled = p === 'granted' || p === 'unsupported';
+      };
+      refreshPermission();
+      permissionBtn.addEventListener('click', async () => {
+        if (typeof Notification === 'undefined') { toast('المتصفح لا يدعم التنبيهات', 'info'); return; }
+        try {
+          const perm = await Notification.requestPermission();
+          refreshPermission();
+          if (perm === 'granted') {
+            toast('فُعّلت تنبيهات الجوال ✅', 'check');
+            showSystemNotification({ id: 'test-' + Date.now(), title: 'جليس', body: 'هكذا ستظهر التنبيهات على جوالك.' });
+          }
+        } catch (error) {
+          toast('تعذر طلب إذن التنبيهات', 'info');
+        }
+      });
+    }
+
+    const readAll = root.querySelector('#notify-read-all');
+    if (readAll) {
+      readAll.addEventListener('click', async () => {
+        await cloudRequest('markNotificationsRead', {});
+        notifyState.unread = 0;
+        updateNotifyBadge();
+        const fresh = await loadNotifications();
+        paint(fresh && fresh.data ? fresh.data : []);
+        toast('تم تعليم التنبيهات كمقروءة', 'check');
+      });
+    }
+
+    const settingsBtn = root.querySelector('#notify-settings-btn');
+    if (settingsBtn) settingsBtn.addEventListener('click', () => openNotifySettingsSheet());
+  });
+}
+
+/* ---- إعدادات قناة الإرسال (للمشرف) ---- */
+function openNotifySettingsSheet() {
+  if (!isSupervisor()) { toast('الإعدادات للمشرفين فقط', 'info'); return; }
+  openSheet(`
+    ${sheetHead('إعدادات تنبيهات الجوال', 'أين تريد أن تصلك التنبيهات')}
+    <form id="notify-settings-form" class="meeting-form" novalidate>
+      <div class="field">
+        <label for="notify-channel">قناة الإرسال</label>
+        <select class="input" id="notify-channel">
+          <option value="email">بريد النادي (يعمل فورًا)</option>
+          <option value="telegram">تيليجرام (على الجوال مباشرة)</option>
+          <option value="ntfy">ntfy (تطبيق مجاني على الجوال)</option>
+          <option value="pushover">Pushover (تطبيق iOS/Android)</option>
+          <option value="off">إيقاف الإرسال</option>
+        </select>
       </div>
-      <div class="notif-item">
-        <span class="notif-icon"><svg class="ic"><use href="#i-book"/></svg></span>
-        <div class="notif-body"><strong>كتاب جديد في المكتبة</strong><p>أضيف «موسم الهجرة إلى الشمال» إلى رفوف النادي.</p><small>قبل يومين</small></div>
+      <div class="field" data-ch="telegram">
+        <label for="notify-tg-token">١) توكن البوت</label>
+        <input class="input" id="notify-tg-token" dir="ltr" placeholder="123456:ABC-DEF...">
+        <div class="notify-guide">
+          <p>افتح <b>@BotFather</b> ← أرسل <b>/newbot</b> ← اختر اسمًا للبوت ← سيعطيك <b>Token</b> (انسخه).</p>
+        </div>
       </div>
-    </div>`);
+      <div class="field" data-ch="telegram">
+        <label for="notify-tg-chat">٢) معرّف المحادثة</label>
+        <input class="input" id="notify-tg-chat" dir="ltr" placeholder="123456789">
+        <div class="notify-guide">
+          <p>افتح <b>https://t.me/userinfobot</b> ← ستجد <b>Id</b> (رقم يبدأ بـ ١٠٠…) — انسخه.</p>
+          <p>ثم افتح بوتك (الرابط: <b>https://t.me/اسم_بوتك</b>) وأرسل له أي رسالة.</p>
+        </div>
+      </div>
+      <div class="field" data-ch="ntfy">
+        <label for="notify-ntfy">مجلد ntfy</label>
+        <input class="input" id="notify-ntfy" dir="ltr" placeholder="jalees-club-9x2">
+        <small class="field-hint">اختر اسمًا سريًا للمجلد — نفس الاسم في تطبيق ntfy على جوالك.</small>
+      </div>
+      <div class="field" data-ch="pushover">
+        <label for="notify-po-token">توكن Pushover</label>
+        <input class="input" id="notify-po-token" dir="ltr" placeholder="xxxxxxxxxxxxxxxxxxxx">
+      </div>
+      <div class="field" data-ch="pushover">
+        <label for="notify-po-user">معرّف مستخدم Pushover</label>
+        <input class="input" id="notify-po-user" dir="ltr" placeholder="uXXXXXXX">
+      </div>
+      <div class="field">
+        <label for="notify-url">رابط الموقع (اختياري)</label>
+        <input class="input" id="notify-url" dir="ltr" placeholder="https://example.com">
+      </div>
+      <div class="field">
+        <label>أنواع التنبيهات</label>
+        <div class="notify-types" id="notify-types"></div>
+      </div>
+      <p class="form-error" id="notify-settings-error" role="alert" hidden></p>
+      <div class="notify-actions">
+        <button class="btn btn-primary" type="submit"><svg class="ic"><use href="#i-check"/></svg> حفظ</button>
+        <button class="btn btn-ghost" type="button" id="notify-test-btn"><svg class="ic"><use href="#i-send"/></svg> إرسال تجريبي</button>
+      </div>
+    </form>`, (root) => {
+    const error = root.querySelector('#notify-settings-error');
+    const fail = (message) => { error.textContent = message; error.hidden = false; };
+    const channel = root.querySelector('#notify-channel');
+    const typesBox = root.querySelector('#notify-types');
+
+    const applyChannel = () => {
+      root.querySelectorAll('[data-ch]').forEach((block) => {
+        block.hidden = block.dataset.ch !== channel.value;
+      });
+    };
+    applyChannel();
+    channel.addEventListener('change', applyChannel);
+
+    const readPayload = () => {
+      const types = [...typesBox.querySelectorAll('input:checked')].map((i) => i.value);
+      return {
+        channel: channel.value,
+        telegramToken: root.querySelector('#notify-tg-token').value.trim(),
+        telegramChat: root.querySelector('#notify-tg-chat').value.trim(),
+        ntfyTopic: root.querySelector('#notify-ntfy').value.trim(),
+        pushoverToken: root.querySelector('#notify-po-token').value.trim(),
+        pushoverUser: root.querySelector('#notify-po-user').value.trim(),
+        siteUrl: root.querySelector('#notify-url').value.trim(),
+        types: types
+      };
+    };
+
+    root.querySelector('#notify-settings-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      error.hidden = true;
+      const payload = readPayload();
+      const result = await cloudRequest('saveNotifySettings', payload);
+      if (!result || result.success !== true) { fail('تعذر حفظ الإعدادات'); return; }
+      try { localStorage.setItem('jalees-notify-settings', JSON.stringify(payload)); } catch (e) {}
+      toast('تم حفظ إعدادات التنبيهات', 'check');
+      closeSheet();
+    });
+
+    root.querySelector('#notify-test-btn').addEventListener('click', async () => {
+      error.hidden = true;
+      const payload = readPayload();
+      await cloudRequest('saveNotifySettings', payload);
+      try { localStorage.setItem('jalees-notify-settings', JSON.stringify(payload)); } catch (e) {}
+      const test = await cloudRequest('testNotification', {});
+      if (test && test.pushed) {
+        toast('وصل التنبيه التجريبي ✅ (' + test.channel + ')', 'check');
+      } else {
+        fail('لم يصل التنبيه: ' + ((test && test.detail) || 'تحقق من الإعدادات'));
+      }
+    });
+
+    /* تحميل الإعدادات المحفوظة (من الخادم + ما ذُكر على هذا الجهاز) */
+    (async () => {
+      const settings = await cloudRequest('getNotifySettings');
+      const loaded = settings && settings.success === true ? settings : {};
+      let local = {};
+      try { local = JSON.parse(localStorage.getItem('jalees-notify-settings') || '{}'); } catch (e) { local = {}; }
+      const pick = (key, serverValue) => String((local && local[key]) || serverValue || '');
+      if (loaded.channel) channel.value = loaded.channel;
+      root.querySelector('#notify-tg-token').value = pick('telegramToken', '');
+      root.querySelector('#notify-tg-chat').value = pick('telegramChat', loaded.telegramChat);
+      root.querySelector('#notify-ntfy').value = pick('ntfyTopic', loaded.ntfyTopic);
+      root.querySelector('#notify-po-token').value = pick('pushoverToken', '');
+      root.querySelector('#notify-po-user').value = pick('pushoverUser', '');
+      root.querySelector('#notify-url').value = pick('siteUrl', loaded.siteUrl);
+      const allTypes = loaded.allTypes || Object.keys(NOTIFY_ICONS);
+      const enabled = new Set(loaded.types && loaded.types.length ? loaded.types : allTypes);
+      typesBox.innerHTML = allTypes.map((type) => {
+        const label = (loaded.labels && loaded.labels[type] && loaded.labels[type].label) || type;
+        return `<label class="notify-type"><input type="checkbox" value="${esc(type)}" ${enabled.has(type) ? 'checked' : ''}> ${esc(label)}</label>`;
+      }).join('');
+      applyChannel();
+    })();
+  });
 }
 
 function openJoinSheet() {
@@ -7283,6 +7520,12 @@ async function setSessionMember(member) {
     /* التخزين غير متاح */
   }
   await saveState();
+  /* التنبيهات: تحميل أول مرة ثم استطلاع كل ٣٠ ثانية */
+  notifyState.lastSeenId = '';
+  notifyState.unread = 0;
+  updateNotifyBadge();
+  loadNotifications(true).then(() => { notifyState.lastSeenId = notifyState.items.length ? String(notifyState.items[0].id || '') : ''; }).catch(() => {});
+  startNotificationPolling();
 }
 
 function showGate(view = 'register') {
@@ -7317,6 +7560,8 @@ function applyGuestVisibility() {
   if (goalCard) goalCard.style.display = isGuest ? 'none' : '';
   const categoryManager = document.getElementById('manage-library-categories-btn');
   if (categoryManager) categoryManager.hidden = !isSupervisor();
+  const clearArticles = document.getElementById('clear-articles-btn');
+  if (clearArticles) clearArticles.hidden = !isSupervisor();
 }
 
 function showPublicHome() {
@@ -7334,9 +7579,9 @@ function showPublicHome() {
     memberId: 'guest',
     profile: { ...base.profile, name: 'زائر', role: 'زائر' },
     quotes: getLocalSharedQuotes(),
-    articles: ARTICLE_SEED.map((article) => ({ ...article })),
+    articles: [],
     seenQuotes: getLocalSharedQuotes().length,
-    seenArticles: ARTICLE_SEED.length,
+    seenArticles: 0,
     seenClubBooks: 0
   };
   enterApp(false);
@@ -7875,6 +8120,30 @@ async function handleGlobalClick(event) {
     case 'open-article-compose':
       openArticleComposer();
       break;
+    case 'articles-clear': {
+      if (!isSupervisor()) { toast('حذف كل المقالات للمشرفين فقط', 'info'); break; }
+      openConfirm({
+        title: 'حذف كل المقالات',
+        text: 'سيُحذف كل المقالات نهائيًا من مجلة النادي في كل الأجهزة. لا يمكن التراجع. هل أنت متأكد؟',
+        confirmLabel: 'حذف الكل',
+        danger: true,
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteAllArticles', { by: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success !== true) { toast('تعذر حذف المقالات', 'info'); return; }
+          deletedArticleIds = new Set();
+          state.articles = [];
+          state.savedArticles = [];
+          syncState.articles = new Set();
+          if (currentMember) persistSyncState(currentMember.id);
+          await saveState();
+          renderArticles();
+          renderHome();
+          updateNavBadges();
+          toast('تم حذف كل المقالات', 'trash');
+        }
+      });
+      break;
+    }
     case 'open-add-book':
       openAddBook();
       break;
@@ -8390,6 +8659,11 @@ function handleLogSubmit(event) {
 async function init() {
   bindPasswordToggles();
 
+  /* عامل الخدمة: يتيح تثبيت الموقع على الجوال واستقبال التنبيهات */
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    try { navigator.serviceWorker.register('sw.js?v=r43').catch(() => {}); } catch (error) { /* تجاهل */ }
+  }
+
   $('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const identifier = $('#login-email').value.replace(/\s+/g, ' ').trim();
@@ -8811,9 +9085,9 @@ async function init() {
       memberId: 'guest',
       profile: { ...base.profile, name: 'زائر', role: 'زائر' },
       quotes: getLocalSharedQuotes(),
-      articles: ARTICLE_SEED.map((a) => ({ ...a })),
+      articles: [],
       seenQuotes: getLocalSharedQuotes().length,
-      seenArticles: ARTICLE_SEED.length,
+      seenArticles: 0,
       seenClubBooks: 0
     };
     enterApp(false);

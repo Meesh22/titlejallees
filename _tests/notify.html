@@ -1,0 +1,203 @@
+/* اختبار نظام التنبيهات: التسجيل + الاستشارة + القراءة + الإرسال */
+(async function () {
+  const results = [];
+  const ok = (name, cond, extra) => results.push({ name, pass: !!cond, extra: extra === undefined ? '' : String(extra) });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const src = await (await fetch('apps-script-final.js?t=' + Date.now())).text();
+  let fileCounter = 0;
+  function MockSheet(name, rows, id) { this.name = name; this._rows = rows; this._id = id; }
+  MockSheet.prototype.getSheetId = function () { return this._id; };
+  MockSheet.prototype.getName = function () { return this.name; };
+  MockSheet.prototype.getLastRow = function () { return this._rows.length; };
+  MockSheet.prototype.getLastColumn = function () { return Math.max(1, (this._rows[0] || []).length); };
+  MockSheet.prototype.getMaxColumn = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxColumns = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getMaxRows = function () { return this._rows.length; };
+  MockSheet.prototype.getDataRange = function () { const s = this; return { getValues: () => s._rows }; };
+  MockSheet.prototype.getRange = function (r, c, nr, nc) {
+    const s = this;
+    return {
+      getValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((s._rows[r - 1 + i] || [])[c - 1 + j] ?? ''); o.push(row); } return o; },
+      getValue: () => (s._rows[r - 1] || [])[c - 1] ?? '',
+      getDisplayValues: () => { const o = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(String((s._rows[r - 1 + i] || [])[c - 1 + j] ?? '')); o.push(row); } return o; },
+      setValues: (v) => { for (let i = 0; i < v.length; i++) for (let j = 0; j < v[i].length; j++) { const rr = r - 1 + i, cc = c - 1 + j; if (!s._rows[rr]) s._rows[rr] = []; s._rows[rr][cc] = v[i][j]; } },
+      setValue: (x) => { if (!s._rows[r - 1]) s._rows[r - 1] = []; s._rows[r - 1][c - 1] = x; },
+      setBackground: () => {}, setFontColor: () => {}
+    };
+  };
+  MockSheet.prototype.setName = function (n) { this.name = n; };
+  MockSheet.prototype.appendRow = function (row) { this._rows.push(row.slice()); };
+  MockSheet.prototype.deleteRow = function (r) { this._rows.splice(r - 1, 1); };
+  MockSheet.prototype.insertColumnsAfter = function () {};
+  MockSheet.prototype.setBackground = function () {};
+  MockSheet.prototype.setFontColor = function () {};
+
+  const members = new MockSheet('الأعضاء', [[
+    'id', 'name', 'email', 'passwordHash', 'salt', 'role', 'status', 'createdAt', 'lastLogin',
+    'resetCode', 'resetExpires', 'phone', 'profilePhoto', 'memberType'
+  ], ['m1', 'مشعل الحفير', 'a@b.c', 'h', 's', 'supervisor', 'active', 1, '', '', '', '0555000000', '', 'member'],
+  ['m2', 'سالم عبدالله ناصر', 'm2@example.com', 'h2', 's2', 'member', 'active', 2, '', '', '', '05551112233', '', 'member']], 1);
+  const sheets = [members];
+  const ss = {
+    getId: () => 'SHEET-ID-1',
+    getSheets: () => sheets,
+    getSheetByName: (n) => sheets.find((s) => s.name === n) || null,
+    getSheetById: (id) => sheets.find((s) => s._id === id) || null,
+    insertSheet: (n) => { const s = new MockSheet(n, [[]], 900 + sheets.length); sheets.push(s); return s; },
+    deleteSheet: (s) => { const i = sheets.indexOf(s); if (i >= 0) sheets.splice(i, 1); },
+    setActiveSheet: () => {}, moveActiveSheet: () => {}
+  };
+  const mockFile = () => ({ getId: () => 'FILE' + (++fileCounter), getUrl: () => 'https://drive.google.com/file/d/F/view', setSharing: () => {}, setName: () => {} });
+  const mockFolder = { getId: () => 'FOLDER1', createFile: () => mockFile() };
+  globalThis.SpreadsheetApp = { openById: () => ss, flush: () => {} };
+  globalThis.DriveApp = {
+    getFolderById: () => mockFolder,
+    getFoldersByName: () => ({ hasNext: () => true, next: () => mockFolder }),
+    createFolder: () => ({ getId: () => 'FOLDER1' }),
+    Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' }
+  };
+  globalThis.Logger = { log: () => {} };
+  const propStore = {};
+  globalThis.PropertiesService = {
+    getScriptProperties: () => ({
+      getProperty: (k) => (k in propStore ? propStore[k] : ''),
+      setProperty: (k, v) => { propStore[k] = String(v); },
+      deleteProperty: (k) => { delete propStore[k]; }
+    })
+  };
+  globalThis.Utilities = {
+    newBlob: (d, t, n) => ({ data: d, type: t, name: n }),
+    base64Decode: (s) => String(s), base64Encode: (s) => String(s),
+    getUuid: () => 'uuid-' + Math.random(), formatDate: () => '2026-01-01',
+    computeDigest: (a, s) => 'digest:' + String(s), base64EncodeWebSafe: (s) => String(s),
+    DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' }
+  };
+  globalThis.Session = { getScriptTimeZone: () => 'Asia/Riyadh', getEffectiveUser: () => ({ getEmail: () => 'jjalees.com@gmail.com' }) };
+  const sentMails = [];
+  /* موك صارم: يرفض أي خاصية غير معروفة (مثل ما يفعل Apps Script) */
+  const MAIL_ALLOWED = ['to', 'subject', 'body', 'htmlBody', 'cc', 'bcc', 'replyTo', 'name', 'from'];
+  globalThis.MailApp = {
+    sendEmail: (o) => {
+      Object.keys(o || {}).forEach((k) => {
+        if (MAIL_ALLOWED.indexOf(k) < 0) throw new Error('Invalid argument: ' + k);
+      });
+      sentMails.push(o);
+    },
+    getRemainingDailyQuota: () => 100
+  };
+  /* موك الطلبات الخارجية: نلتقط ما يُرسل لكل قناة */
+  const httpCalls = [];
+  globalThis.UrlFetchApp = {
+    fetch: (url, options) => {
+      httpCalls.push({ url: String(url), options: options });
+      return { getResponseCode: () => 200, getContentText: () => '{"ok":true}' };
+    }
+  };
+  globalThis.ScriptApp = {};
+  globalThis.ContentService = { MimeType: { JSON: 'application/json' }, createTextOutput: (t) => ({ setMimeType: () => ({ __t: t }) }) };
+  (0, eval)(src);
+
+  const originalCloudRequest = window.cloudRequest;
+  window.cloudRequest = async (action, data, memberId) => {
+    try {
+      if (data === null || data === undefined) return JSON.parse(doGet({ parameter: { action, memberId: memberId || '' } }).__t);
+      return JSON.parse(doPost({ parameter: { action, data: JSON.stringify(data) } }).__t);
+    } catch (e) {
+      return { success: false, error: String((e && e.message) || e) };
+    }
+  };
+  const api = (action, data, memberId) => window.cloudRequest(action, data, memberId);
+
+  try {
+    /* ===== 1) طلب تسجيل جديد ⇒ تنبيه ===== */
+    const req = await api('requestRegistrationCode', { name: 'نورة عبدالله سالم', phone: '0509999888', email: 'noura@example.com', password: 'كلمةسر456' });
+    ok('طلب رمز التسجيل', req.success === true, req.error || '');
+    const mail = sentMails[sentMails.length - 1] || {};
+    const code = (String(mail.htmlBody || '').match(/\b\d{6}\b/) || [])[0] || '';
+    const verify = await api('verifyRegistrationCode', { email: 'noura@example.com', code: code });
+    ok('تأكيد الرمز', verify.success === true, verify.error || '');
+
+    const list = await api('getNotifications');
+    ok('وصل التنبيه إلى قائمة التنبيهات', (list.data || []).some((n) => n.type === 'register' && String(n.body || '').indexOf('نورة') >= 0), JSON.stringify((list.data || []).map((n) => n.title + ' :: ' + n.body)));
+    ok('التنبيه غير مقروء بعد', (list.data || []).some((n) => n.type === 'register' && !n.read));
+    ok('عدّاد غير المقروء صحيح', Number(list.unread) >= 1, 'unread=' + list.unread);
+
+    /* ===== 2) الإرسال الافتراضي = البريد ===== */
+    ok('أُرسل تنبيه بالبريد إلى صندوق النادي', sentMails.length >= 2 && String(sentMails[sentMails.length - 1].to || '') === 'jjalees.com@gmail.com', JSON.stringify(sentMails[sentMails.length - 1] || {}).slice(0, 160));
+    const mailKeys = Object.keys(sentMails[sentMails.length - 1] || {});
+    ok('رسالة البريد بدون وسوم غير معروفة', mailKeys.every((k) => MAIL_ALLOWED.indexOf(k) >= 0), mailKeys.join(','));
+    ok('نص الرسالة يحتوي اسم النادي', String((sentMails[sentMails.length - 1] || {}).body || '').indexOf('جليس') >= 0, String((sentMails[sentMails.length - 1] || {}).body || '').slice(0, 80));
+
+    /* ===== 3) تيليجرام ===== */
+    await api('saveNotifySettings', { channel: 'telegram', telegramToken: 'TOKEN123', telegramChat: '998877', types: ['register', 'consultation'] });
+    httpCalls.length = 0;
+    const testTg = await api('testNotification', {});
+    ok('اختبار الإرسال عبر تيليجرام', testTg.success === true && testTg.pushed === true, JSON.stringify(testTg));
+    const tgCall = httpCalls.find((c) => c.url.indexOf('telegram.org') >= 0);
+    ok('اتصل بخادم تيليجرام', !!tgCall, JSON.stringify(httpCalls.map((c) => c.url)));
+    ok('أرسل معرّف المحادثة', !!tgCall && String(tgCall.options.payload).indexOf('998877') >= 0, tgCall ? String(tgCall.options.payload).slice(0, 120) : '');
+
+    /* ===== 4) ntfy ===== */
+    await api('saveNotifySettings', { channel: 'ntfy', ntfyTopic: 'jalees-secret-topic', types: ['register'] });
+    httpCalls.length = 0;
+    const testNtfy = await api('testNotification', {});
+    ok('اختبار الإرسال عبر ntfy', testNtfy.success === true && testNtfy.pushed === true, JSON.stringify(testNtfy));
+    const ntfyCall = httpCalls.find((c) => c.url.indexOf('ntfy.sh') >= 0);
+    ok('اتصل بـ ntfy بالمجلد السري', !!ntfyCall && ntfyCall.url.indexOf('jalees-secret-topic') >= 0, ntfyCall ? ntfyCall.url : JSON.stringify(httpCalls.map((c) => c.url)));
+
+    /* ===== 5) Pushover ===== */
+    await api('saveNotifySettings', { channel: 'pushover', pushoverToken: 'PT', pushoverUser: 'PU', types: ['register'] });
+    httpCalls.length = 0;
+    const testPo = await api('testNotification', {});
+    ok('اختبار الإرسال عبر Pushover', testPo.success === true && testPo.pushed === true, JSON.stringify(testPo));
+    ok('اتصل بـ Pushover', httpCalls.some((c) => c.url.indexOf('pushover.net') >= 0), JSON.stringify(httpCalls.map((c) => c.url)));
+
+    /* ===== 6) أنواع التنبيهات المفعّلة ===== */
+    await api('saveNotifySettings', { channel: 'email', types: ['consultation'] });
+    httpCalls.length = 0;
+    sentMails.length = 0;
+    const consult = await api('submitConsultation', { memberId: 'm2', question: 'ما أفضل كتاب في 관리 الوقت؟' });
+    ok('أُرسلت الاستشارة', consult.success === true, consult.error || '');
+    const list2 = await api('getNotifications');
+    ok('وصل تنبيه الاستشارة', (list2.data || []).some((n) => n.type === 'consultation'), JSON.stringify((list2.data || []).map((n) => n.type)));
+    ok('الإرسال بالاستشارة تم', sentMails.length >= 1, 'رسائل=' + sentMails.length);
+
+    /* نوع غير مفعّل لا يُرسل */
+    sentMails.length = 0;
+    await api('saveClubBook', { id: 'bk-notify', memberId: 'm1', memberName: 'مشعل', title: 'كتاب إشعار', author: 'مؤلف', category: 'أدب', coverColor: '#111111', report: '', pages: 5 });
+    const list3 = await api('getNotifications');
+    ok('النوع غير المفعّل لا يُخزَّن', !(list3.data || []).some((n) => n.type === 'book'), JSON.stringify((list3.data || []).map((n) => n.type)));
+    ok('النوع غير المفعّل لا يُرسل', sentMails.length === 0, 'رسائل=' + sentMails.length);
+
+    /* ===== 7) تعليم المقروء ===== */
+    const read = await api('markNotificationsRead', {});
+    ok('تعليم الكل كمقروء', read.success === true && Number(read.marked) >= 1, JSON.stringify(read));
+    const list4 = await api('getNotifications');
+    ok('لا يبقى غير مقروء', Number(list4.unread) === 0, 'unread=' + list4.unread);
+
+    /* ===== 8) الإعدادات تُقرأ ===== */
+    const settings = await api('getNotifySettings');
+    ok('قراءة الإعدادات', settings.success === true && settings.channel === 'email' && Array.isArray(settings.allTypes), JSON.stringify(settings).slice(0, 200));
+    ok('كل الأنواع معروفة', (settings.allTypes || []).length >= 10, (settings.allTypes || []).join(','));
+
+    /* ===== 9) الواجهة: جرس التنبيهات ===== */
+    const bell = document.querySelector('[data-action="notifications"]');
+    ok('زر الجرس موجود', !!bell);
+    const listHtml = await (async () => {
+      openNotificationsSheet();
+      await wait(700);
+      const items = document.querySelectorAll('#notify-list .notif-item');
+      return { count: items.length, summary: (document.querySelector('#notify-summary') || {}).textContent };
+    })();
+    ok('قائمة التنبيهات تعرض عناصر', listHtml.count >= 1, JSON.stringify(listHtml));
+    closeSheet();
+
+    const passed = results.filter((r) => r.pass).length;
+    return { passed, total: results.length, failures: results.filter((r) => !r.pass) };
+  } catch (e) {
+    return { passed: results.filter((r) => r.pass).length, total: results.length, failures: results.filter((r) => !r.pass), fatal: String((e && e.stack) || e) };
+  } finally {
+    window.cloudRequest = originalCloudRequest;
+  }
+})()

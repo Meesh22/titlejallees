@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -9,6 +9,12 @@
   <title>جليس | مساحة الأعضاء</title>
   <meta name="description" content="مساحة ثقافية تجمع محبي القراءة في منطقة القصيم، للتعلم والحوار حول الكتب والأفكار والتاريخ.">
   <meta name="theme-color" content="#1E3A2B">
+  <link rel="manifest" href="manifest.json?v=r45-20261113">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="جليس">
+  <link rel="apple-touch-icon" href="logo-icon.png?v=1">
+  <link rel="icon" href="logo-icon.png?v=1" type="image/png">
 
   <!-- Open Graph -->
   <meta property="og:title" content="نادي جليس القرائي | لأن القراءة تجمعنا">
@@ -36,7 +42,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=r42-20261111">
+  <link rel="stylesheet" href="app.css?v=r45-20261113">
 </head>
 <body>
 
@@ -351,9 +357,10 @@
             <div class="header-actions">
               <button class="btn btn-ghost btn-guest-action" type="button" id="guest-register-btn" data-action="open-gate-register" hidden>التسجيل</button>
               <button class="btn btn-gold btn-guest-action" type="button" id="guest-login-btn" data-action="open-gate-login" hidden>دخول</button>
-              <button class="icon-btn" type="button" data-action="notifications" aria-label="التنبيهات">
+              <button class="icon-btn notify-btn" type="button" data-action="notifications" aria-label="التنبيهات">
                 <svg class="ic"><use href="#i-bell"/></svg>
                 <span class="notif-dot"></span>
+                <span class="nav-badge notify-count" id="notify-count" hidden>0</span>
               </button>
               <button class="avatar-btn" type="button" id="header-avatar" data-action="open-profile" aria-label="ملفي الشخصي">م</button>
             </div>
@@ -505,6 +512,9 @@
 
               <div class="quotes-stats-bar">
                 <button class="btn btn-gold btn-member-stats" type="button" data-action="member-stats"><svg class="ic"><use href="#i-chart"/></svg> إحصائيات الأعضاء</button>
+                <button class="btn btn-sm btn-ghost danger" type="button" data-action="articles-clear" id="clear-articles-btn" hidden>
+                  <svg class="ic"><use href="#i-trash"/></svg> حذف كل المقالات
+                </button>
               </div>
 
               <div class="chips-row" id="article-filters">
@@ -652,6 +662,6 @@
     <div class="noscript">هذه المساحة تحتاج تفعيل جافاسكريبت في المتصفح.</div>
   </noscript>
 
-  <script src="app.js?v=r42-20261111"></script>
+  <script src="app.js?v=r45-20261113"></script>
 </body>
 </html>

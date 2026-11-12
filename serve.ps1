@@ -22,6 +22,7 @@ while ($listener.IsListening) {
         '.jpg'  { 'image/jpeg' }
         '.jpeg' { 'image/jpeg' }
         '.webp' { 'image/webp' }
+        '.json' { 'application/json; charset=utf-8' }
         default { 'application/octet-stream' }
       }
       $bytes = [IO.File]::ReadAllBytes($file)

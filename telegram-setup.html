@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعداد تنبيهات جليس | تيليجرام</title>
+<style>
+  :root { --green:#1E3A2B; --gold:#C59B63; --line:#E8E2D6; --muted:#6B7A6E; --bg:#F8F5EE; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Tahoma, Arial, sans-serif; background:var(--bg); color:var(--green); padding:18px 14px 60px; }
+  .card { max-width:560px; margin:0 auto; background:#fff; border:1px solid var(--line); border-radius:18px; padding:22px 20px; box-shadow:0 8px 30px rgba(30,58,43,.07); }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { font-size:12.5px; color:var(--muted); line-height:1.9; margin:0 0 18px; }
+  .step { display:flex; gap:11px; padding:13px; border:1px solid var(--line); border-radius:14px; margin-bottom:11px; background:#FCFBF7; }
+  .step.done { border-color:#BFE3C4; background:#F3FBF4; }
+  .step.active { border-color:var(--gold); background:#FFFCF5; box-shadow:0 0 0 3px rgba(197,155,99,.12); }
+  .num { flex:none; width:27px; height:27px; border-radius:50%; background:var(--green); color:#fff; display:grid; place-items:center; font-size:13px; font-weight:700; }
+  .step.done .num { background:#4CAF50; }
+  .step.active .num { background:var(--gold); }
+  .body { flex:1; }
+  .body strong { display:block; font-size:13.5px; margin-bottom:3px; }
+  .body p { font-size:11.5px; color:var(--muted); line-height:1.85; margin:0 0 8px; }
+  .body b { color:var(--gold); }
+  code, .mono { font-family: Consolas, monospace; background:#F1EDE4; padding:1px 6px; border-radius:6px; font-size:11.5px; direction:ltr; display:inline-block; }
+  input { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:11px; font-size:13px; font-family:Consolas,monospace; direction:ltr; text-align:left; background:#fff; }
+  input:focus { outline:2px solid rgba(197,155,99,.35); border-color:var(--gold); }
+  button { border:0; border-radius:11px; padding:11px 16px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .primary { background:var(--green); color:#fff; }
+  .gold { background:var(--gold); color:#fff; }
+  .ghost { background:#F1EDE4; color:var(--green); }
+  .row { display:flex; gap:8px; margin-top:9px; flex-wrap:wrap; }
+  .status { margin-top:16px; padding:12px 14px; border-radius:12px; font-size:12.5px; line-height:1.9; display:none; }
+  .status.ok { display:block; background:#F1FBF3; border:1px solid #BFE3C4; color:#246b33; }
+  .status.err { display:block; background:#FDF3F3; border:1px solid #F0C2C2; color:#a03232; }
+  .status.wait { display:block; background:#FFFCF5; border:1px solid var(--gold); color:#7a5a20; }
+  .foot { max-width:560px; margin:16px auto 0; font-size:11px; color:var(--muted); line-height:1.9; text-align:center; }
+.alt { margin-top:16px; border:1px solid var(--line); border-radius:14px; background:#FCFBF7; overflow:hidden; }
+.alt summary { padding:12px 14px; cursor:pointer; font-size:12.5px; color:var(--green); font-weight:700; }
+.alt summary b { color:var(--gold); }
+.alt-body { padding:0 14px 14px; }
+.alt-body p { font-size:11.5px; color:var(--muted); line-height:1.85; margin:0 0 8px; }
+.alt-body ol { margin:0 0 10px; padding-inline-start:18px; font-size:11.5px; color:var(--muted); line-height:1.9; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔔 إعداد تنبيهات جليس على تيليجرام</h1>
+  <p class="sub">ثلاث خطوات فقط — ولا تحتاج تفهم أي شيء تقني.Roughly دقيقتان.</p>
+
+  <div class="step active" id="s1">
+    <span class="num">1</span>
+    <div class="body">
+      <strong>احصل على «التوكن» من @BotFather</strong>
+      <p>التوكن = <b>كلمة سر بوتك</b> في تيليجرام. يعطيك إياه تيليجرام مجانًا — مثل ما يعطيك كلمة سر أي تطبيق.
+      <br>شكله: <code>7123456789:AAH8kLxxxxxx...</code></p>
+      <p><b>كيف تحصله (٤ رسائل فقط):</b><br>
+      ① افتح <b>@BotFather</b> (بالضغط على الزر بالأسفل)<br>
+      ② أرسل له <b>/newbot</b><br>
+      ③ أرسل اسمًا للبوت (مثال: <b>جليس إشارات</b>)<br>
+      ④ أرسل يوزرًا (مثال: <b>jalees_notify_bot</b>)<br>
+      ⑤ يرد عليك بـ <b>Token</b> — انسخه والصقه بالأسفل 👇</p>
+      <input id="token" placeholder="7123456789:AAH8kLxxxxxx..." autocomplete="off">
+      <div class="row">
+        <button class="gold" id="btnCheck">تحقّق من التوكن</button>
+        <a class="ghost" style="text-decoration:none;padding:11px 16px;border-radius:11px;display:inline-block;font-size:13px;font-weight:700" href="https://t.me/BotFather" target="_blank" rel="noopener">افتح @BotFather</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="s2">
+    <span class="num">2</span>
+    <div class="body">
+      <strong>أرسل رسالة للبوت</strong>
+      <p id="s2text">بعد التحقق من التوكن، افتح بوتك وأرسل له أي رسالة (مثل <b>/start</b>) — عشان يعرف إنك محادثة خاصة.</p>
+      <div class="row">
+        <a class="ghost" id="botLink" style="text-decoration:none;padding:11px 16px;border-radius:11px;display:inline-block;font-size:13px;font-weight:700;display:none" href="#" target="_blank" rel="noopener">افتح بوتك</a>
+        <button class="gold" id="btnChat" style="display:none">وجدت المحادثة — متابعة</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="s3">
+    <span class="num">3</span>
+    <div class="body">
+      <strong>حفظ الإعدادات وإرسال تنبيه تجريبي</strong>
+      <p>بنحفظ الإعدادات في الخادم ونرسل لك تنبيهًا تجريبيًا — لو وصلك ✅ فكل شي تمام.</p>
+      <div class="row">
+        <button class="primary" id="btnSave" style="display:none">احفظ وأرسل تجريبي</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <details class="alt">
+    <summary>ما عندك توكن؟ استخدم <b>ntfy</b> — بدون كلمة سر</summary>
+    <div class="alt-body">
+      <p>هذا الطريق أبسط: <b>ما تحتاج توكن ولا كلمة سر</b> — بس تختار اسمًا سريًا للمجلد.</p>
+      <ol>
+        <li>ثبّت تطبيق <b>ntfy</b> على جوالك (من Google Play أو App Store — مجاني).</li>
+        <li>افتح التطبيق واشترك في المجلد، مثلًا: <code>jalees-club-9x2</code> (اختر اسمًا لا يعرفه أحد).</li>
+        <li>اكتب نفس الاسم بالأسفل ← «احفظ وأرسل تجريبي».</li>
+      </ol>
+      <input id="ntfyTopic" placeholder="jalees-club-9x2" autocomplete="off">
+      <div class="row">
+        <button class="gold" id="btnNtfy">احفظ وأرسل تجريبي (ntfy)</button>
+        <a class="ghost" style="text-decoration:none;padding:11px 16px;border-radius:11px;display:inline-block;font-size:13px;font-weight:700" href="https://ntfy.sh" target="_blank" rel="noopener">حمّل تطبيق ntfy</a>
+      </div>
+    </div>
+  </details>
+</div>
+
+<p class="foot">جليس | مساحة الأعضاء — إعدادات تنبيهات المشرف</p>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbykj8VcIZXP6ljg-W0O0qeP1OHVhO7Y_jp9ReJy0i8KswPrQCDHAgtixCfCGz_6a6n-iA/exec';
+let token = '';
+let botUsername = '';
+let chatId = '';
+
+const $ = (s) => document.querySelector(s);
+const status = (kind, text) => { const el = $('#status'); el.className = 'status ' + kind; el.textContent = text; };
+const mark = (id, state) => { const el = $(id); el.classList.remove('active', 'done'); if (state) el.classList.add(state); };
+
+async function tg(method, payload) {
+  const url = 'https://api.telegram.org/bot' + token + '/' + method;
+  const res = await fetch(url, payload ? { method:'post', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) } : undefined);
+  const json = await res.json().catch(() => ({}));
+  if (!json.ok) throw new Error((json.description || 'خطأ من تيليجرام') + ' — تأكد من التوكن');
+  return json.result;
+}
+
+$('#btnCheck').addEventListener('click', async () => {
+  token = $('#token').value.trim();
+  if (!token) { status('err', 'الصق التوكن أولًا.'); return; }
+  status('wait', 'جارٍ التحقق…');
+  try {
+    const me = await tg('getMe');
+    botUsername = me.username;
+    status('ok', '✅ التوكن صحيح! البوت: @' + botUsername);
+    mark('#s1', 'done');
+    mark('#s2', 'active');
+    const link = $('#botLink');
+    link.href = 'https://t.me/' + botUsername;
+    link.style.display = 'inline-block';
+    link.textContent = 'افتح @' + botUsername;
+    $('#btnChat').style.display = 'inline-block';
+    $('#s2text').innerHTML = 'افتح بوتك (<b>@' + botUsername + '</b>) بالضغط على الزر بالأسفل، وأرسل له أي رسالة (مثل <b>/start</b>).';
+  } catch (e) {
+    status('err', '❌ ' + e.message);
+  }
+});
+
+$('#btnChat').addEventListener('click', async () => {
+  status('wait', 'جارٍ البحث عن محادثتك…');
+  const findChat = async () => {
+    const updates = await tg('getUpdates', { limit: 30 });
+    let found = '';
+    updates.forEach((u) => {
+      const m = u.message || u.edited_message || {};
+      if (m.chat && !found) found = String(m.chat.id);
+    });
+    return found;
+  };
+  try {
+    let found = await findChat();
+    /* ننتظر حتى ٤٠ ثانية — المستخدم قد يكون يرسل /start الآن */
+    const started = Date.now();
+    while (!found && Date.now() - started < 40000) {
+      status('wait', 'لم تصل رسالة بعد — افتح البوت وأرسل /start (ننتظرك هنا…)');
+      await new Promise((r) => setTimeout(r, 2500));
+      try { found = await findChat(); } catch (e) { /* نكمل المحاولة */ }
+    }
+    if (!found) {
+      status('err', 'ما وصلت رسالة. افتح @' + botUsername + ' (الزر بالأعلى) وأرسل /start، ثم اضغط «وجدت المحادثة» مرة ثانية.');
+      return;
+    }
+    chatId = found;
+    status('ok', '✅ رقم المحادثة: ' + chatId);
+    mark('#s2', 'done');
+    mark('#s3', 'active');
+    $('#btnSave').style.display = 'inline-block';
+  } catch (e) {
+    status('err', '❌ ' + e.message);
+  }
+});
+
+$('#btnSave').addEventListener('click', async () => {
+  status('wait', 'جارٍ الحفظ والإرسال…');
+  try {
+    const payload = {
+      action: 'saveNotifySettings',
+      data: JSON.stringify({
+        channel: 'telegram',
+        telegramToken: token,
+        telegramChat: chatId,
+        types: ['register','join','consultation','article','book','weekly','archive','window','selection','summary','member']
+      })
+    };
+    const saved = await (await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=saveNotifySettings&data=' + encodeURIComponent(payload.data)
+    })).json();
+    if (!saved || saved.success !== true) {
+      const msg = String((saved && (saved.error || saved.message)) || 'تعذر الحفظ');
+      if (/غير معروف|unknown action/i.test(msg)) {
+        throw new Error('الخادم المنشور ما زال قديمًا (r37). الحل:\n\n١) الصق apps-script-final-full.txt في Apps Script\n٢) Deploy → New version\n٣) شغّل setupJaleesSheets مرة واحدة\n٤) ارجع هنا واضغط «احفظ وأرسل تجريبي»');
+      }
+      throw new Error(msg);
+    }
+
+    const test = await (await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=testNotification&data=' + encodeURIComponent(JSON.stringify({}))
+    })).json();
+
+    if (test && test.pushed) {
+      status('ok', '🎉 تم! وصل التنبيه التجريبي لتيليجرام — افتح تيليجرام الآن.\n\nكل طلب تسجيل جديد س يصلك إشعار فورًا.');
+      mark('#s3', 'done');
+    } else {
+      const detail = String((test && test.detail) || 'تحقق من الاتصال بالإنترنت');
+      if (/غير معروف|unknown action/i.test(detail)) {
+        status('err', 'الخادم المنشور ما زال قديمًا (r37). الحل: الصق apps-script-final-full.txt ← Deploy → New version ← شغّل setupJaleesSheets ← ارجع هنا.');
+      } else {
+        status('err', 'حُفظت الإعدادات لكن لم يصل التنبيه: ' + detail);
+      }
+    }
+  } catch (e) {
+    status('err', '❌ ' + (e.message || e));
+  }
+});
+$('#btnNtfy').addEventListener('click', async () => {
+  const topic = $('#ntfyTopic').value.trim();
+  if (!topic) { status('err', 'اكتب اسم المجلد أولًا.'); return; }
+  status('wait', 'جارٍ الحفظ والإرسال…');
+  try {
+    const types = ['register','join','consultation','article','book','weekly','archive','window','selection','summary','member'];
+    const saved = await (await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=saveNotifySettings&data=' + encodeURIComponent(JSON.stringify({ channel: 'ntfy', ntfyTopic: topic, types: types }))
+    })).json();
+    if (!saved || saved.success !== true) throw new Error((saved && saved.error) || 'تعذر الحفظ');
+    const test = await (await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=testNotification&data=' + encodeURIComponent(JSON.stringify({}))
+    })).json();
+    if (test && test.pushed) {
+      status('ok', '🎉 تم! افتح تطبيق ntfy على جوالك — لازم تكون مشترك في المجلد: ' + topic);
+    } else {
+      status('err', 'حُفظت الإعدادات لكن لم يصل التنبيه: ' + ((test && test.detail) || 'تأكد أنك مشترك في المجلد بنفس الاسم'));
+    }
+  } catch (e) {
+    status('err', '❌ ' + (e.message || e));
+  }
+});
+</script>
+</body>
+</html>

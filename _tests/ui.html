@@ -414,6 +414,37 @@
     const errs = [];
     window.addEventListener('error', (e) => errs.push(String(e.message)));
 
+    /* ================= الشيت هو المصدر: ما ليس في الشيت يختفي ================= */
+    const localOnly = { id: 'club-local-only', title: 'كتاب محلي فقط', author: 'مؤلف', coverColor: '#123456', createdAt: 99 };
+    state.clubBooks = [...(state.clubBooks || []), localOnly];
+    syncState.clubBooks.add('club-local-only');
+    await api('getClubBooks');
+    await refreshClubBooksFromCloud();
+    ok('كتاب محلي غير موجود في الشيت يختفي', !(state.clubBooks || []).some((b) => b.id === 'club-local-only'), (state.clubBooks || []).map((b) => b.title).join(' | '));
+
+    const freshLocal = { id: 'club-fresh', title: 'كتاب جديد لم يُرفع', author: 'مؤلف', coverColor: '#123456', createdAt: 100 };
+    state.clubBooks = [...(state.clubBooks || []), freshLocal];
+    await refreshClubBooksFromCloud();
+    ok('كتاب جديد لم يُرفع بعد يبقى محليًا', (state.clubBooks || []).some((b) => b.id === 'club-fresh'), 'Missing fresh book');
+
+    const localArticle = { id: 'a-local', title: 'مقال محلي قديم', category: 'قراءة', body: 'نص', createdAt: 5, authorId: currentMember.id, authorName: currentMember.name };
+    state.articles = [...(state.articles || []), localArticle];
+    syncState.articles.add('a-local');
+    await refreshArticlesFromCloud();
+    ok('مقال محلي غير موجود في الشيت يختفي', !(state.articles || []).some((a) => a.id === 'a-local'), (state.articles || []).map((a) => a.title).join(' | '));
+
+    /* ================= حذف كل المقالات ================= */
+    await api('saveArticle', { id: 'art-x', memberId: 'm1', memberName: 'مشعل', title: 'مقال للحذف', category: 'قراءة', body: 'نص', read: 3 });
+    let arts = await api('getArticles');
+    ok('المقال الجديد موجود في الشيت', (arts.data || []).some((a) => a.id === 'art-x'), JSON.stringify((arts.data || []).map((a) => a.id)));
+    const clearAll = await api('deleteAllArticles', { by: 'مشعل' });
+    ok('حذف كل المقالات (الخادم)', clearAll && clearAll.success === true, JSON.stringify(clearAll));
+    arts = await api('getArticles');
+    ok('لم يبقَ أي مقال في الشيت', (arts.data || []).length === 0, JSON.stringify((arts.data || []).map((a) => a.id)));
+
+    await refreshArticlesFromCloud();
+    ok('المقالات اختفت من الموقع', (state.articles || []).length === 0, JSON.stringify((state.articles || []).map((a) => a.title)));
+
     const passed = results.filter((r) => r.pass).length;
     return { passed, total: results.length, failures: results.filter((r) => !r.pass), cloudCalls: cloudCalls.length, errors: errs };
   } catch (e) {

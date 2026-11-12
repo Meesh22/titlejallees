@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r37';
+const CODE_VERSION = 'jalees-2026-11-13-r40';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -17,6 +17,7 @@ const SELECTION_QUOTES_SHEET = 'مختارات الاقتباسات';
 const WEEKLY_REPORTS_SHEET = 'التقارير الأسبوعية';
 const DELETED_LOG_SHEET = 'سجل المحذوفات';
 const BOOK_SUMMARIES_SHEET = 'ملخصات الأعضاء';
+const NOTIFICATIONS_SHEET = 'التنبيهات';
 
 const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
 
@@ -552,8 +553,183 @@ function getArticlesSheet(ss) {
 }
 
 /* ==========================================================================
-   حسابات الأعضاء: البريد الإلكتروني + الرمز السري
+   نظام التنبيهات: إشعار داخل الموقع + إرسال فعلي إلى جوال المشرف
    ========================================================================== */
+const NOTIFICATION_TYPES = {
+  register: { label: 'طلب تسجيل', icon: 'user' },
+  join: { label: 'طلب انضمام', icon: 'user' },
+  consultation: { label: 'استشارة', icon: 'chat' },
+  article: { label: 'مقال', icon: 'article' },
+  book: { label: 'كتاب', icon: 'book' },
+  weekly: { label: 'تقرير أسبوعي', icon: 'calendar' },
+  archive: { label: 'أرشيف', icon: 'library' },
+  window: { label: 'نافذة قرائية', icon: 'quote' },
+  selection: { label: 'اقتباس مختار', icon: 'quote' },
+  summary: { label: 'ملخص', icon: 'book' },
+  member: { label: 'عضو', icon: 'user' }
+};
+
+function getNotificationsSheet(ss) {
+  return getDataSheet(ss, NOTIFICATIONS_SHEET, [
+    'id', 'type', 'title', 'body', 'memberId', 'memberName', 'createdAt', 'readAt', 'link'
+  ]);
+}
+
+/* ---- إعدادات قناة الإرسال (تُحفظ في خصائص السكربت) ---- */
+function pushSettings() {
+  let props = {};
+  try { props = PropertiesService.getScriptProperties(); } catch (error) { props = {}; }
+  const get = (key, fallback) => {
+    try { return String(props.getProperty(key) || fallback || ''); } catch (error) { return fallback || ''; }
+  };
+  return {
+    channel: (get('JALEES_PUSH_CHANNEL', 'email') || 'email').toLowerCase(),
+    telegramToken: get('JALEES_TELEGRAM_TOKEN', ''),
+    telegramChat: get('JALEES_TELEGRAM_CHAT', '6584082937'),
+    ntfyTopic: get('JALEES_NTFY_TOPIC', ''),
+    pushoverToken: get('JALEES_PUSHOVER_TOKEN', ''),
+    pushoverUser: get('JALEES_PUSHOVER_USER', ''),
+    types: get('JALEES_PUSH_TYPES', ''),
+    siteUrl: get('JALEES_SITE_URL', '')
+  };
+}
+
+function pushEnabledTypes() {
+  const settings = pushSettings();
+  const list = String(settings.types || '').split(',').map((t) => t.trim()).filter(Boolean);
+  return list.length ? new Set(list) : new Set(Object.keys(NOTIFICATION_TYPES));
+}
+
+/* ---- الإرسال الفعلي إلى الجوال (تيليجرام / ntfy / Pushover / بريد) ---- */
+function sendPushNotification(ss, type, title, body, link) {
+  const settings = pushSettings();
+  const channel = settings.channel;
+  if (!channel || channel === 'off' || channel === 'none') {
+    return { sent: false, channel: channel, detail: 'الإرسال مُعطّل' };
+  }
+  const text = link ? (title + '\n' + body + '\n' + link) : (title + '\n' + body);
+  try {
+    if (channel === 'telegram') {
+      if (!settings.telegramToken || !settings.telegramChat) throw new Error('إعدادات تيليجرام ناقصة');
+      const url = 'https://api.telegram.org/bot' + settings.telegramToken + '/sendMessage';
+      const res = UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({
+          chat_id: settings.telegramChat,
+          text: text,
+          disable_web_page_preview: true
+        }),
+        muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      const body = String(res.getContentText() || '');
+      if (code < 200 || code >= 300) throw new Error('تيليجرام ' + code + ': ' + body.slice(0, 160));
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed && parsed.ok === false) throw new Error('تيليجرام: ' + String((parsed.description || 'خطأ') || '').slice(0, 160));
+      } catch (parseError) {
+        if (parseError && /تيليجرام/.test(String(parseError.message || ''))) throw parseError;
+      }
+      return { sent: true, channel: channel, detail: 'أُرسل عبر تيليجرام' };
+    }
+
+    if (channel === 'ntfy') {
+      if (!settings.ntfyTopic) throw new Error('مجلد ntfy غير محدد');
+      const res = UrlFetchApp.fetch('https://ntfy.sh/' + encodeURIComponent(settings.ntfyTopic), {
+        method: 'post',
+        contentType: 'text/plain; charset=utf-8',
+        payload: text,
+        headers: {
+          Title: String(title || 'جليس').slice(0, 100),
+          Tags: 'books',
+          Priority: 'default',
+          Click: String(link || settings.siteUrl || '')
+        },
+        muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      if (code < 200 || code >= 300) throw new Error('ntfy: ' + code + ' ' + String(res.getContentText() || '').slice(0, 120));
+      return { sent: true, channel: channel, detail: 'أُرسل عبر ntfy' };
+    }
+
+    if (channel === 'pushover') {
+      if (!settings.pushoverToken || !settings.pushoverUser) throw new Error('إعدادات Pushover ناقصة');
+      const res = UrlFetchApp.fetch('https://api.pushover.net/1/messages.json', {
+        method: 'post',
+        contentType: 'application/x-www-form-urlencoded',
+        payload: {
+          token: settings.pushoverToken,
+          user: settings.pushoverUser,
+          title: String(title || 'جليس'),
+          message: String(body || ''),
+          url: String(link || settings.siteUrl || ''),
+          sound: 'push'
+        },
+        muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      if (code < 200 || code >= 300) throw new Error('Pushover: ' + code + ' ' + String(res.getContentText() || '').slice(0, 120));
+      return { sent: true, channel: channel, detail: 'أُرسل عبر Pushover' };
+    }
+
+    if (channel === 'email') {
+      const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
+        <p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>
+        <h2 style="margin:0 0 10px">${title || 'جليس'}</h2>
+        <p>${body || ''}</p>
+        ${link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : ''}
+      </div>`;
+      const plain = ['نادي جليس القرائي', title || 'جليس', body || '', link || ''].filter(Boolean).join('\n');
+      const opts = {
+        to: MAIL_FROM,
+        subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
+        body: plain,
+        htmlBody: html
+      };
+      /* ملاحظة: MailApp لا يقبل إلا وسوم معروفة — الرابط يوضع داخل النص لا كخاصية */
+      try {
+        MailApp.sendEmail(opts);
+      } catch (firstError) {
+        MailApp.sendEmail({ to: MAIL_FROM, subject: opts.subject, body: plain, htmlBody: html });
+      }
+      return { sent: true, channel: channel, detail: 'أُرسل إلى بريد النادي' };
+    }
+
+    return { sent: false, channel: channel, detail: 'قناة غير معروفة' };
+  } catch (error) {
+    return { sent: false, channel: channel, detail: String((error && error.message) || error) };
+  }
+}
+
+/* ---- تسجيل تنبيه وإرساله ---- */
+function notifySupervisors(ss, type, title, body, link, memberId, memberName) {
+  /* النوع غير المفعّل = لا تسجيل ولا إرسال */
+  if (!pushEnabledTypes().has(String(type || 'member'))) {
+    return { stored: false, push: { sent: false, channel: 'off', detail: 'نوع غير مفعّل' } };
+  }
+
+  let stored = false;
+  try {
+    const id = 'n-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100);
+    getNotificationsSheet(ss).appendRow([
+      id, String(type || 'member'), String(title || ''), String(body || ''),
+      String(memberId || ''), String(memberName || ''), Date.now(), '', String(link || '')
+    ]);
+    stored = true;
+  } catch (error) { /* السجل لا يمنع الإرسال */ }
+
+  let push = { sent: false, channel: 'off', detail: 'تعذّر الإرسال' };
+  try {
+    push = sendPushNotification(ss, type, title, body, link);
+  } catch (error) {
+    push = { sent: false, channel: 'off', detail: String((error && error.message) || error) };
+  }
+  try { logMailAttempt(ss, String(memberId || title || 'تنبيه'), push.sent ? 'push-sent' : 'push-failed', push.detail, ''); } catch (error) {}
+  return { stored: stored, push: push };
+}
+
+
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -1286,6 +1462,12 @@ function doPost(e) {
       }
 
       sheet.appendRow(rowData);
+      notifySupervisors(
+        ss, 'book',
+        'كتاب جديد في المكتبة',
+        String(data.title || '') + ' — ' + String(data.author || ''),
+        '', String(data.memberId || ''), String(data.memberName || '')
+      );
       return output({ success: true, id: rowData[0], message: 'تم حفظ الكتاب' });
     }
 
@@ -1397,6 +1579,12 @@ function doPost(e) {
         ''
       ]);
       paintJoinRequestRow(sheet, row, 'pending');
+      notifySupervisors(
+        ss, 'join',
+        'طلب انضمام جديد',
+        (data.name || 'عضو') + ' أرسل طلب انضمام — ' + (data.phone || ''),
+        '', '', String(data.name || '')
+      );
       return output({ success: true, message: 'تم حفظ طلب الانضمام' });
     }
 
@@ -1611,6 +1799,12 @@ function doPost(e) {
         summaryId, memberId, data.memberName || '', data.bookTitle || '',
         data.bookAuthor || '', data.summary || '', data.createdAt || Date.now(), '', ''
       ]);
+      notifySupervisors(
+        ss, 'summary',
+        'ملخص كتاب جديد',
+        (data.memberName || 'عضو') + ' — ' + String(data.bookTitle || ''),
+        '', memberId, String(data.memberName || '')
+      );
       return output({ success: true, id: summaryId, message: 'تم نشر الملخص' });
     }
 
@@ -1693,6 +1887,12 @@ function doPost(e) {
         }
       }
       sheet.appendRow(rowData);
+      notifySupervisors(
+        ss, 'selection',
+        'اقتباس مختار جديد',
+        String(data.text || '').slice(0, 110),
+        '', '', String(data.by || 'مشرف')
+      );
       return output({ success: true, id: selectionId, message: 'تم نشر الاقتباس في مختارات النادي' });
     }
 
@@ -1739,6 +1939,12 @@ function doPost(e) {
         return output({ success: true, id: reportId, message: 'تم تحديث تقرير هذا الأسبوع' });
       }
       sheet.appendRow(rowData);
+      notifySupervisors(
+        ss, 'weekly',
+        'تقرير أسبوعي جديد',
+        'الأسبوع ' + weekNo + (data.title ? ' — ' + String(data.title).slice(0, 70) : ''),
+        '', '', String(data.by || 'مشرف')
+      );
       return output({ success: true, id: reportId, message: 'تم حفظ التقرير الأسبوعي' });
     }
 
@@ -1933,6 +2139,12 @@ function doPost(e) {
         }
       }
       sheet.appendRow(rowData);
+      notifySupervisors(
+        ss, 'window',
+        'نافذة قرائية جديدة',
+        String(data.title || ''),
+        '', '', String(data.createdBy || 'مشرف')
+      );
       return output({ success: true, id: tipId, message: 'تم حفظ النصيحة' });
     }
 
@@ -2018,6 +2230,12 @@ function doPost(e) {
       const id = `consult-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
       const sheet = getConsultationsSheet(ss);
       sheet.appendRow([id, memberId, String(member[1] || ''), question, Date.now(), '', '', '', '']);
+      notifySupervisors(
+        ss, 'consultation',
+        'استشارة جديدة',
+        String(member[1] || '') + ': ' + String(question || '').slice(0, 120),
+        '', memberId, String(member[1] || '')
+      );
       return output({ success: true, id: id, message: 'تم إرسال استشارتك للمستشارين' });
     }
 
@@ -2179,6 +2397,13 @@ function doPost(e) {
       ]);
       paintMemberRow(sheet, sheet.getLastRow(), 'pending');
       clearPendingRegistration(email);
+      /* تنبيه المشرف بوجود طلب تسجيل جديد */
+      notifySupervisors(
+        ss, 'register',
+        'طلب تسجيل جديد',
+        record.name + ' (' + email + ') يطلب الانضمام للنادي — بانتظار موافقتك.',
+        '', id, record.name
+      );
       return output({
         success: true,
         status: 'pending',
@@ -2422,6 +2647,12 @@ function doPost(e) {
         data.title || '', data.category || '', data.body || '',
         data.excerpt || '', data.read || 0, data.createdAt || Date.now()
       ]);
+      notifySupervisors(
+        ss, 'article',
+        'مقال جديد',
+        (data.memberName || 'عضو') + ' نشر: ' + String(data.title || '').slice(0, 90),
+        '', String(data.memberId || ''), String(data.memberName || '')
+      );
       return output({ success: true, message: 'تم حفظ المقال' });
     }
 
@@ -2503,6 +2734,12 @@ function doPost(e) {
         }
       }
       sheet.appendRow(rowData);
+      notifySupervisors(
+        ss, 'archive',
+        'مدخل جديد في الأرشيف',
+        String(data.title || '') + (data.location ? ' — ' + String(data.location) : ''),
+        '', '', String(data.createdBy || 'مشرف')
+      );
       return output({ success: true, message: 'تم حفظ التسجيل' });
     }
 
@@ -2570,6 +2807,81 @@ function doPost(e) {
         return output({ success: true, message: 'نُقل المقال إلى سلة المحذوفات' });
       }
       return output({ success: true, message: 'المقال غير موجود' });
+    }
+
+    /* ===== التنبيهات ===== */
+    if (action === 'markNotificationsRead') {
+      const sheet = getNotificationsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let marked = 0;
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+        const targetId = String(data.id || '').trim();
+        for (let i = 0; i < rows.length; i++) {
+          if (rows[i][7]) continue;
+          if (targetId && String(rows[i][0]) !== targetId) continue;
+          sheet.getRange(i + 2, 8).setValue(Date.now());
+          marked += 1;
+        }
+      }
+      return output({ success: true, marked: marked });
+    }
+
+    if (action === 'getNotifySettings') {
+      const settings = pushSettings();
+      return output({
+        success: true,
+        channel: settings.channel,
+        hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
+        hasNtfy: Boolean(settings.ntfyTopic),
+        hasPushover: Boolean(settings.pushoverToken && settings.pushoverUser),
+        types: [...pushEnabledTypes()],
+        allTypes: Object.keys(NOTIFICATION_TYPES),
+        labels: NOTIFICATION_TYPES
+      });
+    }
+
+    if (action === 'saveNotifySettings') {
+      const channel = String(data.channel || 'off').toLowerCase();
+      const props = PropertiesService.getScriptProperties();
+      const set = (key, value) => { try { props.setProperty(key, String(value || '')); } catch (error) {} };
+      set('JALEES_PUSH_CHANNEL', channel);
+      set('JALEES_TELEGRAM_TOKEN', String(data.telegramToken || '').trim());
+      set('JALEES_TELEGRAM_CHAT', String(data.telegramChat || '').trim());
+      set('JALEES_NTFY_TOPIC', String(data.ntfyTopic || '').trim());
+      set('JALEES_PUSHOVER_TOKEN', String(data.pushoverToken || '').trim());
+      set('JALEES_PUSHOVER_USER', String(data.pushoverUser || '').trim());
+      set('JALEES_SITE_URL', String(data.siteUrl || '').trim());
+      const types = Array.isArray(data.types) ? data.types.map((t) => String(t)).filter(Boolean) : [];
+      set('JALEES_PUSH_TYPES', types.join(','));
+      return output({ success: true, message: 'تم حفظ إعدادات التنبيهات', channel: channel });
+    }
+
+    if (action === 'testNotification') {
+      const result = notifySupervisors(
+        ss, 'register', 'تجربة تنبيه',
+        'هكذا سيصلك التنبيه على جوالك عندما يطلب عضو تسجيلًا جديدًا.',
+        String(data.link || ''), '', 'تجربة'
+      );
+      return output({
+        success: true,
+        stored: result.stored,
+        pushed: result.push.sent,
+        channel: result.push.channel,
+        detail: result.push.detail
+      });
+    }
+
+    /* ===== حذف كل المقالات (للمشرف) ===== */
+    if (action === 'deleteAllArticles') {
+      const sheet = getArticlesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) {
+        sheet.deleteRow(row);
+        removed += 1;
+      }
+      return output({ success: true, removed: removed, message: 'تم حذف كل المقالات' });
     }
 
     if (action === 'deleteQuote' || action === 'restoreQuote') {
@@ -2649,6 +2961,50 @@ function doGet(e) {
         success: true,
         member: { id: String(member[0] || ''), name: String(member[1] || ''), photo: String(member[12] || '') }
       });
+    }
+
+    if (action === 'getNotifySettings') {
+      const settings = pushSettings();
+      return output({
+        success: true,
+        channel: settings.channel,
+        telegramChat: settings.telegramChat,
+        ntfyTopic: settings.ntfyTopic,
+        siteUrl: settings.siteUrl,
+        hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
+        hasNtfy: Boolean(settings.ntfyTopic),
+        hasPushover: Boolean(settings.pushoverToken && settings.pushoverUser),
+        types: [...pushEnabledTypes()],
+        allTypes: Object.keys(NOTIFICATION_TYPES),
+        labels: NOTIFICATION_TYPES
+      });
+    }
+
+    if (action === 'getNotifications') {
+      const sheet = getNotificationsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      const data = [];
+      let unread = 0;
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+        rows.forEach((row) => {
+          if (!row[0]) return;
+          if (!row[7]) unread += 1;
+          data.push({
+            id: String(row[0]),
+            type: String(row[1] || 'member'),
+            title: String(row[2] || ''),
+            body: String(row[3] || ''),
+            memberId: String(row[4] || ''),
+            memberName: String(row[5] || ''),
+            createdAt: Number(row[6]) || 0,
+            read: Boolean(row[7]),
+            link: String(row[8] || '')
+          });
+        });
+      }
+      data.sort((a, b) => b.createdAt - a.createdAt);
+      return output({ success: true, data: data.slice(0, 40), unread: unread, types: NOTIFICATION_TYPES });
     }
 
     if (action === 'getVersion') {
@@ -3694,6 +4050,11 @@ function setupJaleesSheets() {
   step(MAIL_LOG_SHEET, () => {
     const mailLog = getMailLogSheet(ss);
     return mailLog.getMaxColumns() + ' عمود · نسخة إلى ' + mailBccAddress();
+  });
+
+  step(NOTIFICATIONS_SHEET, () => {
+    const notifications = getNotificationsSheet(ss);
+    return notifications.getMaxColumns() + ' عمود · قناة الإرسال: ' + pushSettings().channel;
   });
 
   step(READING_TIPS_SHEET, () => {
