@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r31';
+const CODE_VERSION = 'jalees-2026-11-10-r32';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -443,13 +443,15 @@ function ensureJoinRequestStatuses(sheet) {
 const MEMBER_STATUS_COLORS = {
   active: { background: '#d9ead3', font: '#274e13' },
   pending: { background: '#efefef', font: '#555555' },
-  rejected: { background: '#f4cccc', font: '#9c0006' }
+  rejected: { background: '#f4cccc', font: '#9c0006' },
+  banned: { background: '#4a4a4a', font: '#ffffff' }
 };
 
 function memberStatusCode(value) {
   const status = String(value || '').trim().toLowerCase();
   if (!status || status === 'active') return 'active';
   if (status === 'rejected') return 'rejected';
+  if (status === 'banned' || status === 'طرد' || status === 'blocked') return 'banned';
   return 'pending';
 }
 
@@ -746,6 +748,22 @@ function findMemberRow(sheet, email) {
   const rows = sheet.getRange(2, 3, lastRow - 1, 1).getDisplayValues();
   for (let i = 0; i < rows.length; i++) {
     if (normalizeEmail(rows[i][0]) === target) return i + 2;
+  }
+  return -1;
+}
+
+/* البحث عن حساب مطرود بالبريد أو برقم الجوال */
+function findBannedRow(sheet, email, phone) {
+  const targetEmail = normalizeEmail(email);
+  const targetPhone = normalizePhone(phone);
+  if (!targetEmail && !targetPhone) return -1;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (memberStatusCode(rows[i][6]) !== 'banned') continue;
+    if (targetEmail && normalizeEmail(rows[i][2]) === targetEmail) return i + 2;
+    if (targetPhone && normalizePhone(rows[i][11]) === targetPhone) return i + 2;
   }
   return -1;
 }
@@ -1276,6 +1294,29 @@ function doPost(e) {
       const isConsultant = (String(data.isConsultant) === 'true' || data.isConsultant === true);
       sheet.getRange(row, 6).setValue(isConsultant ? 'consultant' : 'member');
       return output({ success: true, role: isConsultant ? 'consultant' : 'member', message: isConsultant ? 'تم ترقية العضو إلى مستشار' : 'تم إلغاء ترقية المستشار' });
+    }
+
+    /* منح صلاحية إشراف لعضو (للمشرف فقط) */
+    if (action === 'setSupervisorStatus') {
+      const sheet = getMembersSheet(ss);
+      const row = Number(data.row);
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      const isSupervisor = (String(data.isSupervisor) === 'true' || data.isSupervisor === true);
+      const current = String(sheet.getRange(row, 6).getValue() || '');
+      const next = isSupervisor ? 'supervisor' : (current === 'consultant' ? 'consultant' : 'member');
+      sheet.getRange(row, 6).setValue(next);
+      return output({ success: true, role: next, message: isSupervisor ? 'أصبح العضو مشرفًا للنادي' : 'أُلغي إشراف العضو' });
+    }
+
+    /* طرد عضو: يُمنع من الدخول بنفس الإيميل أو الرقم */
+    if (action === 'banMember') {
+      const sheet = getMembersSheet(ss);
+      const row = Number(data.row);
+      if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
+      const banning = !(String(data.banned) === 'false' || data.banned === false);
+      sheet.getRange(row, 7).setValue(banning ? 'banned' : 'active');
+      paintMemberRow(sheet, row, banning ? 'banned' : 'active');
+      return output({ success: true, banned: banning, message: banning ? 'تم طرد العضو — لن يستطيع الدخول بنفس الإيميل أو الرقم' : 'أُعيد تفعيل الحساب' });
     }
 
     if (action === 'setMemberType') {
@@ -1844,6 +1885,14 @@ function doPost(e) {
       if (findMemberRow(sheet, email) > 0) {
         throw new Error('هذا البريد مسجل مسبقًا، جرّب الدخول أو استعادة الرمز');
       }
+      const bannedByEmail = findBannedRow(sheet, email, '');
+      if (bannedByEmail > 0) {
+        throw new Error('هذا البريد مطرود من النادي ولا يمكن التسجيل به');
+      }
+      const bannedByPhone = findBannedRow(sheet, '', phone);
+      if (bannedByPhone > 0) {
+        throw new Error('رقم الجوال مطرود من النادي ولا يمكن التسجيل به');
+      }
 
       const previous = readPendingRegistration(email);
       if (previous && previous.sentAt && Date.now() - Number(previous.sentAt) < 60000) {
@@ -1898,6 +1947,10 @@ function doPost(e) {
         clearPendingRegistration(email);
         throw new Error('هذا البريد مسجل مسبقًا، يمكنك الدخول الآن');
       }
+      if (findBannedRow(sheet, email, record.phone) > 0) {
+        clearPendingRegistration(email);
+        throw new Error('هذا الحساب مطرود من النادي ولا يمكن تفعيله');
+      }
       if (!verifyPassword(code, record.codeSalt, record.codeHash)) {
         record.attempts = (Number(record.attempts) || 0) + 1;
         if (record.attempts >= 6) {
@@ -1950,6 +2003,7 @@ function doPost(e) {
 
       const values = sheet.getRange(row, 1, 1, 13).getValues()[0];
       const status = memberStatusCode(values[6]);
+      if (status === 'banned') throw new Error('تم طرد حسابك من النادي');
       if (status === 'rejected') throw new Error('تم رفض طلب حسابك، تواصل مع إدارة النادي');
       if (status !== 'active') throw new Error('حسابك بانتظار موافقة المشرف');
 

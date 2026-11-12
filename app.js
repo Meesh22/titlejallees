@@ -73,7 +73,13 @@ const MAIN_API_ACTIONS = new Set([
   'saveProfile', 'getProfile', 'saveEntry', 'getEntries',
   'getMyBooks', 'saveMyBook', 'deleteMyBook',
   'getReadingTips', 'saveReadingTip', 'deleteReadingTip',
-  'setConsultantStatus', 'setMemberType'
+  'setConsultantStatus', 'setMemberType', 'setSupervisorStatus', 'banMember',
+  'getBookSummaries', 'saveBookSummary', 'deleteBookSummary',
+  'getReadingLists', 'saveReadingList', 'deleteReadingList',
+  'getSelectionQuotes', 'toggleSelectionQuote',
+  'getWeeklyReports', 'saveWeeklyReport', 'deleteWeeklyReport', 'deleteAllWeeklyReports',
+  'describeSpreadsheet', 'organizeSheets', 'dedupeClubBooks', 'getLikes', 'toggleLike',
+  'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile'
 ]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
@@ -6401,22 +6407,23 @@ function openMemberStatsSheet() {
     if (!entry.photo) entry.photo = photoByName(name) || '';
     return entry;
   };
-  // Approved members first
-  (approvedMembersCache || []).forEach((m) => {
+  /* الأعضاء الحقيقيون فقط (المعتمدون في قاعدة البيانات) */
+  const approved = (approvedMembersCache || []).filter((m) => m && String(m.name || '').trim());
+  const approvedNames = new Set(approved.map((m) => normalizeName(m.name)));
+  approved.forEach((m) => {
     const e = ensure(m.name);
     if (e) e.photo = m.photo || e.photo;
   });
-  // Roster names
-  (MEMBERS || []).forEach((m) => { ensure(m.name); });
-  // Quotes
+  /* المساهمون من الاقتباسات والمقالات — إن كانون ضمن الأعضاء المعتمدين */
   (state && state.quotes ? state.quotes : []).forEach((q) => {
     const n = authorNameOf(q);
+    if (!approvedNames.has(normalizeName(n))) return;
     const e = ensure(n);
     if (e) e.quotes += 1;
   });
-  // Articles
   (state && state.articles ? state.articles : []).forEach((a) => {
     const n = authorNameOf(a);
+    if (!approvedNames.has(normalizeName(n))) return;
     const e = ensure(n);
     if (e) e.articles += 1;
   });
@@ -6622,7 +6629,8 @@ function renderApprovedMembers(root, members) {
       ? `منذ ${toAr(new Date(Number(member.joinedAt)).getFullYear())}`
       : '';
     const photo = memberPhoto(member.name, member.photo || '');
-    const roleLabel = isSupervisorMember ? 'مشرف النادي' : (isConsultant ? 'مستشار استشارات' : (member.memberType === 'friend' ? 'صديق جليس' : 'عضو جليس'));
+    const roleLabel = isSupervisorMember ? 'مشرف النادي' : (isConsultant ? 'مستشار' : (member.memberType === 'friend' ? 'صديق جليس' : 'عضو جليس'));
+    const canManage = isSupervisor() && member.row && !isSupervisorMember;
     return `<div class="member-row member-row-promote">
       <button class="member-profile-trigger" type="button" data-action="open-member-profile" data-name="${esc(member.name || '')}">${avatarHTML(member.name || 'عضو جليس', color, 'member-avatar', photo)}</button>
       <div class="member-main">
@@ -6630,7 +6638,11 @@ function renderApprovedMembers(root, members) {
         <small>${roleLabel}${joined ? ' · ' + joined : ''}</small>
       </div>
       ${isSupervisorMember ? '<span class="member-role">مشرف</span>' : (isConsultant ? '<span class="member-role consultant">مستشار</span>' : (member.memberType === 'friend' ? '<span class="member-role friend">صديق</span>' : ''))}
-      ${isSupervisor() && member.row ? `<button class="btn btn-ghost btn-sm member-promote-btn" type="button" data-action="toggle-consultant" data-row="${esc(String(member.row))}" data-consultant="${isConsultant ? 'true' : 'false'}">${isConsultant ? 'إلغاء ترقية مستشار' : 'ترقية إلى مستشار'}</button>` : ''}
+      ${canManage ? `<div class="member-admin-tools">
+        <button class="member-tool-btn" type="button" data-action="toggle-consultant" data-row="${esc(String(member.row))}" data-consultant="${isConsultant ? 'true' : 'false'}" title="${isConsultant ? 'إلغاء ترقية المستشار' : 'ترقية إلى مستشار'}">${isConsultant ? '− مستشار' : '+ مستشار'}</button>
+        <button class="member-tool-btn" type="button" data-action="toggle-supervisor" data-row="${esc(String(member.row))}" data-supervisor="false" title="منح صلاحية إشراف">+ إشراف</button>
+        <button class="member-tool-btn danger" type="button" data-action="ban-member" data-row="${esc(String(member.row))}" data-name="${esc(member.name || '')}" title="طرد العضو من النادي">طرد</button>
+      </div>` : ''}
     </div>`;
   }).join('');
 }
@@ -7699,18 +7711,79 @@ async function handleGlobalClick(event) {
       const row = Number(actionEl.dataset.row);
       const currently = actionEl.dataset.consultant === 'true';
       const newStatus = !currently;
-      cloudRequest('setConsultantStatus', { row, isConsultant: newStatus, by: (currentMember && currentMember.name) || 'مشرف' })
-        .then((result) => {
-          if (result && result.success === true) {
-            toast(newStatus ? 'تمت ترقية العضو إلى مستشار استشارات' : 'تم إلغاء ترقية المستشار', 'check');
-            refreshJoinRequests();
-            const membersList = document.querySelector('#members-list');
-            if (membersList) loadApprovedMembers(document.querySelector('.sheet-root') || document);
-          } else {
-            toast(cleanServerError(result, 'تعذر تحديث الترقية'), 'info');
+      openConfirm({
+        title: 'هل أنت متأكد من هذا الإجراء؟',
+        text: newStatus
+          ? 'سيصبح العضو مستشارًا، ويستطيع المشاركة بالإجابة على استشارات الأعضاء.'
+          : 'سيُلغى إشراف العضو، وسيعود عضوًا عاديًا.',
+        confirmLabel: 'تأكيد',
+        danger: false,
+        onConfirm: () => {
+          cloudRequest('setConsultantStatus', { row, isConsultant: newStatus, by: (currentMember && currentMember.name) || 'مشرف' })
+            .then((result) => {
+              if (result && result.success === true) {
+                toast(newStatus ? 'تمت ترقية العضو إلى مستشار استشارات' : 'تم إلغاء ترقية المستشار', 'check');
+                refreshJoinRequests();
+                const membersList = document.querySelector('#members-list');
+                if (membersList) loadApprovedMembers(document.querySelector('.sheet-root') || document);
+              } else {
+                toast(cleanServerError(result, 'تعذر تحديث الترقية'), 'info');
+              }
+            })
+            .catch(() => toast('تعذر تحديث الترقية', 'info'));
+        }
+      });
+      break;
+    }
+    case 'toggle-supervisor': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const row = Number(actionEl.dataset.row);
+      const currently = actionEl.dataset.supervisor === 'true';
+      openConfirm({
+        title: 'هل أنت متأكد من هذا الإجراء؟',
+        text: currently
+          ? 'سيُلغى إشراف العضو، وستعود صلاحياته عضوًا عاديًا.'
+          : 'سيصبح العضو مشرفًا للنادي، وله كامل صلاحيات الإدارة.',
+        confirmLabel: 'تأكيد',
+        danger: false,
+        onConfirm: () => {
+          cloudRequest('setSupervisorStatus', { row, isSupervisor: !currently, by: (currentMember && currentMember.name) || 'مشرف' })
+            .then((result) => {
+              if (result && result.success === true) {
+                toast(result.message || (currently ? 'أُلغي إشراف العضو' : 'أصبح العضو مشرفًا للنادي'), 'check');
+                const membersList = document.querySelector('#members-list');
+                if (membersList) loadApprovedMembers(document.querySelector('.sheet-root') || document);
+                refreshApprovedMembersCache();
+              } else {
+                toast(cleanServerError(result, 'تعذر تحديث الإشراف'), 'info');
+              }
+            })
+            .catch(() => toast('تعذر تحديث الإشراف', 'info'));
+        }
+      });
+      break;
+    }
+    case 'ban-member': {
+      if (!isSupervisor()) { toast('الطرد للمشرفين فقط', 'info'); break; }
+      const row = Number(actionEl.dataset.row);
+      const memberName = actionEl.dataset.name || 'العضو';
+      openConfirm({
+        title: 'هل أنت متأكد من هذا الإجراء؟',
+        text: `سيُمنع «${memberName}» من الدخول بنفس البريد أو رقم الجوال، ولن يستطيع التسجيل مرة أخرى.`,
+        confirmLabel: 'تأكيد',
+        danger: true,
+        onConfirm: async () => {
+          const result = await cloudRequest('banMember', { row, banned: true, by: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success !== true) {
+            toast(cleanServerError(result, 'تعذر طرد العضو'), 'info');
+            return;
           }
-        })
-        .catch(() => toast('تعذر تحديث الترقية', 'info'));
+          toast(result.message || 'تم طرد العضو', 'trash');
+          const membersList = document.querySelector('#members-list');
+          if (membersList) loadApprovedMembers(document.querySelector('.sheet-root') || document);
+          refreshApprovedMembersCache();
+        }
+      });
       break;
     }
     case 'go-home':
