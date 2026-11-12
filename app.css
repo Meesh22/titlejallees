@@ -3188,6 +3188,18 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   background: rgba(163, 80, 59, .12); border: 1px solid rgba(163, 80, 59, .3);
   color: var(--clay); font-size: 7px; font-weight: 800; letter-spacing: .4px;
 }
+.book-pdf-current {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 6px; border-radius: 11px;
+  background: var(--paper-2); border: 1px solid var(--line);
+}
+.book-pdf-current a {
+  display: inline-flex; align-items: center; gap: 5px; text-decoration: none;
+  color: var(--green-700); font-size: 8.5px; font-weight: 800;
+}
+.book-pdf-current a .ic { width: 13px; height: 13px; }
+.book-pdf-current .btn.danger { color: var(--clay); background: rgba(163, 80, 59, .12); border-color: rgba(163, 80, 59, .3); }
+.book-pdf-current .btn.danger.active { background: var(--clay); color: #fff; }
 .my-book-pdf, .book-pdf-open { text-decoration: none; }
 
 .shared-quote {

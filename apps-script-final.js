@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-10-r30';
+const CODE_VERSION = 'jalees-2026-11-10-r31';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -3326,14 +3326,23 @@ function setupJaleesSheets() {
     }
   };
 
-  /* أولًا: توحيد الأسماء وترتيب التبويبات (قبل إنشاء أي تبويب جديد) */
   /* أولًا: إصلاح رؤوس الأعمدة (حتى نكتشف التكرارات بمخطط الأعمدة) */
   step('إصلاح رؤوس الأعمدة', () => {
     const fixed = repairSheetHeaders(ss);
     return fixed.length ? fixed.join('، ') : 'سليمة';
   });
 
-  /* ثانيًا: توحيد الأسماء وترتيب التبويبات */
+  /* ثانيًا: دمج «المكتبة» مع النسخة القديمة وحذفها — مصدر واحد للمكتبة */
+  step('دمج المكتبة مع النسخة القديمة وحذفها', () => {
+    const main = getBooksSheet(ss);
+    const legacy = ss.getSheetById(OLD_BOOKS_SHEET_ID);
+    if (!legacy || legacy.getSheetId() === main.getSheetId()) return 'لا توجد نسخة قديمة';
+    const result = mergeBooksSheetInto(main, legacy);
+    try { ss.deleteSheet(legacy); } catch (error) { /* تجاهل */ }
+    return 'أُضيف ' + result.added + ' كتاب · أُكمل ' + result.completed + ' كتاب (ملفات PDF والأغلفة الناقصة)';
+  });
+
+  /* ثالثًا: توحيد الأسماء وترتيب التبويبات */
   step('تنظيم التبويبات', () => {
     const result = organizeSheets(ss);
     return result.report.join(' · ');

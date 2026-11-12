@@ -3392,13 +3392,26 @@ function openEditClubBook(bookId) {
         <small id="edit-club-book-image-status" class="meeting-image-status"></small>
       </div>
       <div class="field">
-        <label for="edit-club-book-pdf">ملف الكتاب PDF</label>
+        <label for="edit-club-book-pdf">ملف الكتاب (PDF)</label>
         <input class="input" id="edit-club-book-pdf" type="file" accept="application/pdf,.pdf">
-        <small id="edit-club-book-pdf-status" class="meeting-image-status">${book.pdfUrl ? 'يوجد ملف PDF مرفوع — ارفع ملفًا جديدًا لاستبداله.' : 'يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.'}</small>
+        ${book.pdfUrl ? `<div class="book-pdf-current">
+          <a href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> عرض الملف المرفوع حاليًا</a>
+          <button type="button" class="btn btn-sm btn-ghost danger" id="edit-club-book-pdf-remove">إزالة الملف</button>
+        </div>` : ''}
+        <small id="edit-club-book-pdf-status" class="meeting-image-status">${book.pdfUrl ? 'ارفع ملفًا جديدًا لاستبدال الحالي.' : 'يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.'}</small>
       </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> حفظ التعديلات</button>
     </form>`, (root) => {
     let imageData = book.coverImage || '';
+    let removePdf = false;
+    const pdfRemoveBtn = root.querySelector('#edit-club-book-pdf-remove');
+    if (pdfRemoveBtn) pdfRemoveBtn.addEventListener('click', () => {
+      removePdf = !removePdf;
+      pdfRemoveBtn.textContent = removePdf ? 'تراجع عن الإزالة' : 'إزالة الملف';
+      pdfRemoveBtn.classList.toggle('active', removePdf);
+      const pdfStatus = root.querySelector('#edit-club-book-pdf-status');
+      if (pdfStatus) pdfStatus.textContent = removePdf ? 'سيُحذف الملف عند الحفظ.' : 'ارفع ملفًا جديدًا لاستبدال الحالي.';
+    });
     const fileInput = root.querySelector('#edit-club-book-image');
     const previewWrap = root.querySelector('#edit-club-book-image-preview-wrap');
     const preview = root.querySelector('#edit-club-book-image-preview');
@@ -3438,7 +3451,7 @@ function openEditClubBook(bookId) {
       const title = root.querySelector('#edit-club-book-title').value.trim();
       if (!title) { toast('أدخل عنوان الكتاب', 'info'); return; }
 
-      let pdfUrl = book.pdfUrl || '';
+      let pdfUrl = removePdf ? '' : (book.pdfUrl || '');
       const pdfFile = root.querySelector('#edit-club-book-pdf').files && root.querySelector('#edit-club-book-pdf').files[0];
       if (pdfFile) {
         const pdfStatus = root.querySelector('#edit-club-book-pdf-status');
