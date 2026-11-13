@@ -153,6 +153,20 @@
     ok('اختبار الإرسال عبر Pushover', testPo.success === true && testPo.pushed === true, JSON.stringify(testPo));
     ok('اتصل بـ Pushover', httpCalls.some((c) => c.url.indexOf('pushover.net') >= 0), JSON.stringify(httpCalls.map((c) => c.url)));
 
+    /* ===== 5ب) مشاركة البوت مع عدة مشرفين ===== */
+    await api('saveNotifySettings', { channel: 'telegram', telegramToken: 'TOKEN123', telegramChat: '111, 222, -100333', types: ['register'] });
+    httpCalls.length = 0;
+    const testMany = await api('testNotification', {});
+    ok('الإرسال لعدة محادثات ينجح', testMany.success === true && testMany.pushed === true, JSON.stringify(testMany));
+    const tgCalls = httpCalls.filter((c) => c.url.indexOf('telegram.org') >= 0);
+    ok('أُرسل لكل المحادثات (٣)', tgCalls.length === 3, 'عدد=' + tgCalls.length);
+    const chatIds = tgCalls.map((c) => JSON.parse(c.options.payload).chat_id);
+    ok('الأرقام كلها صحيحة', chatIds.join(',') === '111,222,-100333', chatIds.join(','));
+    ok('التفصيل يذكر عدد المستقبِلين', String(testMany.detail || '').indexOf('3') >= 0, testMany.detail || '');
+
+    const settingsMany = await api('getNotifySettings');
+    ok('الإعدادات تحفظ كل المحادثات', Array.isArray(settingsMany.telegramChats) && settingsMany.telegramChats.length === 3, JSON.stringify(settingsMany.telegramChats));
+
     /* ===== 6) أنواع التنبيهات المفعّلة ===== */
     await api('saveNotifySettings', { channel: 'email', types: ['consultation'] });
     httpCalls.length = 0;

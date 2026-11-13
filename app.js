@@ -1390,30 +1390,50 @@ function renderRecordedMeetings(root, meetings) {
 
     return `
       <article class="recorded-meeting-card${type ? ' has-type' : ''}">
+        <div class="recorded-meeting-content">
+          <div class="recorded-meeting-head">
+            <h3>${esc(item.title || 'لقاء جليس')}</h3>
+          </div>
+          <div class="recorded-meeting-meta">
+            ${dateLabel ? `<span class="rm-pill"><svg class="ic"><use href="#i-calendar"/></svg>${esc(dateLabel)}</span>` : ''}
+            ${item.location ? `<span class="rm-pill"><svg class="ic"><use href="#i-pin"/></svg>${esc(item.location)}</span>` : ''}
+            ${Number(item.views) > 0 ? `<span class="rm-pill"><svg class="ic"><use href="#i-users"/></svg>${toAr(Number(item.views) || 0)} حاضر</span>` : ''}
+          </div>
+          ${item.description ? `<div class="rm-desc">
+            <p class="recorded-meeting-description" data-action="toggle-meeting-description" data-id="${esc(item.id)}" role="button" tabindex="0" title="اضغط لعرض النص كاملًا">${esc(item.description)}</p>
+          </div>
+          <button class="recorded-meeting-more" type="button" data-action="expand-meeting-description" data-id="${esc(item.id)}" hidden>اقرأ المزيد</button>` : ''}
+          ${item.speaker ? `<div class="recorded-meeting-speaker"><svg class="ic"><use href="#i-user"/></svg><span>${esc(item.speaker)}</span></div>` : ''}
+          <div class="recorded-meeting-actions">
+            ${photos.length ? `<button class="btn btn-sm btn-ghost archive-view-photos" type="button" data-action="view-archive-photos" data-id="${esc(item.id)}"><svg class="ic"><use href="#i-article"/></svg> الصور${photos.length > 1 ? ' (' + toAr(photos.length) + ')' : ''}</button>` : ''}
+            ${isSupervisor() ? `<button class="icon-btn recorded-meeting-edit" type="button" data-action="edit-recorded-meeting" data-id="${esc(item.id)}" aria-label="تعديل اللقاء"><svg class="ic"><use href="#i-edit"/></svg></button>` : ''}
+            ${isSupervisor() ? `<button class="icon-btn recorded-meeting-delete" type="button" data-action="delete-recorded-meeting" data-id="${esc(item.id)}" aria-label="حذف اللقاء"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+          </div>
+        </div>
         <div class="recorded-meeting-media">
           ${galleryMarkup}
           ${type ? `<span class="recorded-meeting-type">${esc(type)}</span>` : ''}
-        </div>
-        <div class="recorded-meeting-content">
-          <div class="recorded-meeting-meta">
-            ${dateLabel ? `<span><svg class="ic"><use href="#i-calendar"/></svg>${esc(dateLabel)}</span>` : ''}
-            ${item.location ? `<span><svg class="ic"><use href="#i-pin"/></svg>${esc(item.location)}</span>` : ''}
-            ${Number(item.views) > 0 ? `<span><svg class="ic"><use href="#i-users"/></svg>${toAr(Number(item.views) || 0)} حاضر</span>` : ''}
-          </div>
-          <h3>${esc(item.title || 'لقاء جليس')}</h3>
-          ${item.description ? `<p class="recorded-meeting-description">${esc(item.description)}</p>` : ''}
-          ${item.speaker ? `<div class="recorded-meeting-speaker"><svg class="ic"><use href="#i-user"/></svg>${esc(item.speaker)}</div>` : ''}
-          ${photos.length > 1 ? `<button class="btn btn-sm btn-ghost archive-view-photos" type="button" data-action="view-archive-photos" data-id="${esc(item.id)}"><svg class="ic"><use href="#i-article"/></svg> عرض الصور (${toAr(photos.length)})</button>` : ''}
-          ${isSupervisor() ? `<button class="icon-btn recorded-meeting-delete" type="button" data-action="delete-recorded-meeting" data-id="${esc(item.id)}" aria-label="حذف اللقاء"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+          ${photos.length ? `<button class="recorded-meeting-media-btn" type="button" data-action="view-archive-photos" data-id="${esc(item.id)}" aria-label="عرض صور اللقاء"></button>` : ''}
         </div>
       </article>`;
   }).join('');
+
+  /* زر «اقرأ المزيد» يظهر فقط للوصف المقطوع فعلاً */
+  list.querySelectorAll('.recorded-meeting-description').forEach((paragraph) => {
+    if (paragraph.scrollHeight <= paragraph.clientHeight + 2) return;
+    const card = paragraph.closest('article');
+    const button = card ? card.querySelector('.recorded-meeting-more') : null;
+    if (button) button.hidden = false;
+  });
 }
 
 function openArchivePhotosViewer(id) {
   const record = (state.recordedMeetings || []).find((item) => String(item.id) === String(id));
   if (!record) { toast('تعذر فتح الصور', 'info'); return; }
-  const gallery = Array.isArray(record.images) ? record.images.filter(Boolean) : (record.image ? [record.image] : []);
+  /* لو قائمة الصور فارغة نستخدم الصورة الأساسية */
+  const gallery = (Array.isArray(record.images) ? record.images.filter(Boolean) : [])
+    .concat(record.image && !(Array.isArray(record.images) && record.images.includes(record.image)) ? [record.image] : [])
+    .filter(Boolean);
   if (!gallery.length) { toast('لا توجد صور لهذا اللقاء', 'info'); return; }
   openSheet(`
     <div class="sheet-head reading-window-viewer-head">
@@ -1456,35 +1476,38 @@ function openMeetingArchiveSheet() {
   });
 }
 
-function openRecordedMeetingComposer() {
+function openRecordedMeetingComposer(recordId = '') {
   if (!isSupervisor()) { toast('إضافة اللقاءات للمشرفين فقط', 'info'); return; }
+  const editing = recordId ? (state.recordedMeetings || []).find((item) => String(item.id) === String(recordId)) : null;
+  if (recordId && !editing) { toast('لم أجد اللقاء', 'info'); return; }
   openSheet(`
-    ${sheetHead('إضافة لقاء إلى الأرشيف', 'سجّل لقاءً سابقًا بعنوانه وصوره التي أُخذت أثناءه')}
+    ${sheetHead(editing ? 'تعديل بيانات اللقاء' : 'إضافة لقاء إلى الأرشيف', editing ? 'حدّث العنوان والوصف والصور' : 'سجّل لقاءً سابقًا بعنوانه وصوره التي أُخذت أثناءه')}
     <form id="recorded-meeting-form" class="meeting-form" novalidate>
       <div class="field">
         <label for="recorded-type">قسم الأرشيف</label>
         <select class="input" id="recorded-type">
-          ${MEETING_ARCHIVE_TYPES.map((type) => `<option value="${esc(type)}">${esc(type)}</option>`).join('')}
+          ${MEETING_ARCHIVE_TYPES.map((type) => `<option value="${esc(type)}" ${editing && editing.type === type ? 'selected' : ''}>${esc(type)}</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="مثال: مناقشة كتاب بناء الطفل"></div>
-      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء وأهم ما دار فيه"></textarea></div>
+      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="مثال: مناقشة كتاب بناء الطفل" value="${esc(editing ? editing.title || '' : '')}"></div>
+      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء وأهم ما دار فيه">${esc(editing ? editing.description || '' : '')}</textarea></div>
       <div class="meeting-form-row">
-        <div class="field"><label>تاريخ اللقاء (سنة / شهر / يوم)</label>${dateYMDField('recorded-date', 'تاريخ اللقاء')}</div>
-        <div class="field"><label for="recorded-speaker">مقدّم اللقاء / الضيف</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدّم اللقاء"></div>
+        <div class="field"><label>تاريخ اللقاء (ميلادي / هجري)</label>${dateYMDField('recorded-date', 'تاريخ اللقاء')}</div>
+        <div class="field"><label for="recorded-speaker">مقدّم اللقاء / الضيف</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدّم اللقاء" value="${esc(editing ? editing.speaker || '' : '')}"></div>
       </div>
-      <div class="field"><label for="recorded-location">المكان</label><input class="input" id="recorded-location" maxlength="140" placeholder="مثال: قاعة النادي — القصيم"></div>
-      <div class="field"><label for="recorded-views">عدد الحضور</label><input class="input" id="recorded-views" type="number" min="0" value="0"></div>
+      <div class="field"><label for="recorded-location">المكان</label><input class="input" id="recorded-location" maxlength="140" placeholder="مثال: قاعة النادي — القصيم" value="${esc(editing ? editing.location || '' : '')}"></div>
+      <div class="field"><label for="recorded-views">عدد الحضور</label><input class="input" id="recorded-views" type="number" min="0" value="${esc(editing ? String(editing.views || 0) : '0')}"></div>
       <div class="field">
         <label>صور اللقاء</label>
-        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>اختر صور اللقاء</span><small>يمكنك اختيار عدة صور دفعة واحدة (حتى ١٢ صورة)</small></label>
+        <label class="meeting-upload" for="recorded-image-input"><svg class="ic"><use href="#i-article"/></svg><span>${editing ? 'أضف صورًا إضافية' : 'اختر صور اللقاء'}</span><small>يمكنك اختيار عدة صور دفعة واحدة (حتى ١٢ صورة)</small></label>
         <input id="recorded-image-input" class="meeting-file-input" type="file" accept="image/*" multiple>
         <div id="recorded-gallery" class="archive-gallery-picker"></div>
         <small id="recorded-image-status" class="meeting-image-status"></small>
       </div>
-      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> نشر في أرشيف النادي</button>
+      <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> ${editing ? 'حفظ التعديلات' : 'نشر في أرشيف النادي'}</button>
     </form>`, (root) => {
-    let galleryImages = [];
+    let galleryImages = editing ? (Array.isArray(editing.images) ? editing.images.filter(Boolean).slice() : (editing.image ? [editing.image] : [])) : [];
+    initYMDField('recorded-date', editing ? editing.recordedAt || '' : '');
     const fileInput = root.querySelector('#recorded-image-input');
     const gallery = root.querySelector('#recorded-gallery');
     const status = root.querySelector('#recorded-image-status');
@@ -1521,30 +1544,35 @@ function openRecordedMeetingComposer() {
       }
 
       const record = {
-        id: `recorded-${Date.now()}`,
+        id: editing ? String(editing.id) : `recorded-${Date.now()}`,
         title,
         description: root.querySelector('#recorded-description').value.trim(),
         recordedAt,
         speaker: root.querySelector('#recorded-speaker').value.trim(),
         views: Number(root.querySelector('#recorded-views').value) || 0,
-        duration: '',
-        videoUrl: '',
+        duration: editing ? (editing.duration || '') : '',
+        videoUrl: editing ? (editing.videoUrl || '') : '',
         image: galleryImages[0] || '',
         images: galleryImages.slice(),
         type: root.querySelector('#recorded-type').value,
         location: root.querySelector('#recorded-location').value.trim(),
-        createdAt: Date.now(),
-        createdBy: currentMember.name
+        createdAt: editing ? (editing.createdAt || Date.now()) : Date.now(),
+        createdBy: editing ? (editing.createdBy || currentMember.name) : currentMember.name,
+        updatedAt: Date.now()
       };
 
-      state.recordedMeetings = [record, ...(state.recordedMeetings || [])];
+      if (editing) {
+        state.recordedMeetings = (state.recordedMeetings || []).map((item) => (String(item.id) === record.id ? record : item));
+      } else {
+        state.recordedMeetings = [record, ...(state.recordedMeetings || [])];
+      }
       await saveState();
       closeSheet();
       const result = await cloudRequest('saveRecordedMeeting', record);
       if (!result || result.success === false) {
         toast('حُفظ اللقاء على هذا الجهاز، وتعذرت مزامنته الآن', 'info');
       } else {
-        toast('تمت إضافة اللقاء إلى الأرشيف', 'calendar');
+        toast(editing ? 'تم تعديل بيانات اللقاء' : 'تمت إضافة اللقاء إلى الأرشيف', 'calendar');
       }
       openMeetingArchiveSheet();
     });
@@ -1590,9 +1618,14 @@ function meetingDateLabel(date) {
   const datePart = raw.match(/\d{4}-\d{2}-\d{2}/);
   const parsed = datePart ? new Date(`${datePart[0]}T12:00:00`) : new Date(raw);
   if (Number.isNaN(parsed.getTime())) return String(date);
-  return new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', {
+  const greg = new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   }).format(parsed);
+  /* التاريخ الهجري مذكور مع الميلادي ليسهل على الأعضاء */
+  const hijri = new Intl.DateTimeFormat('ar-u-ca-islamic-umalqura-nu-arab', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  }).format(parsed);
+  return `${greg} · ${hijri}`;
 }
 
 function meetingTimeLabel(time) {
@@ -1969,20 +2002,159 @@ function cropImageDataUrl(dataUrl, size) {
   });
 }
 
+/* ============================================================================
+   التاريخ: ميلادي وهجري مع تزامن فوري بينهما
+   ============================================================================ */
+const HIJRI_MONTH_NAMES = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
+const GREG_MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+/* ميلادي → هجري (تقويم أم القرى عبر Intl) */
+function toHijriParts(date) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      year: 'numeric', month: 'numeric', day: 'numeric'
+    }).formatToParts(date);
+    const get = (type) => Number((parts.find((p) => p.type === type) || {}).value);
+    const y = get('year'); const m = get('month'); const d = get('day');
+    if (!y || !m || !d) return null;
+    return { y: y, m: m, d: d };
+  } catch (error) {
+    return null;
+  }
+}
+
+/* هجري → ميلادي (بحث قصير حول التاريخ التقريبي) */
+function fromHijriParts(y, m, d) {
+  if (!y || !m || !d) return null;
+  if (m < 1 || m > 12) return null;
+  /* يوم يوليان تقريبي: ١ محرم ١ هـ = 1948439.5 */
+  const jd = Math.floor((y - 1) * 354.36708 + (m - 1) * 29.53058 + (d - 1) + 1948439.5);
+  const approx = new Date((jd - 2440587.5) * 86400000);
+  const base = new Date(approx.getFullYear(), approx.getMonth(), approx.getDate());
+  for (let delta = -5; delta <= 5; delta++) {
+    const candidate = new Date(base.getFullYear(), base.getMonth(), base.getDate() + delta);
+    const h = toHijriParts(candidate);
+    if (h && h.y === y && h.m === m && h.d === d) return candidate;
+  }
+  return null;
+}
+
+function gregDaysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function hijriDaysInMonth(year, month) {
+  const first = fromHijriParts(year, month, 1);
+  let nextYear = year; let nextMonth = month + 1;
+  if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+  const next = fromHijriParts(nextYear, nextMonth, 1);
+  if (!first || !next) return 30;
+  return Math.max(29, Math.round((next.getTime() - first.getTime()) / 86400000));
+}
+
+function toISODate(date) {
+  if (!date) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseISODate(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function dateYMDField(idPrefix, label) {
-  const months = Array.from({ length: 12 }, (_, i) => i + 1);
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
-  const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
-  const today = new Date();
   return `
-  <span class="ymd-group" role="group" aria-label="${label || 'التاريخ'}">
-    <label>سنة <select class="input ymd-y" id="${idPrefix}-y">${years.map((y) => `<option value="${y}" ${y === today.getFullYear() ? 'selected' : ''}>${toAr(y)}</option>`).join('')}</select></label>
-    <label>شهر <select class="input ymd-m" id="${idPrefix}-m">${months.map((m) => `<option value="${m}" ${m === today.getMonth() + 1 ? 'selected' : ''}>${toAr(m)}</option>`).join('')}</select></label>
-    <label>يوم <select class="input ymd-d" id="${idPrefix}-d">${days.map((d) => `<option value="${d}" ${d === today.getDate() ? 'selected' : ''}>${toAr(d)}</option>`).join('')}</select></label>
+  <span class="ymd-group" role="group" aria-label="${label || 'التاريخ'}" id="${idPrefix}-group">
+    <span class="ymd-cal">
+      <button type="button" class="ymd-cal-btn is-active" data-cal="greg">ميلادي</button>
+      <button type="button" class="ymd-cal-btn" data-cal="hijri">هجري</button>
+    </span>
+    <label>سنة <select class="input ymd-y" id="${idPrefix}-y"></select></label>
+    <label>شهر <select class="input ymd-m" id="${idPrefix}-m"></select></label>
+    <label>يوم <select class="input ymd-d" id="${idPrefix}-d"></select></label>
     <input type="hidden" id="${idPrefix}-hidden">
+    <small class="ymd-alt" id="${idPrefix}-alt"></small>
   </span>`;
 }
+
+/* تهيئة حقل التاريخ: تعبئة + تزامن بين التقويمين */
+function initYMDField(idPrefix, initialValue) {
+  const group = document.getElementById(`${idPrefix}-group`);
+  if (!group) return;
+  const ySel = document.getElementById(`${idPrefix}-y`);
+  const mSel = document.getElementById(`${idPrefix}-m`);
+  const dSel = document.getElementById(`${idPrefix}-d`);
+  const hidden = document.getElementById(`${idPrefix}-hidden`);
+  const alt = document.getElementById(`${idPrefix}-alt`);
+  if (!ySel || !mSel || !dSel || !hidden) return;
+
+  let cal = 'greg';
+  let current = parseISODate(initialValue) || new Date();
+
+  const fill = () => {
+    const h = toHijriParts(current) || { y: 1447, m: 1, d: 1 };
+    const g = { y: current.getFullYear(), m: current.getMonth() + 1, d: current.getDate() };
+    const view = cal === 'hijri' ? h : g;
+    const other = cal === 'hijri' ? g : h;
+
+    const years = [];
+    for (let y = view.y - 8; y <= view.y + 8; y++) years.push(y);
+    ySel.innerHTML = years.map((y) => `<option value="${y}" ${y === view.y ? 'selected' : ''}>${toAr(y)}</option>`).join('');
+
+    const monthNames = cal === 'hijri' ? HIJRI_MONTH_NAMES : GREG_MONTH_NAMES;
+    mSel.innerHTML = monthNames.map((name, index) => `<option value="${index + 1}">${esc(name)}</option>`).join('');
+    mSel.value = String(view.m);
+
+    const maxDays = cal === 'hijri' ? hijriDaysInMonth(view.y, view.m) : gregDaysInMonth(view.y, view.m);
+    const days = [];
+    for (let d = 1; d <= maxDays; d++) days.push(d);
+    dSel.innerHTML = days.map((d) => `<option value="${d}">${toAr(d)}</option>`).join('');
+    dSel.value = String(Math.min(view.d, maxDays));
+
+    alt.textContent = cal === 'hijri'
+      ? `يوافق ${toAr(other.d)} ${GREG_MONTH_NAMES[other.m - 1]} ${toAr(other.y)} م`
+      : `يوافق ${toAr(other.d)} ${HIJRI_MONTH_NAMES[other.m - 1]} ${toAr(other.y)} هـ`;
+
+    hidden.value = toISODate(current);
+  };
+
+  const apply = () => {
+    const y = Number(ySel.value);
+    const m = Number(mSel.value);
+    const d = Number(dSel.value);
+    if (cal === 'greg') {
+      current = new Date(y, m - 1, d);
+    } else {
+      const converted = fromHijriParts(y, m, d);
+      if (!converted) { fill(); return; }
+      current = converted;
+    }
+    fill();
+  };
+
+  ySel.addEventListener('change', apply);
+  mSel.addEventListener('change', apply);
+  dSel.addEventListener('change', apply);
+  group.querySelectorAll('[data-cal]').forEach((button) => {
+    button.addEventListener('click', () => {
+      cal = button.dataset.cal === 'hijri' ? 'hijri' : 'greg';
+      group.querySelectorAll('[data-cal]').forEach((item) => item.classList.toggle('is-active', item === button));
+      fill();
+    });
+  });
+
+  fill();
+}
+
 function readYMD(idPrefix) {
+  const hidden = document.getElementById(`${idPrefix}-hidden`);
+  if (hidden && hidden.value) return hidden.value;
   const y = document.getElementById(`${idPrefix}-y`);
   const m = document.getElementById(`${idPrefix}-m`);
   const d = document.getElementById(`${idPrefix}-d`);
@@ -5256,11 +5428,11 @@ function openNotifySettingsSheet() {
         </div>
       </div>
       <div class="field" data-ch="telegram">
-        <label for="notify-tg-chat">٢) معرّف المحادثة</label>
-        <input class="input" id="notify-tg-chat" dir="ltr" placeholder="123456789">
+        <label for="notify-tg-chat">٢) معرّفات المحادثات (افصل بينها بفاصلة)</label>
+        <input class="input" id="notify-tg-chat" dir="ltr" placeholder="6584082937, 123456789">
         <div class="notify-guide">
-          <p>افتح <b>https://t.me/userinfobot</b> ← ستجد <b>Id</b> (رقم يبدأ بـ ١٠٠…) — انسخه.</p>
-          <p>ثم افتح بوتك (الرابط: <b>https://t.me/اسم_بوتك</b>) وأرسل له أي رسالة.</p>
+          <p>احسب لكل مشرف رقمه من <b>https://t.me/userinfobot</b> (رقمك: <b id="notify-my-chat">6584082937</b>) — وضع الأرقام كلها هنا.</p>
+          <p><b>أو استخدم مجموعة/قناة:</b> أنشئ مجموعة في تيليجرام ← أضف بوتك <b>مشرفًا</b> فيها ← خذ رقم المجموعة (يبدأ بـ <code>-100</code>) ← ضعه هنا ← تصلك التنبيهات لكل المشرفين دفعة واحدة.</p>
         </div>
       </div>
       <div class="field" data-ch="ntfy">
@@ -5350,7 +5522,8 @@ function openNotifySettingsSheet() {
       const pick = (key, serverValue) => String((local && local[key]) || serverValue || '');
       if (loaded.channel) channel.value = loaded.channel;
       root.querySelector('#notify-tg-token').value = pick('telegramToken', '');
-      root.querySelector('#notify-tg-chat').value = pick('telegramChat', loaded.telegramChat);
+      const chatIds = String((local && local.telegramChat) || (loaded.telegramChats || []).join(', ') || loaded.telegramChat || '');
+      root.querySelector('#notify-tg-chat').value = chatIds;
       root.querySelector('#notify-ntfy').value = pick('ntfyTopic', loaded.ntfyTopic);
       root.querySelector('#notify-po-token').value = pick('pushoverToken', '');
       root.querySelector('#notify-po-user').value = pick('pushoverUser', '');
@@ -7289,6 +7462,7 @@ function openMeetingComposer() {
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-calendar"/></svg> نشر اللقاء للأعضاء</button>
     </form>`, (root) => {
     let imageData = '';
+    initYMDField('meeting-date', '');
     let crop = { width: 397, height: 320, locked: true };
     const fileInput = root.querySelector('#meeting-image-input');
     const previewWrap = root.querySelector('#meeting-image-preview-wrap');
@@ -7897,6 +8071,26 @@ async function handleGlobalClick(event) {
     case 'view-archive-photos':
       openArchivePhotosViewer(id);
       break;
+    case 'edit-recorded-meeting':
+      openRecordedMeetingComposer(id);
+      break;
+    case 'expand-meeting-description':
+    case 'toggle-meeting-description': {
+      const card = actionEl.closest('article');
+      const paragraph = card ? card.querySelector('.recorded-meeting-description') : null;
+      if (!paragraph) break;
+      const expanded = paragraph.classList.toggle('is-expanded');
+      const wrap = card.querySelector('.rm-desc');
+      if (wrap) wrap.classList.toggle('is-expanded', expanded);
+      const more = card.querySelector('.recorded-meeting-more');
+      if (more) {
+        more.textContent = expanded ? 'أقل' : 'اقرأ المزيد';
+        more.classList.toggle('is-open', expanded);
+      }
+      paragraph.title = expanded ? 'اضغط للاختصار' : 'اضغط لعرض النص كاملًا';
+      if (!expanded && card.scrollIntoView) card.scrollIntoView({ block: 'nearest' });
+      break;
+    }
     case 'organize-sheets':
       /* الإزالة من قائمة المزيد — يبقى الإجراء متاحًا من الخادم مباشرة */
       openSheetsOrganizer();

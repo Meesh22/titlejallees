@@ -1057,7 +1057,15 @@ select.input {
   background-repeat: no-repeat;
   padding-left: 32px;
 }
-textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
+textarea.input {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.8;
+  border-color: rgba(30, 58, 43, 0.26);
+  background: #FDFCF9;
+}
+textarea.input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-glow); background: var(--white); }
+textarea::placeholder { color: #A9B1AC; }
 
 /* ط²ط± ط¥ط¸ظ‡ط§ط±/ط¥ط®ظپط§ط، ط§ظ„ط±ظ…ط² ط§ظ„ط³ط±ظٹ */
 .password-wrap { position: relative; display: flex; }
@@ -1386,33 +1394,74 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .recorded-meetings-loading { padding:20px 10px; text-align:center; color:var(--muted-2); font-size:10px; }
 .recorded-meeting-card {
   display:grid;
-  grid-template-columns:minmax(0,1fr) 112px;
+  grid-template-columns:minmax(0,1fr) 84px;
   gap:12px;
-  padding:10px;
+  padding:11px;
   border:1px solid var(--line);
   border-radius:16px;
   background:var(--white);
   box-shadow:0 5px 15px rgba(30,58,43,.06);
 }
-.recorded-meeting-media { position:relative; min-height:94px; overflow:hidden; align-self:start; border-radius:12px; background:#172820; }
-.recorded-meeting-media > img { display:block; width:100%; height:94px; object-fit:cover; }
-.recorded-meeting-placeholder { display:grid; place-items:center; height:94px; color:#e7d09a; background:linear-gradient(145deg,#19392c,#315b49); }
-.recorded-meeting-placeholder .ic { width:26px; height:26px; }
+.recorded-meeting-media { position:relative; min-height:84px; overflow:hidden; align-self:start; border-radius:11px; background:#172820; }
+.recorded-meeting-media > img { display:block; width:100%; height:84px; object-fit:cover; }
+.recorded-meeting-placeholder { display:grid; place-items:center; height:84px; color:#e7d09a; background:linear-gradient(145deg,#19392c,#315b49); }
+.recorded-meeting-placeholder .ic { width:24px; height:24px; }
 .recorded-meeting-play { position:absolute; inset:0; display:grid; place-items:center; text-decoration:none; }
-.recorded-meeting-play .ic { display:grid; place-items:center; width:35px; height:35px; padding:7px; border-radius:50%; color:var(--green-800); background:rgba(226,190,117,.94); box-shadow:0 3px 12px rgba(0,0,0,.24); }
+.recorded-meeting-play .ic { display:grid; place-items:center; width:32px; height:32px; padding:6px; border-radius:50%; color:var(--green-800); background:rgba(226,190,117,.94); box-shadow:0 3px 12px rgba(0,0,0,.24); }
 .recorded-meeting-duration { position:absolute; right:6px; bottom:6px; padding:2px 5px; border-radius:5px; color:#fff; background:rgba(12,22,17,.8); font-size:7px; font-weight:700; direction:ltr; }
-.recorded-meeting-content { min-width:0; display:flex; flex-direction:column; align-items:flex-start; }
-.recorded-meeting-meta { display:flex; flex-wrap:wrap; gap:7px; color:var(--muted-2); font-size:7px; }
-.recorded-meeting-meta span { display:inline-flex; align-items:center; gap:3px; }
-.recorded-meeting-meta .ic { width:10px; height:10px; color:var(--gold-700); }
-.recorded-meeting-content h3 { margin:6px 0 4px; color:var(--green-800); font:700 12px/1.5 var(--serif); }
-.recorded-meeting-description { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; color:var(--muted); font-size:8px; line-height:1.65; }
-.recorded-meeting-speaker { display:flex; align-items:center; gap:4px; margin-top:6px; color:var(--muted-2); font-size:7.5px; }
-.recorded-meeting-speaker .ic { width:11px; height:11px; color:var(--gold-700); }
-.recorded-meeting-actions { display:flex; align-items:center; gap:5px; margin-top:auto; padding-top:7px; }
-.recorded-meeting-actions .btn { min-height:26px; padding:5px 8px; font-size:8px; }
+.recorded-meeting-content { min-width:0; display:flex; flex-direction:column; align-items:stretch; }
+.recorded-meeting-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.recorded-meeting-meta { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.rm-pill {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 7px; border-radius:999px;
+  background:var(--green-50); border:1px solid rgba(30,58,43,.08);
+  color:var(--muted); font-size:8px; line-height:1.4; white-space:nowrap;
+  max-width:100%; overflow:hidden; text-overflow:ellipsis;
+}
+.rm-pill .ic { width:10px; height:10px; color:var(--gold-700); flex:none; }
+.recorded-meeting-content h3 {
+  margin:0; color:var(--green-800);
+  font:700 13.5px/1.55 var(--serif);
+  display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2;
+}
+.rm-desc { position:relative; margin-top:6px; }
+.rm-desc::after {
+  content:''; position:absolute; inset-inline:9px; bottom:1px; height:22px;
+  background:linear-gradient(to top, #FAF8F2 35%, rgba(250,248,242,0));
+  pointer-events:none; border-radius:0 0 8px 8px;
+}
+.rm-desc.is-expanded::after { display:none; }
+.recorded-meeting-description {
+  display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+  margin:0; padding:7px 9px;
+  border-radius:9px; background:#FAF8F2; border:1px solid rgba(30,58,43,.06);
+  color:var(--muted); font-size:9px; line-height:1.75;
+  cursor:pointer; transition:border-color .2s, background .2s;
+}
+.recorded-meeting-description:hover { border-color:rgba(197,155,99,.4); background:#FDF8EC; }
+.recorded-meeting-description:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+.recorded-meeting-description.is-expanded { -webkit-line-clamp:unset; overflow:visible; cursor:default; }
+.recorded-meeting-more {
+  align-self:flex-start; margin-top:6px; padding:2px 0;
+  border:0; background:transparent; cursor:pointer;
+  color:var(--gold-700); font-size:8.5px; font-weight:800;
+  text-decoration:underline; text-underline-offset:3px;
+}
+.recorded-meeting-more.is-open { color:var(--muted-2); text-decoration:none; }
+.recorded-meeting-speaker { display:flex; align-items:center; gap:4px; margin-top:7px; color:var(--muted-2); font-size:8px; }
+.recorded-meeting-speaker .ic { width:11px; height:11px; color:var(--gold-700); flex:none; }
+.recorded-meeting-actions { display:flex; align-items:center; gap:6px; margin-top:auto; padding-top:9px; }
+.recorded-meeting-actions .btn { min-height:26px; padding:5px 9px; font-size:8px; }
 .recorded-meeting-actions .ic { width:12px; height:12px; }
-.recorded-meeting-delete { width:26px; height:26px; color:var(--clay); }
+.recorded-meeting-delete { width:26px; height:26px; color:var(--clay); flex:none; }
+.recorded-meeting-edit { width:26px; height:26px; color:var(--green-700); flex:none; }
+/* زر تغطية الصورة لفتح المعرض */
+.recorded-meeting-media-btn {
+  position:absolute; inset:0; width:100%; height:100%;
+  border:0; padding:0; background:transparent; cursor:zoom-in;
+}
+.recorded-meeting-media-btn:focus-visible { outline:2px solid var(--gold); outline-offset:-2px; }
 .recorded-meeting-unavailable { color:var(--muted-2); font-size:7px; }
 .deleted-items-list { display:grid; gap:8px; }
 .trash-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px 1px 8px; color:var(--muted-2); font-size:8px; }
@@ -2996,6 +3045,10 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
 .archive-gallery img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .archive-gallery:not(.is-multi) img { height: 190px; }
 .archive-gallery.is-multi img { height: 86px; }
+/* داخل بطاقة الأرشيف: صورة مصغّرة ثابتة الحجم */
+.recorded-meeting-media .archive-gallery:not(.is-multi) img { height: 84px; }
+.recorded-meeting-media .archive-gallery.is-multi img { height: 38px; }
+.recorded-meeting-media .archive-gallery.is-multi { grid-template-columns: repeat(2, 1fr); gap: 2px; padding: 2px; }
 .archive-gallery-more {
   position: absolute; inset-block-end: 6px; inset-inline-end: 6px;
   padding: 3px 8px; border-radius: 999px; background: rgba(12, 24, 18, .7); color: #F3E4C6;
@@ -3909,9 +3962,23 @@ textarea.input { resize: vertical; min-height: 66px; line-height: 1.7; }
   margin: 0;
   color: var(--muted);
 }
-.ymd-group { display: flex; gap: 6px; }
-.ymd-group label { flex: 1; display: grid; gap: 4px; font-size: 8px; font-weight: 700; color: var(--muted); }
+.ymd-group { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; }
+.ymd-group label { flex: 1 1 80px; display: grid; gap: 4px; font-size: 8px; font-weight: 700; color: var(--muted); min-width: 0; }
 .ymd-group select { width: 100%; }
+.ymd-cal {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border-radius: 9px; background: var(--green-50); border: 1px solid rgba(30,58,43,.1);
+  flex: none; align-self: flex-end; margin-bottom: 1px;
+}
+.ymd-cal-btn {
+  border: 0; background: transparent; color: var(--muted);
+  padding: 5px 10px; border-radius: 7px; font-size: 9px; font-weight: 700; cursor: pointer;
+}
+.ymd-cal-btn.is-active { background: var(--green-800); color: #F6F1E4; box-shadow: 0 2px 6px rgba(30,58,43,.22); }
+.ymd-alt {
+  flex: 1 1 100%; font-size: 8.5px; color: var(--muted-2);
+  padding-inline-start: 2px; margin-top: 1px;
+}
 .reader-author small { display: block; font-size: 8px; color: var(--muted-2); }
 .reader-body p { font-size: var(--reader-font, 12px); line-height: 2.05; color: #39453F; margin-bottom: 12px; }
 .reader-actions { display: flex; gap: 7px; margin-top: 8px; padding-top: 13px; border-top: 1px solid var(--line); }

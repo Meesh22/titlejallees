@@ -411,6 +411,139 @@
       ok('الكتابان المحذوفان نهائيًا لم يعودا', !(booksFinal.data || []).some((b) => String(b.title).indexOf('كتاب جماعي') === 0), JSON.stringify((booksFinal.data || []).map((b) => b.title)));
     }
 
+    /* ================= التاريخ الهجري/الميلادي + بطاقة الأرشيف ================= */
+    openRecordedMeetingComposer();
+    await wait(700);
+    const grp = document.getElementById('recorded-date-group');
+    ok('حقل التاريخ موجود', !!grp);
+    const ySel = document.getElementById('recorded-date-y');
+    const mSel = document.getElementById('recorded-date-m');
+    const dSel = document.getElementById('recorded-date-d');
+    const hidden = document.getElementById('recorded-date-hidden');
+    ok('التاريخ الميلادي معبّأ', !!ySel && !!ySel.value && !!hidden.value, hidden && hidden.value);
+    const gregIso = hidden.value;
+
+    /* التحويل الهجري */
+    const h = toHijriParts(parseISODate(gregIso));
+    ok('تحويل التاريخ للهجري', !!h && h.y > 1400, JSON.stringify(h));
+    const back = fromHijriParts(h.y, h.m, h.d);
+    ok('رجوع التاريخ من الهجري', toISODate(back) === gregIso, toISODate(back) + ' ≠ ' + gregIso);
+
+    /* التبديل للهجري */
+    document.querySelector('#recorded-date-group [data-cal="hijri"]').click();
+    await wait(250);
+    ok('التبديل للهجري يغيّر القيم', Number(ySel.value) === h.y && Number(mSel.value) === h.m, ySel.value + '-' + mSel.value);
+    ok('أسماء الأشهر الهجرية', (mSel.options[0] || {}).textContent === 'محرم', (mSel.options[0] || {}).textContent);
+    ok('السطر يذكر التاريخ المقابل', String((document.getElementById('recorded-date-alt') || {}).textContent || '').indexOf('م') >= 0, (document.getElementById('recorded-date-alt') || {}).textContent);
+    ok('القيمة المخفية تبقى ميلادية', hidden.value === gregIso, hidden.value);
+
+    /* تعديل السنة هجريًا ← يتزامن الميلادي */
+    ySel.value = String(h.y - 1);
+    ySel.dispatchEvent(new Event('change', { bubbles: true }));
+    await wait(250);
+    ok('تعديل السنة هجريًا يغيّر الميلادي', hidden.value !== gregIso, hidden.value + ' ≠ ' + gregIso);
+    const h2 = toHijriParts(parseISODate(hidden.value));
+    ok('التاريخ الجديد يطابق السنة الهجرية المختارة', h2 && h2.y === h.y - 1, JSON.stringify(h2));
+
+    /* الرجوع للميلادي */
+    document.querySelector('#recorded-date-group [data-cal="greg"]').click();
+    await wait(250);
+    ok('الرجوع للميلادي', Number(ySel.value) === parseISODate(hidden.value).getFullYear(), ySel.value);
+
+    /* حقل النص له حد واضح */
+    const ta = document.getElementById('recorded-description');
+    const taStyle = getComputedStyle(ta);
+    ok('حقل النص له حد ظاهر', parseFloat(taStyle.borderTopWidth) > 0.5 && taStyle.borderTopStyle === 'solid', taStyle.borderTopWidth + ' ' + taStyle.borderTopStyle + ' ' + taStyle.borderTopColor);
+    closeSheet();
+
+    /* بطاقة الأرشيف: صورة صغيرة ونص واسع */
+    const longText = 'في الأمسية الثالثة من سلسلة القراءة والتربية التي ينظمها نادي جليس، يستعرض الدكتور عبد العزيز-NEXT рождения الواعية'.repeat(4);
+    await api('saveRecordedMeeting', {
+      id: 'rec-test', title: 'لقاء اختباري', description: longText,
+      recordedAt: '2026-11-13', images: ['data:image/jpeg;base64,AAAA'], image: 'data:image/jpeg;base64,AAAA', createdBy: 'مشرف',
+      views: 7, location: 'قاعة النادي', type: 'مناقشات الكتب', speaker: 'د. عبد العزيز'
+    });
+    state.recordedMeetings = (state.recordedMeetings || []).concat([{ id:'rec-test', title:'لقاء اختباري', description: longText, recordedAt:'2026-11-13', images:['data:image/jpeg;base64,AAAA'], image:'data:image/jpeg;base64,AAAA', views:7, location:'قاعة النادي', type:'مناقشات الكتب', speaker:'د. عبد العزيز', createdAt: Date.now() }]);
+    openMeetingArchiveSheet();
+    await wait(1400);
+    const card = document.querySelector('#recorded-meetings-list > article');
+    if (card) {
+      const media = card.querySelector('.recorded-meeting-media');
+      const content = card.querySelector('.recorded-meeting-content');
+      const mw = parseFloat(getComputedStyle(media).width);
+      const cw = parseFloat(getComputedStyle(content).width);
+      ok('صورة البطاقة صغيرة', mw <= 100, mw + 'px');
+      ok('نص البطاقة أوسع من الصورة', cw > mw * 1.8, cw + ' vs ' + mw);
+      ok('بطاقة الأرشيف تعرض التاريخ بالتقويمين', card.textContent.indexOf('هـ') >= 0, card.textContent.replace(/\s+/g,' ').slice(0,120));
+
+      /* زر «اقرأ المزيد» للوصف الطويل */
+      const desc = card.querySelector('.recorded-meeting-description');
+      const more = card.querySelector('.recorded-meeting-more');
+      ok('زر «اقرأ المزيد» موجود للوصف', !!more);
+      ok('الوصف داخل صندوق بتلاشٍ ناعم', !!card.querySelector('.rm-desc'));
+      if (desc && more) {
+        const clipped = desc.scrollHeight > desc.clientHeight + 2;
+        ok('زر «اقرأ المزيد» يظهر فقط عند وجود نص مقطوع', more.hidden === !clipped, 'hidden=' + more.hidden + ' clipped=' + clipped);
+        ok('الوصف يعرض ٣ أسطر على الأقل', desc.textContent.length > 60, String(desc.textContent.length));
+        const lineHeight = parseFloat(getComputedStyle(desc).lineHeight);
+        ok('الوصف معروض في ٣ أسطر', Math.round((desc.clientHeight - 14) / lineHeight) >= 3, Math.round((desc.clientHeight - 14) / lineHeight) + ' سطر');
+        ok('الوصف قابل للنقر (cursor)', getComputedStyle(desc).cursor === 'pointer', getComputedStyle(desc).cursor);
+        /* النقر على النص نفسه يوسّعه */
+        desc.click();
+        await wait(250);
+        ok('النقر على النص يوسّعه', desc.classList.contains('is-expanded'), desc.className);
+        ok('الزر يتحول لـ «أقل» بعد النقر على النص', more.textContent.trim() === 'أقل', more.textContent);
+        desc.click();
+        await wait(250);
+        ok('النقر مرة أخرى ينطوي', !desc.classList.contains('is-expanded'), desc.className);
+        ok('الزر يعود لـ «اقرأ المزيد»', more.textContent.trim() === 'اقرأ المزيد', more.textContent);
+        if (!more.hidden) {
+          more.click();
+          await wait(250);
+          ok('الوصف يتمدد عند الضغط', desc.classList.contains('is-expanded'), desc.className);
+          ok('زر «اقرأ المزيد» يتحول لـ «أقل»', more.textContent.trim() === 'أقل', more.textContent);
+          ok('التلاشي يختفي عند التمدد', card.querySelector('.rm-desc').classList.contains('is-expanded'));
+          more.click();
+          await wait(250);
+          ok('الوصف ينطوي مرة ثانية', !desc.classList.contains('is-expanded'), desc.className);
+          ok('الزر يعود لـ «اقرأ المزيد»', more.textContent.trim() === 'اقرأ المزيد', more.textContent);
+        }
+      }
+
+      /* النقر على الصورة يفتح المعرض */
+      const mediaBtn = card.querySelector('.recorded-meeting-media-btn');
+      ok('الصورة قابلة للنقر لفتح المعرض', !!mediaBtn);
+      if (mediaBtn) {
+        mediaBtn.click();
+        await wait(500);
+        ok('المعرض يفتح بالنقر على الصورة', !!document.querySelector('.archive-photos-viewer'), 'photos=' + document.querySelectorAll('.archive-photos-viewer img').length);
+        closeSheet();
+        openMeetingArchiveSheet();
+        await wait(1200);
+      }
+
+      /* المشرف يعدّل اللقاء */
+      const editBtn = document.querySelector('#recorded-meetings-list [data-action="edit-recorded-meeting"]');
+      ok('زر التعديل موجود للمشرف', !!editBtn);
+      if (editBtn) {
+        editBtn.click();
+        await wait(600);
+        ok('نموذج التعديل يفتح', !!document.querySelector('#recorded-meeting-form'));
+        ok('النموذج معبّأ بالبيانات', String((document.querySelector('#recorded-title') || {}).value || '').length > 0, (document.querySelector('#recorded-title') || {}).value);
+        ok('زر الحفظ يقول «حفظ التعديلات»', String((document.querySelector('#recorded-meeting-form button[type=submit]') || {}).textContent || '').indexOf('حفظ التعديلات') >= 0, (document.querySelector('#recorded-meeting-form button[type=submit]') || {}).textContent);
+        const newTitle = 'عنوان معدّل للاختبار';
+        document.querySelector('#recorded-title').value = newTitle;
+        document.querySelector('#recorded-meeting-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        await wait(1200);
+        const updated = (state.recordedMeetings || []).filter((m) => m.title === newTitle);
+        ok('التعديل يُحفظ في الحالة', updated.length === 1, JSON.stringify((state.recordedMeetings || []).map((m) => m.title)));
+        ok('التعديل لا يضيف سجلًا مكررًا', (state.recordedMeetings || []).filter((m) => m.id === 'rec-test').length === 1, (state.recordedMeetings || []).length + ' سجل');
+        const cloudAfter = await api('getRecordedMeetings');
+        ok('التعديل يصل للسحابة', (cloudAfter.data || []).some((m) => m.title === newTitle), JSON.stringify((cloudAfter.data || []).map((m) => m.title)));
+      }
+    }
+    closeSheet();
+
     const errs = [];
     window.addEventListener('error', (e) => errs.push(String(e.message)));
 

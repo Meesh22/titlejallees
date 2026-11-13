@@ -93,6 +93,20 @@
   <div class="status" id="status"></div>
 
   <details class="alt">
+    <summary>مشاركة البوت مع مشرفين آخرين؟</summary>
+    <div class="alt-body">
+      <p>تقدر ترسل التنبيهات <b>لأكثر من شخص</b> — إما أرقام مفردة، أو مجموعة واحدة.</p>
+      <p><b>الطريقة ١ — أرقام مفردة:</b> كل مشرف يفتح <b>https://t.me/userinfobot</b> وياخذ رقمه ← افصل الأرقام بفاصلة.</p>
+      <p><b>الطريقة ٢ — مجموعة (الأفضل):</b> أنشئ مجموعة في تيليجرام «تنبيهات جليس» ← أضف بوتك <b>مشرفًا (Admin)</b> ← الرقم يبدأ بـ <code>-100</code>.</p>
+      <input id="extraChats" placeholder="6584082937, 123456789, -1001234567890" autocomplete="off">
+      <small class="field-hint" style="display:block;margin-top:6px;font-size:10.5px;color:#6B7A6E">اتركه فاضيًا للإبقاء على رقمك فقط.</small>
+      <div class="row">
+        <button class="gold" id="btnExtra">احفظ قائمة المستقبِلين</button>
+      </div>
+    </div>
+  </details>
+
+  <details class="alt">
     <summary>ما عندك توكن؟ استخدم <b>ntfy</b> — بدون كلمة سر</summary>
     <div class="alt-body">
       <p>هذا الطريق أبسط: <b>ما تحتاج توكن ولا كلمة سر</b> — بس تختار اسمًا سريًا للمجلد.</p>
@@ -231,6 +245,29 @@ $('#btnSave').addEventListener('click', async () => {
     status('err', '❌ ' + (e.message || e));
   }
 });
+$('#btnExtra').addEventListener('click', async () => {
+  const list = $('#extraChats').value.split(/[,;\n\r]+/).map((v) => v.trim()).filter(Boolean);
+  if (!list.length) { status('err', 'اكتب رقمًا واحدًا على الأقل.'); return; }
+  status('wait', 'جارٍ الحفظ…');
+  try {
+    const saved = await (await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=saveNotifySettings&data=' + encodeURIComponent(JSON.stringify({ channel: 'telegram', telegramToken: token, telegramChat: list.join(','), types: ['register','join','consultation','article','book','weekly','archive','window','selection','summary','member'] }))
+    })).json();
+    if (!saved || saved.success !== true) throw new Error((saved && (saved.error || saved.message)) || 'تعذر الحفظ');
+    const test = await (await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=testNotification&data=' + encodeURIComponent(JSON.stringify({}))
+    })).json();
+    if (test && test.pushed) status('ok', '🎉 تم! صار التنبيه يروح لـ ' + list.length + ' محادثة. ' + ((test.detail) || ''));
+    else status('err', 'حُفظت القائمة لكن لم يصل التنبيه: ' + ((test && test.detail) || 'تحقق من الأرقام'));
+  } catch (e) {
+    status('err', '❌ ' + (e.message || e));
+  }
+});
+
 $('#btnNtfy').addEventListener('click', async () => {
   const topic = $('#ntfyTopic').value.trim();
   if (!topic) { status('err', 'اكتب اسم المجلد أولًا.'); return; }

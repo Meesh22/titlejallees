@@ -209,6 +209,20 @@
   const quotes3 = get('getQuotes');
   ok('عاد الاقتباس بعد الاسترجاع', (quotes3.data || []).some((q) => q.id === 'q-77'), JSON.stringify((quotes3.data || []).map((q) => q.id)));
 
+  /* الحذف النهائي لاقتباس بلا معرّف في العمود الأول */
+  const quoteNoId = post('saveQuote', { quote_text: 'اقتباس بلا معرّف', author_name: 'اختبار' });
+  const quotesBefore = get('getQuotes');
+  const noIdItem = (quotesBefore.data || []).find((q) => q.quote_text === 'اقتباس بلا معرّف');
+  ok('حُفظ اقتباس', !!noIdItem, JSON.stringify((quotesBefore.data || []).map((q) => q.id)));
+  if (noIdItem) {
+    const delNoId = post('deleteQuote', { id: noIdItem.id, deletedBy: 'مشرف' });
+    ok('حذف اقتباس (معرّف مولّد)', delNoId && delNoId.success === true, JSON.stringify(delNoId));
+    const purgeNoId = post('purgeDeletedItem', { type: 'quote', id: noIdItem.id, by: 'مشرف' });
+    ok('الحذف النهائي لاقتباس', purgeNoId && purgeNoId.success === true, JSON.stringify(purgeNoId));
+    const quotesAfter = get('getQuotes');
+    ok('اختفى الاقتباس نهائيًا', !(quotesAfter.data || []).some((q) => q.quote_text === 'اقتباس بلا معرّف'), JSON.stringify((quotesAfter.data || []).map((q) => q.id)));
+  }
+
   const toggle = post('toggleSelectionQuote', { id: 'sel-x', on: true });
   ok('تفعيل اقتباس مختار', toggle.success === true, JSON.stringify(toggle));
 

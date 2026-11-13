@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-13-r40';
+const CODE_VERSION = 'jalees-2026-11-13-r44';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -582,10 +582,16 @@ function pushSettings() {
   const get = (key, fallback) => {
     try { return String(props.getProperty(key) || fallback || ''); } catch (error) { return fallback || ''; }
   };
+  /* عدة محادثات مفصولة بفاصلة — للمشاركة مع أكثر من مشرف أو مجموعة */
+  const chats = get('JALEES_TELEGRAM_CHAT', '6584082937')
+    .split(/[,;\n\r]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
   return {
     channel: (get('JALEES_PUSH_CHANNEL', 'email') || 'email').toLowerCase(),
     telegramToken: get('JALEES_TELEGRAM_TOKEN', ''),
-    telegramChat: get('JALEES_TELEGRAM_CHAT', '6584082937'),
+    telegramChat: chats[0] || '',
+    telegramChats: chats,
     ntfyTopic: get('JALEES_NTFY_TOPIC', ''),
     pushoverToken: get('JALEES_PUSHOVER_TOKEN', ''),
     pushoverUser: get('JALEES_PUSHOVER_USER', ''),
@@ -610,28 +616,43 @@ function sendPushNotification(ss, type, title, body, link) {
   const text = link ? (title + '\n' + body + '\n' + link) : (title + '\n' + body);
   try {
     if (channel === 'telegram') {
-      if (!settings.telegramToken || !settings.telegramChat) throw new Error('إعدادات تيليجرام ناقصة');
+      const chats = settings.telegramChats || [];
+      if (!settings.telegramToken || !chats.length) throw new Error('إعدادات تيليجرام ناقصة');
       const url = 'https://api.telegram.org/bot' + settings.telegramToken + '/sendMessage';
-      const res = UrlFetchApp.fetch(url, {
-        method: 'post',
-        contentType: 'application/json',
-        payload: JSON.stringify({
-          chat_id: settings.telegramChat,
-          text: text,
-          disable_web_page_preview: true
-        }),
-        muteHttpExceptions: true
-      });
-      const code = res.getResponseCode();
-      const body = String(res.getContentText() || '');
-      if (code < 200 || code >= 300) throw new Error('تيليجرام ' + code + ': ' + body.slice(0, 160));
-      try {
-        const parsed = JSON.parse(body);
-        if (parsed && parsed.ok === false) throw new Error('تيليجرام: ' + String((parsed.description || 'خطأ') || '').slice(0, 160));
-      } catch (parseError) {
-        if (parseError && /تيليجرام/.test(String(parseError.message || ''))) throw parseError;
+      let sent = 0;
+      const failures = [];
+      for (const chat of chats) {
+        try {
+          const res = UrlFetchApp.fetch(url, {
+            method: 'post',
+            contentType: 'application/json',
+            payload: JSON.stringify({
+              chat_id: chat,
+              text: text,
+              disable_web_page_preview: true
+            }),
+            muteHttpExceptions: true
+          });
+          const code = res.getResponseCode();
+          const body = String(res.getContentText() || '');
+          if (code < 200 || code >= 300) throw new Error('تيليجرام ' + code + ': ' + body.slice(0, 120));
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed && parsed.ok === false) throw new Error('تيليجرام: ' + String((parsed.description || 'خطأ') || '').slice(0, 120));
+          } catch (parseError) {
+            if (parseError && /تيليجرام/.test(String(parseError.message || ''))) throw parseError;
+          }
+          sent += 1;
+        } catch (chatError) {
+          failures.push(chat + ': ' + String((chatError && chatError.message) || chatError).slice(0, 90));
+        }
       }
-      return { sent: true, channel: channel, detail: 'أُرسل عبر تيليجرام' };
+      if (!sent) throw new Error('فشل الإرسال لكل المحادثات — ' + (failures[0] || '؟'));
+      return {
+        sent: true,
+        channel: channel,
+        detail: 'أُرسل عبر تيليجرام إلى ' + sent + ' محادثة' + (failures.length ? ' · فشل ' + failures.length : '')
+      };
     }
 
     if (channel === 'ntfy') {
@@ -1849,8 +1870,13 @@ function doPost(e) {
         if (lastRow < 2) return;
         const ids = source.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
         for (let i = ids.length - 1; i >= 0; i--) {
-          const rowId = (type === 'book') ? bookIdForRow(source, ids[i][0], i) : String(ids[i][0] || '');
-          if (rowId === id) {
+          /* عمود المعرّف يختلف: الاقتباسات في العمود ٦، والباقي في العمود ١ */
+          const idIndex = (type === 'quote') ? 5 : 0;
+          const fallback = 'sheet-' + (i + 1);
+          const rowId = (type === 'book')
+            ? bookIdForRow(source, ids[i][0], i)
+            : String(ids[i][idIndex] || (type === 'quote' ? fallback : ''));
+          if (rowId === id || (type === 'book' && String(ids[i][0] || '') === String(id))) {
             if (type === 'book') {
               /* الحذف النهائي يزيل شاهد المحذوفات حتى يمكن إضافة الكتاب نفسه لاحقًا */
               const rowKey = bookKey(ids[i][3], ids[i][4]);
@@ -2847,7 +2873,9 @@ function doPost(e) {
       const set = (key, value) => { try { props.setProperty(key, String(value || '')); } catch (error) {} };
       set('JALEES_PUSH_CHANNEL', channel);
       set('JALEES_TELEGRAM_TOKEN', String(data.telegramToken || '').trim());
-      set('JALEES_TELEGRAM_CHAT', String(data.telegramChat || '').trim());
+      /* عدة محادثات: نفصلها ونخزّنها موحّدة */
+      const chatList = String(data.telegramChat || '').split(/[,;\n\r]+/).map((v) => v.trim()).filter(Boolean);
+      set('JALEES_TELEGRAM_CHAT', chatList.join(','));
       set('JALEES_NTFY_TOPIC', String(data.ntfyTopic || '').trim());
       set('JALEES_PUSHOVER_TOKEN', String(data.pushoverToken || '').trim());
       set('JALEES_PUSHOVER_USER', String(data.pushoverUser || '').trim());
@@ -2969,6 +2997,7 @@ function doGet(e) {
         success: true,
         channel: settings.channel,
         telegramChat: settings.telegramChat,
+        telegramChats: settings.telegramChats,
         ntfyTopic: settings.ntfyTopic,
         siteUrl: settings.siteUrl,
         hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
@@ -4045,6 +4074,19 @@ function setupJaleesSheets() {
     const joinRequests = getJoinRequestsSheet(ss);
     ensureJoinRequestStatuses(joinRequests);
     return joinRequests.getMaxColumns() + ' عمود';
+  });
+
+  step('تنظيف صفوف فارغة في المكتبة', () => {
+    const target = getBooksSheet(ss);
+    let removed = 0;
+    const lastRow = target.getLastRow();
+    for (let row = lastRow; row >= 2; row--) {
+      const values = target.getRange(row, 1, 1, 5).getDisplayValues()[0];
+      const hasContent = values.some((value) => String(value || '').trim());
+      if (hasContent) continue;
+      try { target.deleteRow(row); removed += 1; } catch (error) { /* تجاهل */ }
+    }
+    return removed ? removed + ' صف فارغ' : 'لا صفوف فارغة';
   });
 
   step(MAIL_LOG_SHEET, () => {
