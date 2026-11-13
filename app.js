@@ -1489,13 +1489,13 @@ function openRecordedMeetingComposer(recordId = '') {
           ${MEETING_ARCHIVE_TYPES.map((type) => `<option value="${esc(type)}" ${editing && editing.type === type ? 'selected' : ''}>${esc(type)}</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="120" required placeholder="مثال: مناقشة كتاب بناء الطفل" value="${esc(editing ? editing.title || '' : '')}"></div>
-      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="3" maxlength="700" placeholder="نبذة قصيرة عن موضوع اللقاء وأهم ما دار فيه">${esc(editing ? editing.description || '' : '')}</textarea></div>
+      <div class="field"><label for="recorded-title">عنوان اللقاء</label><input class="input" id="recorded-title" maxlength="300" required placeholder="مثال: مناقشة كتاب بناء الطفل" value="${esc(editing ? editing.title || '' : '')}"></div>
+      <div class="field"><label for="recorded-description">نبذة عن اللقاء</label><textarea class="input" id="recorded-description" rows="8" maxlength="7000" placeholder="نبذة قصيرة عن موضوع اللقاء وأهم ما دار فيه">${esc(editing ? editing.description || '' : '')}</textarea></div>
       <div class="meeting-form-row">
         <div class="field"><label>تاريخ اللقاء (ميلادي / هجري)</label>${dateYMDField('recorded-date', 'تاريخ اللقاء')}</div>
         <div class="field"><label for="recorded-speaker">مقدّم اللقاء / الضيف</label><input class="input" id="recorded-speaker" maxlength="100" placeholder="اسم مقدّم اللقاء" value="${esc(editing ? editing.speaker || '' : '')}"></div>
       </div>
-      <div class="field"><label for="recorded-location">المكان</label><input class="input" id="recorded-location" maxlength="140" placeholder="مثال: قاعة النادي — القصيم" value="${esc(editing ? editing.location || '' : '')}"></div>
+      <div class="field"><label for="recorded-location">المكان</label><input class="input" id="recorded-location" maxlength="300" placeholder="مثال: قاعة النادي — القصيم" value="${esc(editing ? editing.location || '' : '')}"></div>
       <div class="field"><label for="recorded-views">عدد الحضور</label><input class="input" id="recorded-views" type="number" min="0" value="${esc(editing ? String(editing.views || 0) : '0')}"></div>
       <div class="field">
         <label>صور اللقاء</label>
@@ -3315,7 +3315,7 @@ function openAddBook() {
       </div>
       <div class="field">
         <label for="add-book-report">تقرير عن الكتاب</label>
-        <textarea class="input" id="add-book-report" rows="5" placeholder="اكتب تقرير الكتاب… اترك سطرًا فارغًا بين الفقرات لتنسيقها."></textarea>
+        <textarea class="input" id="add-book-report" rows="12" maxlength="30000" placeholder="اكتب تقرير الكتاب… اترك سطرًا فارغًا بين الفقرات لتنسيقها."></textarea>
       </div>
       <div class="field-row">
         <div class="field">
@@ -3540,7 +3540,7 @@ function openEditClubBook(bookId) {
       <div class="field"><label for="edit-club-book-title">عنوان الكتاب</label><input class="input" id="edit-club-book-title" maxlength="120" value="${esc(book.title)}" required></div>
       <div class="field"><label for="edit-club-book-author">المؤلف</label><input class="input" id="edit-club-book-author" maxlength="100" value="${esc(book.author || '')}"></div>
       <div class="field"><label for="edit-club-book-category">رف / تصنيف الكتاب</label><select class="input" id="edit-club-book-category">${categories.map((category) => `<option value="${esc(category)}" ${normalizeName(category) === normalizeName(book.category) ? 'selected' : ''}>${esc(category)}</option>`).join('')}</select></div>
-      <div class="field"><label for="edit-club-book-report">تفاصيل الكتاب</label><textarea class="input" id="edit-club-book-report" rows="7" maxlength="6000" placeholder="اكتب الوصف، واترك سطرًا فارغًا بين الفقرات.">${esc(book.report || '')}</textarea></div>
+      <div class="field"><label for="edit-club-book-report">تفاصيل الكتاب</label><textarea class="input" id="edit-club-book-report" rows="12" maxlength="30000" placeholder="اكتب الوصف، واترك سطرًا فارغًا بين الفقرات.">${esc(book.report || '')}</textarea></div>
       <div class="field-row"><div class="field"><label for="edit-club-book-pages">عدد الصفحات</label><input class="input" id="edit-club-book-pages" type="number" min="0" max="5000" value="${Number(book.pages) || ''}"></div><div class="field"><label for="edit-club-book-year">سنة النشر</label><input class="input" id="edit-club-book-year" type="number" min="1" max="2100" value="${Number(book.year) || ''}" placeholder="مثال: 2020"></div></div>
       <div class="field"><label for="edit-club-book-color">لون الغلاف</label><input class="input" id="edit-club-book-color" type="color" value="${initialColor}"></div>
       <div class="field">
@@ -4498,7 +4498,7 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
     <form id="quote-form" novalidate>
       <div class="field">
         <label for="quote-text">نص الاقتباس</label>
-        <textarea class="input" id="quote-text" rows="5" maxlength="1500" placeholder="اكتب الجملة التي توقفت عندها…" required></textarea>
+        <textarea class="input" id="quote-text" rows="8" maxlength="10000" placeholder="اكتب الجملة التي توقفت عندها…" required></textarea>
       </div>
       <div class="quote-dropzone" id="quote-dropzone">
         <svg class="ic"><use href="#i-article"/></svg>
@@ -5109,7 +5109,7 @@ function openArticleComposer() {
     <form id="article-form" novalidate>
       <div class="field">
         <label for="article-title">عنوان المقال</label>
-        <input class="input" id="article-title" maxlength="120" placeholder="عنوان يفتح الشهية للقراءة…" required>
+        <input class="input" id="article-title" maxlength="300" placeholder="عنوان يفتح الشهية للقراءة…" required>
       </div>
       <div class="field">
         <label for="article-category">التصنيف</label>
@@ -5131,7 +5131,7 @@ function openArticleComposer() {
             <button type="button" class="font-size-btn" data-font-step="1" aria-label="تكبير الخط">أ+</button>
           </div>
         </div>
-        <textarea class="input" id="article-body" rows="8" maxlength="6000" placeholder="اكتب هنا… اترك سطراً فارغاً بين الفقرات." required></textarea>
+        <textarea class="input" id="article-body" rows="14" maxlength="30000" placeholder="اكتب هنا… اترك سطراً فارغاً بين الفقرات." required></textarea>
       </div>
       <button class="btn btn-gold btn-block" type="submit">
         <svg class="ic"><use href="#i-send"/></svg> انشر المقال
@@ -5553,7 +5553,7 @@ function openJoinSheet() {
       </div>
       <div class="field">
         <label for="join-note">ملاحظة (اختياري)</label>
-        <textarea class="input" id="join-note" rows="2" maxlength="180" placeholder="لماذا تود الانضمام؟"></textarea>
+        <textarea class="input" id="join-note" rows="4" maxlength="1000" placeholder="لماذا تود الانضمام؟"></textarea>
       </div>
       <div class="whatsapp-contact">
         <svg class="ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
@@ -5773,7 +5773,7 @@ function openRateBookSheet(bookId) {
       </div>
       <div class="field">
         <label for="rate-review">المراجعة (اختياري)</label>
-        <textarea class="input" id="rate-review" rows="3" maxlength="300" placeholder="ما رأيك في هذا الكتاب؟">${esc(currentReview)}</textarea>
+        <textarea class="input" id="rate-review" rows="5" maxlength="3000" placeholder="ما رأيك في هذا الكتاب؟">${esc(currentReview)}</textarea>
       </div>
       <button class="btn btn-gold btn-block" type="submit">
         <svg class="ic"><use href="#i-star"/></svg> حفظ التقييم
@@ -6208,7 +6208,7 @@ function openBookSummaryComposer() {
       </div>
       <div class="field">
         <label for="summary-text">الملخص</label>
-        <textarea class="input" id="summary-text" rows="6" maxlength="1500" placeholder="اكتب ملخصك للكتاب: الفكرة الأساسية وما أعجبك فيه…" required></textarea>
+        <textarea class="input" id="summary-text" rows="10" maxlength="10000" placeholder="اكتب ملخصك للكتاب: الفكرة الأساسية وما أعجبك فيه…" required></textarea>
       </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> نشر الملخص</button>
     </form>`, (root) => {
@@ -6708,7 +6708,7 @@ function openReadingListComposer() {
       </div>
       <div class="field">
         <label for="reading-list-description">نبذة قصيرة</label>
-        <textarea class="input" id="reading-list-description" rows="2" maxlength="300" placeholder="لماذا اخترت هذه الكتب؟"></textarea>
+        <textarea class="input" id="reading-list-description" rows="4" maxlength="3000" placeholder="لماذا اخترت هذه الكتب؟"></textarea>
       </div>
       <div class="field">
         <label>الكتب في القائمة (<span id="reading-list-count">٠</span>)</label>
@@ -6896,7 +6896,7 @@ function openReadingTipComposer() {
       </div>
       <div class="field">
         <label for="tip-body">النص</label>
-        <textarea class="input" id="tip-body" rows="4" maxlength="1000" placeholder="اكتب نصيحة قرائية أو فائدة… (اتركه فارغًا إن أضفت صورة فقط)"></textarea>
+        <textarea class="input" id="tip-body" rows="8" maxlength="8000" placeholder="اكتب نصيحة قرائية أو فائدة… (اتركه فارغًا إن أضفت صورة فقط)"></textarea>
       </div>
       <div class="field">
         <label for="tip-image-input">أو أضف صورة فقط (اختياري)</label>
@@ -7128,23 +7128,48 @@ function renderConsultations(root, consultations, mayAnswer, consultantsConfigur
     return;
   }
   const canAnswerAll = mayAnswer || isConsultant();
-  list.innerHTML = consultations.map((item) => `
-    <article class="consultation-card">
-      <div class="consultation-meta"><strong>${esc(item.memberName || 'عضو جليس')}</strong><span>${esc(consultationDateLabel(item.askedAt))}</span></div>
+  const myMemberId = currentMember ? String(currentMember.id || '') : '';
+  const myName = currentMember ? normalizeName(currentMember.name) : '';
+  list.innerHTML = consultations.map((item) => {
+    /* صاحب الإجابة: بمعرّفه، أو باسمه لو المعرّف غير متاح */
+    const isMyAnswer = Boolean(item.answeredById)
+      ? String(item.answeredById) === myMemberId
+      : Boolean(myName) && normalizeName(item.answeredBy) === myName;
+    return `
+    <article class="consultation-card" data-consultation-id="${esc(item.id)}">
+      <div class="consultation-meta">
+        <strong>${esc(item.memberName || 'عضو جليس')}</strong>
+        <span>${esc(consultationDateLabel(item.askedAt))}</span>
+        ${isSupervisor() ? `<button class="icon-btn consultation-delete" type="button" data-action="delete-consultation" data-id="${esc(item.id)}" aria-label="حذف الاستشارة" title="حذف الاستشارة — للمشرف فقط"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+      </div>
       <p class="consultation-question">${esc(item.question || '')}</p>
       ${item.answer ? `
-        <div class="consultation-answer">
-          <small>إجابة ${esc(item.answeredBy || 'المستشار')}</small>
+        <div class="consultation-answer" data-answer-owner="${esc(item.answeredById || '')}">
+          <div class="consultation-answer-head">
+            <small>إجابة ${esc(item.answeredBy || 'المستشار')}</small>
+            ${isMyAnswer ? `<span class="consultation-answer-tools">
+              <button class="btn btn-xs btn-ghost" type="button" data-action="edit-consultation-answer" data-id="${esc(item.id)}" title="تعديل إجابتك">تعديل</button>
+              <button class="btn btn-xs btn-ghost danger" type="button" data-action="delete-consultation-answer" data-id="${esc(item.id)}" title="حذف إجابتك فقط">حذف الإجابة</button>
+            </span>` : ''}
+          </div>
           <p>${esc(item.answer)}</p>
           ${item.answeredAt ? `<time>${esc(consultationDateLabel(item.answeredAt))}</time>` : ''}
+          <form class="consultation-answer-edit" data-id="${esc(item.id)}" hidden>
+            <textarea class="input" name="answer" rows="6" maxlength="20000" required placeholder="عدّل إجابتك…">${esc(item.answer)}</textarea>
+            <div class="row-actions">
+              <button class="btn btn-sm btn-primary" type="submit"><svg class="ic"><use href="#i-send"/></svg> حفظ التعديل</button>
+              <button class="btn btn-sm btn-ghost" type="button" data-action="cancel-edit-answer">إلغاء</button>
+            </div>
+          </form>
         </div>` : canAnswerAll ? `
         <form class="consultation-answer-form" data-id="${esc(item.id)}">
           <label for="consultation-answer-${esc(item.id)}">${isSupervisor() ? 'إجابتك كمشرف' : 'إجابتك كمستشار'}</label>
-          <textarea class="input" id="consultation-answer-${esc(item.id)}" name="answer" rows="3" maxlength="4000" required placeholder="اكتب إجابتك المعرفية…"></textarea>
+          <textarea class="input" id="consultation-answer-${esc(item.id)}" name="answer" rows="6" maxlength="20000" required placeholder="اكتب إجابتك المعرفية…"></textarea>
           <button class="btn btn-sm btn-primary" type="submit"><svg class="ic"><use href="#i-send"/></svg> نشر الإجابة</button>
         </form>` : `
         <div class="consultation-awaiting"><svg class="ic"><use href="#i-clock"/></svg><span>${consultantsConfigured ? 'بانتظار إجابة أحد المستشارين المعتمدين' : 'سيُتاح الرد بعد اعتماد أسماء المستشارين'}</span></div>`}
-    </article>`).join('');
+    </article>`;
+  }).join('');
 
   list.querySelectorAll('.consultation-answer-form').forEach((form) => {
     form.addEventListener('submit', async (event) => {
@@ -7165,6 +7190,73 @@ function renderConsultations(root, consultations, mayAnswer, consultantsConfigur
       }
       toast('تم نشر الإجابة', 'check');
       await loadConsultations(root);
+    });
+  });
+
+  /* تعديل الإجابة (صاحبها) */
+  list.querySelectorAll('[data-action="edit-consultation-answer"]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const card = button.closest('.consultation-card');
+      const form = card ? card.querySelector('.consultation-answer-edit') : null;
+      if (form) { form.hidden = false; const ta = form.querySelector('textarea'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }
+    });
+  });
+  list.querySelectorAll('[data-action="cancel-edit-answer"]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const form = button.closest('.consultation-answer-edit');
+      if (form) form.hidden = true;
+    });
+  });
+  list.querySelectorAll('.consultation-answer-edit').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector('button[type="submit"]');
+      const answer = form.querySelector('textarea').value.trim();
+      if (answer.length < 2) { toast('اكتب الإجابة أولًا', 'info'); return; }
+      setBtnBusy(submit, true, 'جارٍ الحفظ…');
+      const result = await cloudRequest('answerConsultation', { memberId: currentMember.id, id: form.dataset.id, answer });
+      setBtnBusy(submit, false);
+      if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر حفظ التعديل'), 'info'); return; }
+      toast('تم تعديل الإجابة', 'check');
+      await loadConsultations(root);
+    });
+  });
+
+  /* حذف الإجابة (صاحبها) */
+  list.querySelectorAll('[data-action="delete-consultation-answer"]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      openConfirm({
+        title: 'حذف الإجابة',
+        text: 'ستُحذف إجابتك من هذه الاستشارة وتعود بانتظار إجابة المستشار.',
+        confirmLabel: 'حذف الإجابة',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteConsultationAnswer', { memberId: currentMember.id, id: button.dataset.id });
+          if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر حذف الإجابة'), 'info'); return; }
+          toast('تم حذف الإجابة', 'trash');
+          await loadConsultations(root);
+        }
+      });
+    });
+  });
+
+  /* حذف الاستشارة (للمشرف) */
+  list.querySelectorAll('[data-action="delete-consultation"]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      openConfirm({
+        title: 'حذف الاستشارة',
+        text: 'سيُحذف السؤال وإجابته نهائيًا من الاستشارات.',
+        confirmLabel: 'حذف الاستشارة',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteConsultation', { id: button.dataset.id, requesterName: (currentMember && currentMember.name) || 'مشرف' });
+          if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر حذف الاستشارة'), 'info'); return; }
+          toast('تم حذف الاستشارة', 'trash');
+          await loadConsultations(root);
+        }
+      });
     });
   });
 }
@@ -7203,7 +7295,7 @@ function openConsultationsSheet() {
       </div>` : `
       <form id="consultation-question-form" class="consultation-question-form">
         <label for="consultation-question">اطرح سؤالك</label>
-        <textarea class="input" id="consultation-question" name="question" rows="3" maxlength="2000" required placeholder="اكتب سؤالك عن كتاب أو فكرة قرائية…"></textarea>
+        <textarea class="input" id="consultation-question" name="question" rows="6" maxlength="10000" required placeholder="اكتب سؤالك عن كتاب أو فكرة قرائية…"></textarea>
         <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-send"/></svg> إرسال للمستشارين</button>
       </form>`}
     <div class="consultation-role-banner" id="consultation-role-banner" hidden>
@@ -7437,7 +7529,7 @@ function openMeetingComposer() {
       </div>
       <div class="field">
         <label for="meeting-description-input">التعليق أو وصف اللقاء</label>
-        <textarea class="input" id="meeting-description-input" rows="4" maxlength="700" placeholder="اكتب نبذة قصيرة عن اللقاء…"></textarea>
+        <textarea class="input" id="meeting-description-input" rows="6" maxlength="5000" placeholder="اكتب نبذة قصيرة عن اللقاء…"></textarea>
       </div>
       <div class="meeting-form-row">
         <div class="field"><label>التاريخ (سنة / شهر / يوم)</label>${dateYMDField('meeting-date', 'تاريخ اللقاء')}</div>

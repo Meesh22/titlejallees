@@ -1061,9 +1061,11 @@ textarea.input {
   resize: vertical;
   min-height: 72px;
   line-height: 1.8;
-  border-color: rgba(30, 58, 43, 0.26);
-  background: #FDFCF9;
+  border: 1px solid #BFC9BC;
+  background: #FCFBF7;
+  box-shadow: inset 0 1px 2px rgba(30, 58, 43, .04);
 }
+textarea.input:hover { border-color: #A9B6A6; }
 textarea.input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-glow); background: var(--white); }
 textarea::placeholder { color: #A9B1AC; }
 
@@ -4032,6 +4034,15 @@ textarea::placeholder { color: #A9B1AC; }
 .consultation-answer small { color:var(--gold-700); font-size:7.5px; font-weight:800; }
 .consultation-answer p { margin-top:4px; color:var(--ink); font-size:9px; line-height:1.9; white-space:pre-wrap; overflow-wrap:anywhere; }
 .consultation-answer time { display:block; margin-top:4px; color:var(--muted-2); font-size:7px; }
+.consultation-answer-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.consultation-answer-tools { display:flex; align-items:center; gap:4px; }
+.consultation-answer-tools .btn { min-height:22px; padding:3px 8px; font-size:7.5px; border-radius:8px; }
+.consultation-answer-tools .btn.danger { color:var(--clay); }
+.consultation-answer-edit { display:grid; gap:7px; margin-top:9px; padding-top:9px; border-top:1px dashed var(--line); }
+.consultation-answer-edit textarea { resize:vertical; min-height:70px; line-height:1.8; }
+.consultation-answer-edit .row-actions { display:flex; gap:6px; }
+.consultation-delete { width:26px; height:26px; color:var(--clay); flex:none; }
+.consultation-meta > span { margin-inline-end:auto; }
 .consultation-awaiting { display:flex; align-items:center; gap:5px; margin-top:8px; color:var(--muted-2); font-size:7.5px; }
 .consultation-awaiting .ic { width:12px; height:12px; }
 .consultation-answer-form { display:grid; gap:7px; margin-top:9px; }

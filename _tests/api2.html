@@ -164,6 +164,30 @@
   const answerByOther = post('answerConsultation', { memberId: 'm2', id: consult.id, answer: 'محاولة أخرى' });
   ok('منع غير المستشار من الإجابة', answerByOther.success === false, answerByOther.error || '');
 
+  /* صاحب الإجابة يعدّل ويحذف */
+  const answerEdit = post('answerConsultation', { memberId: 'm1', id: consult.id, answer: 'إجابة معدّلة' });
+  ok('صاحب الإجابة يعدّل إجابته', answerEdit.success === true, answerEdit.error || '');
+  const consultsEdit = get('getConsultations');
+  const edited = (consultsEdit.data || []).find((c) => c.id === consult.id);
+  ok('حُفظ تعديل الإجابة', edited && edited.answer === 'إجابة معدّلة', JSON.stringify(edited));
+  ok('الإجابة تنسب لصاحبها', edited && edited.answeredById === 'm1', edited && edited.answeredById);
+
+  const delByOther = post('deleteConsultationAnswer', { memberId: 'm2', id: consult.id });
+  ok('منع حذف إجابة شخص آخر', delByOther.success === false, delByOther.error || '');
+  const delAnswer = post('deleteConsultationAnswer', { memberId: 'm1', id: consult.id });
+  ok('صاحب الإجابة يحذف إجابته', delAnswer.success === true, delAnswer.error || '');
+  const consultsAfterDel = get('getConsultations');
+  const cleared = (consultsAfterDel.data || []).find((c) => c.id === consult.id);
+  ok('الإجابة انحذفت وبقي السؤال', cleared && !cleared.answer, JSON.stringify(cleared));
+
+  /* حذف الاستشارة — للمشرف فقط */
+  const delConsultDenied = post('deleteConsultation', { id: consult.id, requesterName: 'عضو عادي' });
+  ok('منع غير المشرف من حذف الاستشارة', delConsultDenied.success === false, delConsultDenied.error || '');
+  const delConsult = post('deleteConsultation', { id: consult.id, requesterName: 'مشعل الحفير' });
+  ok('المشرف يحذف الاستشارة', delConsult.success === true, delConsult.error || '');
+  const consultsFinal = get('getConsultations');
+  ok('اختفت الاستشارة', !(consultsFinal.data || []).some((c) => c.id === consult.id), JSON.stringify((consultsFinal.data || []).map((c) => c.id)));
+
   const join = post('saveJoinRequest', { name: 'طالب انضمام', phone: '0509999888', note: 'أرغب بالانضمام' });
   ok('طلب انضمام', join.success === true, join.error || '');
   const joins = get('getJoinRequests');

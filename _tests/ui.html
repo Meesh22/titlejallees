@@ -39,6 +39,7 @@
     'id', 'name', 'email', 'passwordHash', 'salt', 'role', 'status', 'createdAt', 'lastLogin',
     'resetCode', 'resetExpires', 'phone', 'profilePhoto', 'memberType'
   ], ['m1', 'مشعل الحفير', 'a@b.c', 'h', 's', 'supervisor', 'active', 1, '', '', '', '0555000000', '', 'member'],
+  ['m30', 'مشعل الحفير', 'meshal@example.com', 'h', 's', 'supervisor', 'active', 1, '', '', '', '05552223344', '', 'member'],
   ['m2', 'عضو تجريبي', 'member2@example.com', 'h2', 's2', 'member', 'active', 2, '', '', '', '05551112233', '', 'member']], 1);
   const books = new MockSheet('المكتبة', [[
     'id', 'memberId', 'memberName', 'title', 'author', 'category', 'coverColor', 'report', 'pages',
@@ -542,6 +543,112 @@
         ok('التعديل يصل للسحابة', (cloudAfter.data || []).some((m) => m.title === newTitle), JSON.stringify((cloudAfter.data || []).map((m) => m.title)));
       }
     }
+    closeSheet();
+
+    /* ================= الاستشارات: حذف + تعديل الإجابة ================= */
+    const consult = await api('submitConsultation', { memberId: 'm1', question: 'سؤال اختباري للمشرف' });
+    ok('طُرحت استشارة', consult.success === true, consult.error || '');
+    const consultId = consult.id;
+    const answer = await api('answerConsultation', { memberId: currentMember.id, id: consultId, answer: 'إجابة اختبارية' });
+    ok('نُشرت إجابة', answer.success === true, answer.error || '');
+
+    openConsultationsSheet();
+    await wait(1200);
+    const cards = document.querySelectorAll('#consultations-list > article');
+    ok('الاستشارات ظاهرة', cards.length >= 1, 'عدد=' + cards.length);
+    ok('زر حذف الاستشارة للمشرف', document.querySelectorAll('#consultations-list [data-action="delete-consultation"]').length >= 1);
+    const myAnswerCard = document.querySelector('#consultations-list [data-consultation-id="' + consultId + '"]');
+    ok('بطاقة الاستشارة موجودة', !!myAnswerCard);
+    if (myAnswerCard) {
+      ok('أدوات صاحب الإجابة (تعديل/حذف)', myAnswerCard.querySelectorAll('.consultation-answer-tools button').length === 2, String(myAnswerCard.querySelectorAll('.consultation-answer-tools button').length));
+      ok('نموذج تعديل الإجابة موجود', !!myAnswerCard.querySelector('.consultation-answer-edit'));
+      const editBtn = myAnswerCard.querySelector('[data-action="edit-consultation-answer"]');
+      editBtn.click();
+      await wait(250);
+      const editForm = myAnswerCard.querySelector('.consultation-answer-edit');
+      ok('نموذج التعديل يظهر بالضغط', editForm && !editForm.hidden);
+      const ta = editForm.querySelector('textarea');
+      ok('نص الإجابة معبّأ', String(ta.value || '').indexOf('إجابة اختبارية') >= 0, ta.value);
+      ta.value = 'إجابة معدّلة في الواجهة';
+      editForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await wait(1200);
+      const afterEdit = await api('getConsultations');
+      const editedRow = (afterEdit.data || []).find((c) => c.id === consultId);
+      ok('التعديل وصل للسحابة', editedRow && editedRow.answer === 'إجابة معدّلة في الواجهة', JSON.stringify(editedRow && editedRow.answer));
+
+      /* حذف الإجابة */
+      openConsultationsSheet();
+      await wait(1300);
+      const card2 = document.querySelector('#consultations-list [data-consultation-id="' + consultId + '"]');
+      const delBtn = card2 ? card2.querySelector('[data-action="delete-consultation-answer"]') : null;
+      ok('زر حذف الإجابة موجود', !!delBtn);
+      if (delBtn) {
+        delBtn.click();
+        await wait(400);
+        const confirmBtn = document.querySelector('#confirm-action');
+        ok('تأكيد الحذف ظهر', !!confirmBtn);
+        confirmBtn.click();
+        await wait(1400);
+        const afterDel = await api('getConsultations');
+        const clearedRow = (afterDel.data || []).find((c) => c.id === consultId);
+        ok('الإجابة حُذفت', clearedRow && !clearedRow.answer, JSON.stringify(clearedRow && clearedRow.answer));
+        ok('السؤال بقي', !!clearedRow);
+      }
+    }
+    closeSheet();
+
+    /* حذف الاستشارة كاملة */
+    openConsultationsSheet();
+    await wait(1300);
+    const delConsultBtn = document.querySelector('#consultations-list [data-consultation-id="' + consultId + '"] [data-action="delete-consultation"]');
+    ok('زر حذف الاستشارة موجود', !!delConsultBtn);
+    if (delConsultBtn) {
+      delConsultBtn.click();
+      await wait(400);
+      const confirmBtn = document.querySelector('#confirm-action');
+      if (confirmBtn) { confirmBtn.click(); await wait(1400); }
+      const afterConsult = await api('getConsultations');
+      ok('الاستشارة حُذفت', !(afterConsult.data || []).some((c) => c.id === consultId), JSON.stringify((afterConsult.data || []).map((c) => c.id)));
+    }
+    closeSheet();
+
+    /* حدود الأحرف الجديدة */
+    openRecordedMeetingComposer();
+    await wait(600);
+    const descTa = document.querySelector('#recorded-description');
+    ok('حدّ وصف اللقاء ٧٠٠٠ حرف', Number(descTa.getAttribute('maxlength')) >= 7000, descTa.getAttribute('maxlength'));
+    closeSheet();
+    openQuoteComposer();
+    await wait(600);
+    const quoteTa = document.querySelector('#quote-text');
+    ok('حدّ نص الاقتباس ١٠٠٠٠ حرف', Number(quoteTa.getAttribute('maxlength')) >= 10000, quoteTa.getAttribute('maxlength'));
+    closeSheet();
+    openArticleComposer();
+    await wait(600);
+    const artTa = document.querySelector('#article-body');
+    ok('حدّ نص المقال ٣٠٠٠٠ حرف', Number(artTa.getAttribute('maxlength')) >= 30000, artTa.getAttribute('maxlength'));
+    closeSheet();
+
+    /* صلاحيات الاستشارات: المشرف يحذف الاستشارة، وصاحب الرد يحذف إجابته فقط */
+    const permConsult = await api('submitConsultation', { memberId: 'm1', question: 'سؤال لاختبار الصلاحيات' });
+    await api('answerConsultation', { memberId: currentMember.id, id: permConsult.id, answer: 'إجابتي على سؤالي' });
+    const originalMember = currentMember;
+    currentMember = { id: 'm99', name: 'عضو عادي جدا', role: 'عضو', color: '#1E3A2B' };
+    openConsultationsSheet();
+    await wait(1800);
+    const ownerCards = document.querySelectorAll('#consultations-list > article');
+    ok('الاستشارات تظهر لعضو عادي', ownerCards.length >= 1, 'عدد=' + ownerCards.length);
+    ok('عضو عادي: بلا زر حذف استشارة', document.querySelectorAll('#consultations-list [data-action="delete-consultation"]').length === 0);
+    ok('عضو عادي: بلا أدوات تعديل/حذف الإجابة', document.querySelectorAll('#consultations-list .consultation-answer-tools button').length === 0);
+    closeSheet();
+
+    currentMember = originalMember;
+    openConsultationsSheet();
+    await wait(1800);
+    ok('المشرف: زر حذف الاستشارة موجود', document.querySelectorAll('#consultations-list [data-action="delete-consultation"]').length >= 1);
+    const ownerCard = document.querySelector('#consultations-list [data-consultation-id="' + permConsult.id + '"]');
+    ok('صاحب الإجابة يرى أدواته', ownerCard && ownerCard.querySelectorAll('.consultation-answer-tools button').length === 2, ownerCard ? String(ownerCard.querySelectorAll('.consultation-answer-tools button').length) : 'لا بطاقة');
+    ok('زر حذف الإجابة موسوم «حذف إجابتك فقط»', ownerCard && ownerCard.querySelector('[data-action="delete-consultation-answer"]').getAttribute('title').indexOf('إجابتك') >= 0);
     closeSheet();
 
     const errs = [];

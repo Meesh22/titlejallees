@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-13-r44';
+const CODE_VERSION = 'jalees-2026-11-13-r47';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -2247,7 +2247,7 @@ function doPost(e) {
       const memberId = String(data.memberId || '').trim();
       const question = String(data.question || '').trim();
       if (question.length < 8) throw new Error('اكتب سؤالك بتفصيل أكبر');
-      if (question.length > 2000) throw new Error('السؤال أطول من الحد المسموح');
+      if (question.length > 10000) throw new Error('السؤال أطول من الحد المسموح (١٠٠٠٠ حرف)');
       const membersSheet = getMembersSheet(ss);
       const memberRow = findMemberRowById(membersSheet, memberId);
       if (memberRow < 2) throw new Error('سجّل الدخول كعضو لطرح استشارة');
@@ -2265,13 +2265,52 @@ function doPost(e) {
       return output({ success: true, id: id, message: 'تم إرسال استشارتك للمستشارين' });
     }
 
+    /* حذف استشارة (للمشرف) */
+    if (action === 'deleteConsultation') {
+      const requester = String(data.requesterName || data.by || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('حذف الاستشارة متاح للمشرفين فقط');
+      const sheet = getConsultationsSheet(ss);
+      const consultationId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') !== consultationId) continue;
+          sheet.deleteRow(i + 2);
+          return output({ success: true, message: 'تم حذف الاستشارة' });
+        }
+      }
+      return output({ success: false, message: 'لم أجد الاستشارة' });
+    }
+
+    /* حذف إجابة الاستشارة (صاحبها فقط) */
+    if (action === 'deleteConsultationAnswer') {
+      const memberId = String(data.memberId || '').trim();
+      const sheet = getConsultationsSheet(ss);
+      const consultationId = String(data.id || '');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 9).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') !== consultationId) continue;
+          const answeredById = String(ids[i][6] || '').trim();
+          if (!answeredById || answeredById !== memberId) {
+            throw new Error('لا يمكنك حذف إجابة كتبها شخص آخر');
+          }
+          sheet.getRange(i + 2, 6, 1, 4).setValues([['', '', '', '']]);
+          return output({ success: true, message: 'تم حذف الإجابة' });
+        }
+      }
+      return output({ success: false, message: 'لم أجد الاستشارة' });
+    }
+
     if (action === 'answerConsultation') {
       const memberId = String(data.memberId || '').trim();
       const consultationId = String(data.id || '').trim();
       const answer = String(data.answer || '').trim();
       if (!consultationId) throw new Error('معرّف الاستشارة مطلوب');
       if (answer.length < 2) throw new Error('اكتب الإجابة');
-      if (answer.length > 4000) throw new Error('الإجابة أطول من الحد المسموح');
+      if (answer.length > 20000) throw new Error('الإجابة أطول من الحد المسموح (٢٠٠٠٠ حرف)');
       const membersSheet = getMembersSheet(ss);
       const memberRow = findMemberRowById(membersSheet, memberId);
       if (memberRow < 2) throw new Error('سجّل الدخول بحساب المستشار');
@@ -3351,10 +3390,12 @@ function doGet(e) {
       const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 9).getValues();
       const consultations = rows.map(row => ({
         id: String(row[0] || ''),
+        memberId: String(row[1] || ''),
         memberName: String(row[2] || ''),
         question: String(row[3] || ''),
         askedAt: row[4],
         answer: String(row[5] || ''),
+        answeredById: String(row[6] || ''),
         answeredBy: String(row[7] || ''),
         answeredAt: row[8]
       })).filter(item => item.id && item.question);
