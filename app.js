@@ -2711,6 +2711,7 @@ function renderHome() {
     <div class="ha-body">
       <span class="chip chip-soft">${esc(article.category)}</span>
       <h4>${esc(article.title)}</h4>
+      <p class="ha-excerpt">${esc((article.excerpt || article.body || '').slice(0, 150))}${(article.excerpt || article.body || '').length > 150 ? '…' : ''}</p>
       <div class="ha-meta"><button class="ha-author" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">${esc(authorNameOf(article))}</button><span>·</span><span>${toAr(article.read || 3)} دقائق قراءة</span></div>
     </div>` : emptyHTML('article', 'لا مقالات متاحة حاليًا', 'ستظهر هنا أحدث مقالات أعضاء جليس.');
   $('#home-article').dataset.action = article ? 'open-article' : '';
@@ -4499,6 +4500,7 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
       <div class="field">
         <label for="quote-text">نص الاقتباس</label>
         <textarea class="input" id="quote-text" rows="8" maxlength="10000" placeholder="اكتب الجملة التي توقفت عندها…" required></textarea>
+        <small class="field-hint" id="quote-counter" dir="ltr"></small>
       </div>
       <div class="quote-dropzone" id="quote-dropzone">
         <svg class="ic"><use href="#i-article"/></svg>
@@ -4554,6 +4556,12 @@ function openQuoteComposer(presetBookId = '', presetBookTitle = '') {
         page.value.trim() ? `ص ${page.value.trim()}` : '',
         state.profile.name
       ].filter(Boolean).join(' · ');
+      const counter = root.querySelector('#quote-counter');
+      if (counter) {
+        const chars = value.length;
+        const words = value ? value.split(/\s+/).filter(Boolean).length : 0;
+        counter.textContent = words ? `${toAr(words)} كلمة · ${toAr(chars)} حرف` : '';
+      }
     };
     [text, book, bookAuthor, page].forEach((field) => field.addEventListener('input', () => {
       // إذا غيّر العضو اسم الكتاب يدويًا نعيد البحث عن المعرف، وإلا نحتفظ بالمعرّف المضبوط من صفحة الكتاب
@@ -5132,6 +5140,7 @@ function openArticleComposer() {
           </div>
         </div>
         <textarea class="input" id="article-body" rows="14" maxlength="30000" placeholder="اكتب هنا… اترك سطراً فارغاً بين الفقرات." required></textarea>
+        <small class="field-hint" id="article-counter" dir="ltr"></small>
       </div>
       <button class="btn btn-gold btn-block" type="submit">
         <svg class="ic"><use href="#i-send"/></svg> انشر المقال
@@ -5159,6 +5168,21 @@ function openArticleComposer() {
       }
     };
     applyFont(fontSize, false);
+    const bodyCounter = root.querySelector('#article-counter');
+    const refreshCounter = () => {
+      if (!bodyCounter) return;
+      const raw = bodyInput ? bodyInput.value.trim() : '';
+      const words = raw ? raw.split(/\s+/).filter(Boolean).length : 0;
+      const chars = raw.length;
+      const minutes = Math.max(1, Math.round(words / 180));
+      bodyCounter.textContent = words
+        ? `${toAr(words)} كلمة · ${toAr(chars)} حرف · ${toAr(minutes)} ${minutes === 1 ? 'دقيقة' : 'دقائق'} قراءة`
+        : '';
+    };
+    if (bodyInput) {
+      bodyInput.addEventListener('input', refreshCounter);
+      refreshCounter();
+    }
     root.querySelectorAll('[data-font-step]').forEach((button) => {
       button.addEventListener('click', () => applyFont(fontSize + Number(button.dataset.fontStep), true));
     });
@@ -5345,7 +5369,17 @@ function openNotificationsSheet() {
         ${isSupervisor() ? '<button class="btn btn-sm btn-ghost" type="button" id="notify-settings-btn">إعدادات الإرسال</button>' : ''}
       </div>
     </div>
-    <div class="notif-list" id="notify-list"><p class="notif-loading">جارٍ التحميل…</p></div>`, async (root) => {
+    <div class="notif-list" id="notify-list"><p class="notif-loading">جارٍ التحميل…</p></div>
+    ${isSupervisor() ? `
+    <div class="pending-registrations" id="pending-registrations" hidden>
+      <div class="notify-toolbar">
+        <span>طلبات تسجيل تنتظر موافقتك</span>
+        <button class="btn btn-sm btn-ghost" type="button" id="pending-refresh">تحديث</button>
+      </div>
+      <div id="pending-registrations-list" class="pending-list"></div>
+      <small class="field-hint">لو لم يصل العضو رمزه بالبريد، أرسل له الرمز من هنا على واتساب.</small>
+    </div>` : ''}
+  `, async (root) => {
     const list = root.querySelector('#notify-list');
     const summary = root.querySelector('#notify-summary');
     const paint = (data) => {
@@ -5401,6 +5435,38 @@ function openNotificationsSheet() {
 
     const settingsBtn = root.querySelector('#notify-settings-btn');
     if (settingsBtn) settingsBtn.addEventListener('click', () => openNotifySettingsSheet());
+
+    /* طلبات التسجيل المعلّقة مع رموزها */
+    const pendingBox = root.querySelector('#pending-registrations');
+    const pendingList = root.querySelector('#pending-registrations-list');
+    const loadPending = async () => {
+      if (!pendingBox || !pendingList) return;
+      const result = await cloudRequest('getPendingRegistrations', { requesterName: (currentMember && currentMember.name) || 'مشرف' });
+      const items = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+      pendingBox.hidden = false;
+      if (!items.length) {
+        pendingList.innerHTML = '<p class="pending-empty">لا توجد طلبات معلّقة الآن.</p>';
+        return;
+      }
+      pendingList.innerHTML = items.map((item) => `
+        <div class="pending-row">
+          <div class="pending-main">
+            <strong>${esc(item.name || 'عضو جديد')}</strong>
+            <small dir="ltr">${esc(item.email || '')}${item.phone ? ' · ' + esc(item.phone) : ''}</small>
+          </div>
+          <span class="pending-code" dir="ltr">${esc(item.code || '—')}</span>
+          <button class="btn btn-xs btn-ghost" type="button" data-action="copy-pending-code" data-code="${esc(item.code || '')}">نسخ</button>
+        </div>`).join('');
+      pendingList.querySelectorAll('[data-action="copy-pending-code"]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const ok = await copyText(button.dataset.code || '');
+          toast(ok ? 'نُسخ الرمز — أرسله للعضو' : 'تعذر النسخ', ok ? 'check' : 'info');
+        });
+      });
+    };
+    const pendingRefresh = root.querySelector('#pending-refresh');
+    if (pendingRefresh) pendingRefresh.addEventListener('click', () => loadPending());
+    loadPending();
   });
 }
 
@@ -5416,7 +5482,8 @@ function openNotifySettingsSheet() {
           <option value="email">بريد النادي (يعمل فورًا)</option>
           <option value="telegram">تيليجرام (على الجوال مباشرة)</option>
           <option value="ntfy">ntfy (تطبيق مجاني على الجوال)</option>
-          <option value="pushover">Pushover (تطبيق iOS/Android)</option>
+          <option value="resend">مزوّد بريد احترافي (Resend) — وصول مضمون</option>
+          <option value="brevo">Brevo / Sendinblue — ٣٠٠ رسالة/يوم بلا نطاق</option>
           <option value="off">إيقاف الإرسال</option>
         </select>
       </div>
@@ -5434,6 +5501,29 @@ function openNotifySettingsSheet() {
           <p>احسب لكل مشرف رقمه من <b>https://t.me/userinfobot</b> (رقمك: <b id="notify-my-chat">6584082937</b>) — وضع الأرقام كلها هنا.</p>
           <p><b>أو استخدم مجموعة/قناة:</b> أنشئ مجموعة في تيليجرام ← أضف بوتك <b>مشرفًا</b> فيها ← خذ رقم المجموعة (يبدأ بـ <code>-100</code>) ← ضعه هنا ← تصلك التنبيهات لكل المشرفين دفعة واحدة.</p>
         </div>
+      </div>
+      <div class="field" data-ch="brevo">
+        <label for="notify-brevo-key">مفتاح Brevo (Sendinblue)</label>
+        <input class="input" id="notify-brevo-key" dir="ltr" placeholder="xsmtpsib-xxxxxxxxxxxx">
+        <small class="field-hint">حساب مجاني على brevo.com — ٣٠٠ رسالة/يوم. توثّق بريد النادي فقط (بلا نطاق).</small>
+      </div>
+      <div class="field" data-ch="brevo">
+        <label for="notify-brevo-from">البريد المرسل (موثّق في Brevo)</label>
+        <input class="input" id="notify-brevo-from" dir="ltr" placeholder="jjalees.com@gmail.com">
+        <small class="field-hint">هذا العنوان تضبطه في Brevo: <b>Senders &amp; IPs → Senders</b> ثم توثّقه بالضغط على الرابط المُرسل.</small>
+      </div>
+      <div class="field" data-ch="brevo">
+        <label for="notify-brevo-name">الاسم الظاهر للمرسل</label>
+        <input class="input" id="notify-brevo-name" placeholder="نادي جليس القرائي">
+      </div>
+      <div class="field" data-ch="resend">
+        <label for="notify-resend-key">مفتاح مزوّد البريد (Resend)</label>
+        <input class="input" id="notify-resend-key" dir="ltr" placeholder="re_xxxxxxxxxxxx">
+        <small class="field-hint">حساب مجاني على resend.com — يُنشئ قائمة بريد موثّقة (SPF/DKIM) فلا يصل للب المهملات.</small>
+      </div>
+      <div class="field" data-ch="resend">
+        <label for="notify-resend-from">عنوان المرسل</label>
+        <input class="input" id="notify-resend-from" dir="ltr" placeholder="notifications@yourdomain.com">
       </div>
       <div class="field" data-ch="ntfy">
         <label for="notify-ntfy">مجلد ntfy</label>
@@ -5482,6 +5572,11 @@ function openNotifySettingsSheet() {
         telegramToken: root.querySelector('#notify-tg-token').value.trim(),
         telegramChat: root.querySelector('#notify-tg-chat').value.trim(),
         ntfyTopic: root.querySelector('#notify-ntfy').value.trim(),
+        resendKey: root.querySelector('#notify-resend-key').value.trim(),
+        resendFrom: root.querySelector('#notify-resend-from').value.trim(),
+        brevoKey: root.querySelector('#notify-brevo-key').value.trim(),
+        brevoFrom: root.querySelector('#notify-brevo-from').value.trim(),
+        brevoName: root.querySelector('#notify-brevo-name').value.trim(),
         pushoverToken: root.querySelector('#notify-po-token').value.trim(),
         pushoverUser: root.querySelector('#notify-po-user').value.trim(),
         siteUrl: root.querySelector('#notify-url').value.trim(),
@@ -5525,6 +5620,11 @@ function openNotifySettingsSheet() {
       const chatIds = String((local && local.telegramChat) || (loaded.telegramChats || []).join(', ') || loaded.telegramChat || '');
       root.querySelector('#notify-tg-chat').value = chatIds;
       root.querySelector('#notify-ntfy').value = pick('ntfyTopic', loaded.ntfyTopic);
+      root.querySelector('#notify-resend-key').value = pick('resendKey', '');
+      root.querySelector('#notify-resend-from').value = pick('resendFrom', '');
+      root.querySelector('#notify-brevo-key').value = pick('brevoKey', '');
+      root.querySelector('#notify-brevo-from').value = pick('brevoFrom', loaded.brevoFrom);
+      root.querySelector('#notify-brevo-name').value = pick('brevoName', loaded.brevoName);
       root.querySelector('#notify-po-token').value = pick('pushoverToken', '');
       root.querySelector('#notify-po-user').value = pick('pushoverUser', '');
       root.querySelector('#notify-url').value = pick('siteUrl', loaded.siteUrl);
@@ -6968,7 +7068,7 @@ function openReadingTipComposer() {
 
 function openMoreSheet() {
   openSheet(`
-    ${sheetHead('المزيد', 'خدمات و programmes النادي')}
+    ${sheetHead('المزيد', 'خدمات وبرامج النادي')}
     <div class="more-list">
       <button class="more-item" type="button" data-action="meeting-archive">
         <span class="more-icon"><svg class="ic"><use href="#i-calendar"/></svg></span>
@@ -9154,6 +9254,20 @@ async function init() {
 
   const verifyBack = document.getElementById('verify-back');
   if (verifyBack) verifyBack.addEventListener('click', () => showGateView('register'));
+
+  /* طلب الرمز عبر واتساب — لا يعتمد على البريد إطلاقًا */
+  const verifyWhatsapp = document.getElementById('verify-whatsapp');
+  if (verifyWhatsapp) {
+    verifyWhatsapp.addEventListener('click', () => {
+      const email = (pendingRegister && pendingRegister.email) || ($('#verify-email') && $('#verify-email').textContent) || '';
+      const name = (pendingRegister && pendingRegister.name) || '';
+      const message = 'مرحبًا، أرغب بالتسجيل في نادي جليس القرائي.'
+        + (name ? '\nالاسم: ' + name : '')
+        + (email ? '\nالبريد: ' + email : '')
+        + '\nمن فضلكم أرسلوا لي رمز التحقق.';
+      window.open('https://wa.me/966545946169?text=' + encodeURIComponent(message), '_blank', 'noopener');
+    });
+  }
 
   const verifyResend = document.getElementById('verify-resend');
   if (verifyResend) {

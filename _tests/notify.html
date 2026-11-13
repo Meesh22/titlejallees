@@ -63,7 +63,8 @@
     getScriptProperties: () => ({
       getProperty: (k) => (k in propStore ? propStore[k] : ''),
       setProperty: (k, v) => { propStore[k] = String(v); },
-      deleteProperty: (k) => { delete propStore[k]; }
+      deleteProperty: (k) => { delete propStore[k]; },
+      getProperties: () => Object.assign({}, propStore)
     })
   };
   globalThis.Utilities = {
@@ -153,6 +154,21 @@
     ok('اختبار الإرسال عبر Pushover', testPo.success === true && testPo.pushed === true, JSON.stringify(testPo));
     ok('اتصل بـ Pushover', httpCalls.some((c) => c.url.indexOf('pushover.net') >= 0), JSON.stringify(httpCalls.map((c) => c.url)));
 
+    /* ===== 5ت) مزوّدات البريد عبر التنبيهات (Resend / Brevo) ===== */
+    await api('saveNotifySettings', { channel: 'resend', resendKey: 're_push', resendFrom: 'notifications@jalees.sa', types: ['register'] });
+    httpCalls.length = 0;
+    const testResend = await api('testNotification', {});
+    ok('تنبيه Resend ناجح', testResend.success === true && testResend.pushed === true, JSON.stringify(testResend));
+    const resendPush = httpCalls.find((c) => c.url.indexOf('api.resend.com') >= 0);
+    ok('تنبيه Resend إلى بريد النادي', !!resendPush && String(resendPush.options.payload).indexOf('jjalees.com@gmail.com') >= 0, resendPush ? String(resendPush.options.payload).slice(0, 160) : '');
+
+    await api('saveNotifySettings', { channel: 'brevo', brevoKey: 'xsmtpsib-push', brevoFrom: 'jjalees.com@gmail.com', types: ['register'] });
+    httpCalls.length = 0;
+    const testBrevo = await api('testNotification', {});
+    ok('تنبيه Brevo ناجح', testBrevo.success === true && testBrevo.pushed === true, JSON.stringify(testBrevo));
+    const brevoPush = httpCalls.find((c) => c.url.indexOf('api.brevo.com') >= 0);
+    ok('تنبيه Brevo إلى بريد النادي', !!brevoPush && String(brevoPush.options.payload).indexOf('jjalees.com@gmail.com') >= 0, brevoPush ? String(brevoPush.options.payload).slice(0, 160) : '');
+
     /* ===== 5ب) مشاركة البوت مع عدة مشرفين ===== */
     await api('saveNotifySettings', { channel: 'telegram', telegramToken: 'TOKEN123', telegramChat: '111, 222, -100333', types: ['register'] });
     httpCalls.length = 0;
@@ -194,6 +210,61 @@
     const settings = await api('getNotifySettings');
     ok('قراءة الإعدادات', settings.success === true && settings.channel === 'email' && Array.isArray(settings.allTypes), JSON.stringify(settings).slice(0, 200));
     ok('كل الأنواع معروفة', (settings.allTypes || []).length >= 10, (settings.allTypes || []).join(','));
+
+    /* ===== 8ب) طلبات التسجيل المعلّقة مع الرموز ===== */
+    const pendReg = await api('getPendingRegistrations', { requesterName: 'مشعل الحفير' });
+    ok('قراءة الطلبات المعلّقة', pendReg.success === true && Array.isArray(pendReg.data), JSON.stringify(pendReg).slice(0, 200));
+    ok('الطلب المعلّق يحمل الرمز', (pendReg.data || []).length === 0 || Boolean((pendReg.data[0] || {}).code), JSON.stringify((pendReg.data || [])[0] || {}).slice(0, 120));
+    const pendDenied = await api('getPendingRegistrations', { requesterName: 'عضو عادي' });
+    ok('منع غير المشرف من عرض الطلبات', pendDenied.success === false, pendDenied.error || '');
+
+    /* ===== 8ج) مزوّد بريد احترافي (Resend) ===== */
+    await api('saveNotifySettings', { channel: 'resend', resendKey: 're_test123', resendFrom: 'notifications@jalees.sa', types: ['register'] });
+    httpCalls.length = 0;
+    const resendReq = await api('requestRegistrationCode', { name: 'عضو اختبار المزود', phone: '0505556666', email: 'resendtest@example.com', password: 'كلمةسر456' });
+    ok('طلب رمز عبر مزوّد البريد', resendReq.success === true, resendReq.error || '');
+    const resendCall = httpCalls.filter((c) => c.url.indexOf('api.resend.com') >= 0).pop();
+    ok('اتصل بمزوّد البريد', !!resendCall, JSON.stringify(httpCalls.map((c) => c.url)));
+    ok('الرسالة تحتوي الرمز', !!resendCall && String(resendCall.options.payload).indexOf(resendCall.options.payload.match(/[0-9]{6}/)[0]) >= 0, resendCall ? String(resendCall.options.payload).slice(0, 180) : '');
+    const resendSettings = await api('getNotifySettings');
+    ok('حالة المزوّد محفوظة', resendSettings.hasResend === true, JSON.stringify(resendSettings).slice(0, 160));
+
+    /* ===== 8د) مزوّد بريد احترافي (Brevo) ===== */
+    await api('saveNotifySettings', { channel: 'brevo', brevoKey: 'xsmtpsib-test', brevoFrom: 'jjalees.com@gmail.com', brevoName: 'نادي جليس القرائي', types: ['register'] });
+    httpCalls.length = 0;
+    const brevoReq = await api('requestRegistrationCode', { name: 'عضو اختبار بريفو', phone: '0507775555', email: 'brevotest@example.com', password: 'كلمةسر456' });
+    ok('طلب رمز عبر Brevo', brevoReq.success === true, brevoReq.error || '');
+    const brevoCall = httpCalls.filter((c) => c.url.indexOf('api.brevo.com') >= 0).pop();
+    ok('اتصل بخادم Brevo', !!brevoCall, JSON.stringify(httpCalls.map((c) => c.url)));
+    ok('ترويسة المفتاح صحيحة', !!brevoCall && String(brevoCall.options.headers['api-key'] || '').indexOf('xsmtpsib-test') >= 0, brevoCall ? JSON.stringify(brevoCall.options.headers).slice(0, 120) : '');
+    ok('الرمز داخل نص الرسالة', !!brevoCall && String(brevoCall.options.payload).match(/[0-9]{6}/) !== null, brevoCall ? String(brevoCall.options.payload).slice(0, 200) : '');
+    const brevoSettings = await api('getNotifySettings');
+    ok('Brevo مضبوط ويظهر للمشرف', brevoSettings.hasBrevo === true && String(brevoSettings.brevoFrom).indexOf('jjalees.com') >= 0, JSON.stringify(brevoSettings).slice(0, 160));
+
+    /* ===== 9) رمز طلب التسجيل يصل في تنبيه تيليجرام ===== */
+    await api('saveNotifySettings', { channel: 'telegram', telegramToken: 'TOKEN123', telegramChat: '998877', types: ['register'] });
+    httpCalls.length = 0;
+    const regReq = await api('requestRegistrationCode', { name: 'عضو اختبار تيليجرام', phone: '0507778888', email: 'tgtest@example.com', password: 'كلمةسر456' });
+    ok('طلب رمز التسجيل', regReq.success === true, regReq.error || '');
+    const regCodeSent = (sentMails[sentMails.length - 1] || {}).htmlBody || '';
+    const regCodeMatch = String(regCodeSent).match(/\b\d{6}\b/);
+    const regRealCode = regCodeMatch ? regCodeMatch[0] : '';
+    const verReg = await api('verifyRegistrationCode', { email: 'tgtest@example.com', code: regRealCode });
+    ok('إنشاء الحساب عبر الرمز', verReg.success === true, verReg.error || '');
+    const tgRegCall = httpCalls.filter((c) => c.url.indexOf('telegram.org') >= 0).pop();
+    ok('أُرسل تنبيه تيليجرام لطلب التسجيل', !!tgRegCall, JSON.stringify(httpCalls.map((c) => c.url)));
+    ok('الرمز داخل نص التنبيه', !!tgRegCall && String(tgRegCall.options.payload).indexOf(regRealCode) >= 0, tgRegCall ? String(tgRegCall.options.payload).slice(0, 200) : '');
+    const pendNow = await api('getPendingRegistrations', { requesterName: 'مشعل الحفير' });
+    ok('الطلب المؤكَّد يُحذف من قائمة المنتظرة', !(pendNow.data || []).some((p) => p.email === 'tgtest@example.com'), JSON.stringify((pendNow.data || []).slice(0, 2)).slice(0, 200));
+
+    /* طلب لم يُؤكَّد بعد ⇒ يبقى في القائمة مع رمزه */
+    const stillPending = await api('requestRegistrationCode', { name: 'عضو بانتظار التأكيد', phone: '0506667777', email: 'waiting@example.com', password: 'كلمةسر456' });
+    ok('طلب رمز جديد', stillPending.success === true, stillPending.error || '');
+    const pendList = await api('getPendingRegistrations', { requesterName: 'مشعل الحفير' });
+    const waiting = (pendList.data || []).find((p) => p.email === 'waiting@example.com');
+    ok('الطلب المعلّق يظهر للمشرف', !!waiting, JSON.stringify((pendList.data || []).slice(0, 2)).slice(0, 200));
+    ok('رمز الطلب المعلّق متاح', waiting && /^\d{6}$/.test(String(waiting.code || '')), waiting ? String(waiting.code) : 'لا رمز');
+    ok('اسم العضو ورقمه متاحان', waiting && waiting.name && waiting.phone, waiting ? waiting.name + ' / ' + waiting.phone : '');
 
     /* ===== 9) الواجهة: جرس التنبيهات ===== */
     const bell = document.querySelector('[data-action="notifications"]');

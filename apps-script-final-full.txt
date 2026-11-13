@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-13-r47';
+const CODE_VERSION = 'jalees-2026-11-14-r50';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -593,6 +593,11 @@ function pushSettings() {
     telegramChat: chats[0] || '',
     telegramChats: chats,
     ntfyTopic: get('JALEES_NTFY_TOPIC', ''),
+    resendKey: get('JALEES_RESEND_KEY', ''),
+    resendFrom: get('JALEES_RESEND_FROM', ''),
+    brevoKey: get('JALEES_BREVO_KEY', ''),
+    brevoFrom: get('JALEES_BREVO_FROM', ''),
+    brevoName: get('JALEES_BREVO_NAME', 'نادي جليس القرائي'),
     pushoverToken: get('JALEES_PUSHOVER_TOKEN', ''),
     pushoverUser: get('JALEES_PUSHOVER_USER', ''),
     types: get('JALEES_PUSH_TYPES', ''),
@@ -692,6 +697,59 @@ function sendPushNotification(ss, type, title, body, link) {
       const code = res.getResponseCode();
       if (code < 200 || code >= 300) throw new Error('Pushover: ' + code + ' ' + String(res.getContentText() || '').slice(0, 120));
       return { sent: true, channel: channel, detail: 'أُرسل عبر Pushover' };
+    }
+
+    /* مزوّدات البريد الاحترافية: تُرسل التنبيه إلى بريد النادي (نفس سلوك قناة البريد) */
+    if (channel === 'resend') {
+      if (!settings.resendKey || !settings.resendFrom) throw new Error('إعدادات مزوّد البريد ناقصة (المفتاح أو المرسل)');
+      const html = '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+        + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>'
+        + '<h2 style="margin:0 0 10px">' + String(title || 'جليس') + '</h2>'
+        + '<p>' + String(body || '') + '</p>'
+        + (link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : '') + '</div>';
+      const res = UrlFetchApp.fetch('https://api.resend.com/emails', {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + settings.resendKey },
+        payload: JSON.stringify({
+          from: settings.resendFrom,
+          to: [MAIL_FROM],
+          subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
+          text: text,
+          html: html
+        }),
+        muteHttpExceptions: true
+      });
+      const status = res.getResponseCode();
+      const responseBody = String(res.getContentText() || '');
+      if (status < 200 || status >= 300) throw new Error('مزوّد البريد ' + status + ': ' + responseBody.slice(0, 160));
+      return { sent: true, channel: channel, detail: 'أُرسل عبر مزوّد البريد' };
+    }
+
+    if (channel === 'brevo') {
+      if (!settings.brevoKey || !settings.brevoFrom) throw new Error('إعدادات Brevo ناقصة (المفتاح أو المرسل)');
+      const html = '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+        + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>'
+        + '<h2 style="margin:0 0 10px">' + String(title || 'جليس') + '</h2>'
+        + '<p>' + String(body || '') + '</p>'
+        + (link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : '') + '</div>';
+      const res = UrlFetchApp.fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { 'api-key': settings.brevoKey },
+        payload: JSON.stringify({
+          sender: { name: settings.brevoName || 'نادي جليس القرائي', email: settings.brevoFrom },
+          to: [{ email: MAIL_FROM }],
+          subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
+          htmlContent: html,
+          textContent: text
+        }),
+        muteHttpExceptions: true
+      });
+      const status = res.getResponseCode();
+      const responseBody = String(res.getContentText() || '');
+      if (status < 200 || status >= 300) throw new Error('Brevo ' + status + ': ' + responseBody.slice(0, 160));
+      return { sent: true, channel: channel, detail: 'أُرسل عبر Brevo' };
     }
 
     if (channel === 'email') {
@@ -1131,7 +1189,72 @@ function mailBccAddress() {
   return MAIL_FROM;
 }
 
+/* ---- إرسال عبر مزوّد بريد احترافي (وصول مضمون — لا-importantls إلى المهملات) ---- */
+function sendViaResend(settings, to, subject, intro, code, name) {
+  if (!settings || !settings.resendKey || !settings.resendFrom) return false;
+  const res = UrlFetchApp.fetch('https://api.resend.com/emails', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + settings.resendKey },
+    payload: JSON.stringify({
+      from: settings.resendFrom,
+      to: [to],
+      subject: subject,
+      text: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
+      html: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+        + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
+        + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
+        + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
+        + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>'
+    }),
+    muteHttpExceptions: true
+  });
+  const code2 = res.getResponseCode();
+  const body = String(res.getContentText() || '');
+  if (code2 < 200 || code2 >= 300) throw new Error('مزوّد البريد ' + code2 + ': ' + body.slice(0, 160));
+  return true;
+}
+
+/* ---- إرسال عبر Brevo (توثيق بريد واحد — بدون نطاق) ---- */
+function sendViaBrevo(settings, to, subject, intro, code, name) {
+  if (!settings || !settings.brevoKey || !settings.brevoFrom) return false;
+  const res = UrlFetchApp.fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'api-key': settings.brevoKey },
+    payload: JSON.stringify({
+      sender: { name: settings.brevoName || 'نادي جليس القرائي', email: settings.brevoFrom },
+      to: [{ email: to, name: name || 'عضو جليس' }],
+      subject: subject,
+      htmlContent: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+        + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
+        + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
+        + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
+        + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>',
+      textContent: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.'
+    }),
+    muteHttpExceptions: true
+  });
+  const status = res.getResponseCode();
+  const body = String(res.getContentText() || '');
+  if (status < 200 || status >= 300) throw new Error('Brevo ' + status + ': ' + body.slice(0, 160));
+  return true;
+}
+
 function sendCodeEmail(email, name, code, subject, intro) {
+  /* إن كان مزوّد البريد مضبوطًا نستخدمه — وصوله مضمون */
+  try {
+    const providerSettings = pushSettings();
+    if (providerSettings.channel === 'resend' && sendViaResend(providerSettings, email, subject, intro, code, name)) {
+      return true;
+    }
+    if (providerSettings.channel === 'brevo' && sendViaBrevo(providerSettings, email, subject, intro, code, name)) {
+      return true;
+    }
+  } catch (providerError) {
+    /* نكمل بالبريد العادي إن فشل المزوّد */
+  }
+
   const plainBody = [
     'نادي جليس القرائي',
     '',
@@ -1142,17 +1265,16 @@ function sendCodeEmail(email, name, code, subject, intro) {
     '',
     'الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلب هذا الرمز، تجاهله.'
   ].join('\n');
-  const htmlBody = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
-      <h2 style="margin:0 0 12px">نادي جليس القرائي</h2>
+  const htmlBody = `<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">
       <p>مرحباً ${name}،</p>
       <p>${intro}</p>
-      <p style="font-size:32px;letter-spacing:10px;font-weight:bold;color:#8C532D">${code}</p>
-      <p>هذا الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلب هذا الرمز، تجاهله.</p>
+      <p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">${code}</p>
+      <p>الرمز صالح لمدة ١٥ دقيقة. إن لم تطلب هذا الرمز تجاهله.</p>
+      <p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p>
     </div>`;
   const base = {
     to: email,
     subject: subject,
-    name: MAIL_NAME,
     replyTo: MAIL_REPLY,
     body: plainBody,
     htmlBody: htmlBody
@@ -2462,11 +2584,11 @@ function doPost(e) {
       ]);
       paintMemberRow(sheet, sheet.getLastRow(), 'pending');
       clearPendingRegistration(email);
-      /* تنبيه المشرف بوجود طلب تسجيل جديد */
+      /* تنبيه المشرف بوجود طلب تسجيل جديد — مع الرمز ليقدر يوصله للعضو */
       notifySupervisors(
         ss, 'register',
         'طلب تسجيل جديد',
-        record.name + ' (' + email + ') يطلب الانضمام للنادي — بانتظار موافقتك.',
+        record.name + ' (' + email + ') — الرمز: ' + code + ' — بانتظار موافقتك.',
         '', id, record.name
       );
       return output({
@@ -2874,6 +2996,33 @@ function doPost(e) {
       return output({ success: true, message: 'المقال غير موجود' });
     }
 
+    /* طلبات التسجيل المعلّقة مع رموزها (للمشرف) */
+    if (action === 'getPendingRegistrations') {
+      const requester = String(data.requesterName || data.by || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('عرض الطلبات متاح للمشرفين فقط');
+      const pending = [];
+      try {
+        const all = PropertiesService.getScriptProperties().getProperties();
+        Object.keys(all).forEach((key) => {
+          if (key.indexOf('pending-registration:') !== 0) return;
+          let record = null;
+          try { record = JSON.parse(all[key]); } catch (error) { record = null; }
+          if (!record || !record.email) return;
+          pending.push({
+            email: String(record.email || ''),
+            name: String(record.name || ''),
+            phone: String(record.phone || ''),
+            code: String(record.code || ''),
+            sentAt: Number(record.sentAt) || 0,
+            expiresAt: Number(record.expiry) || 0,
+            attempts: Number(record.attempts) || 0
+          });
+        });
+      } catch (error) { /* لا شيء */ }
+      pending.sort((a, b) => b.sentAt - a.sentAt);
+      return output({ success: true, data: pending.slice(0, 20) });
+    }
+
     /* ===== التنبيهات ===== */
     if (action === 'markNotificationsRead') {
       const sheet = getNotificationsSheet(ss);
@@ -2900,6 +3049,10 @@ function doPost(e) {
         hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
         hasNtfy: Boolean(settings.ntfyTopic),
         hasPushover: Boolean(settings.pushoverToken && settings.pushoverUser),
+        hasResend: Boolean(settings.resendKey && settings.resendFrom),
+        hasBrevo: Boolean(settings.brevoKey && settings.brevoFrom),
+        brevoFrom: settings.brevoFrom,
+        brevoName: settings.brevoName,
         types: [...pushEnabledTypes()],
         allTypes: Object.keys(NOTIFICATION_TYPES),
         labels: NOTIFICATION_TYPES
@@ -2916,6 +3069,11 @@ function doPost(e) {
       const chatList = String(data.telegramChat || '').split(/[,;\n\r]+/).map((v) => v.trim()).filter(Boolean);
       set('JALEES_TELEGRAM_CHAT', chatList.join(','));
       set('JALEES_NTFY_TOPIC', String(data.ntfyTopic || '').trim());
+      set('JALEES_RESEND_KEY', String(data.resendKey || '').trim());
+      set('JALEES_RESEND_FROM', String(data.resendFrom || '').trim());
+      set('JALEES_BREVO_KEY', String(data.brevoKey || '').trim());
+      set('JALEES_BREVO_FROM', String(data.brevoFrom || '').trim());
+      set('JALEES_BREVO_NAME', String(data.brevoName || 'نادي جليس القرائي').trim());
       set('JALEES_PUSHOVER_TOKEN', String(data.pushoverToken || '').trim());
       set('JALEES_PUSHOVER_USER', String(data.pushoverUser || '').trim());
       set('JALEES_SITE_URL', String(data.siteUrl || '').trim());
@@ -3038,6 +3196,10 @@ function doGet(e) {
         telegramChat: settings.telegramChat,
         telegramChats: settings.telegramChats,
         ntfyTopic: settings.ntfyTopic,
+        hasResend: Boolean(settings.resendKey && settings.resendFrom),
+        hasBrevo: Boolean(settings.brevoKey && settings.brevoFrom),
+        brevoFrom: settings.brevoFrom,
+        brevoName: settings.brevoName,
         siteUrl: settings.siteUrl,
         hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
         hasNtfy: Boolean(settings.ntfyTopic),

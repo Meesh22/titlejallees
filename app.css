@@ -507,6 +507,28 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .notify-actions { display: flex; gap: 8px; margin-top: 12px; }
 .notify-actions .btn { flex: 1; }
 
+/* طلبات التسجيل المعلّقة مع الرموز */
+.pending-registrations {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed var(--line-strong);
+}
+.pending-list { display: grid; gap: 8px; margin-bottom: 8px; }
+.pending-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px; border-radius: 12px;
+  background: #FCFBF5; border: 1px solid var(--line);
+}
+.pending-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.pending-main strong { font-size: 10.5px; font-weight: 800; color: var(--green-700); }
+.pending-main small { font-size: 8.5px; color: var(--muted-2); text-align: right; }
+.pending-code {
+  flex: none; padding: 4px 10px; border-radius: 8px;
+  background: var(--gold-soft); border: 1px solid rgba(197,155,99,.4);
+  color: var(--gold-700); font-family: Consolas, monospace;
+  font-size: 13px; font-weight: 800; letter-spacing: 2px;
+}
+.pending-empty { font-size: 9.5px; color: var(--muted-2); text-align: center; padding: 10px 0; }
+
 /* دليل الإعداد داخل صفحة التنبيهات */
 .notify-guide {
   margin-top: 5px;
@@ -1006,6 +1028,15 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .verify-help ul { margin: 0; padding-inline-start: 16px; }
 .verify-help li { margin-bottom: 2px; }
 .verify-help b { color: var(--gold-700); font-weight: 700; }
+.verify-whatsapp {
+  margin-top: 9px; width: 100%;
+  justify-content: center; gap: 7px;
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  background: rgba(37, 211, 102, 0.09);
+  color: #1E7A46;
+}
+.verify-whatsapp:hover { background: rgba(37, 211, 102, 0.16); }
+.verify-whatsapp .ic { width: 15px; height: 15px; }
 
 /* ط§ظ„طھط§ط±ظٹط® ظˆط§ظ„ظˆظ‚طھ ط§ظ„طھظ„ظ‚ط§ط¦ظٹ */
 .auto-stamp {
@@ -1112,6 +1143,9 @@ textarea::placeholder { color: #A9B1AC; }
   gap: 7px;
   margin: 0 0 16px;
 }
+
+/* على الجوال: تفاف شفاف (لا يغيّر الترتيب) — على سطح المكتب: عمودان */
+.home-quotes-article { display: contents; }
 .home-quotes-head { padding-top: 2px; }
 .home-latest-quotes .quote-card {
   padding: 10px 12px 9px;
@@ -1710,6 +1744,7 @@ textarea::placeholder { color: #A9B1AC; }
 .ha-body { min-width: 0; }
 .ha-body .chip { margin-bottom: 4px; }
 .ha-body h4 { font-size: 12.5px; line-height: 1.55; font-weight: 800; color: var(--green-700); }
+.ha-excerpt { font-size: 10.5px; line-height: 1.7; color: var(--muted); margin: 4px 0 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .ha-meta { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 9px; color: var(--muted-2); }
 .ha-meta b { color: var(--green-600); font-weight: 700; }
 
@@ -4112,12 +4147,8 @@ textarea::placeholder { color: #A9B1AC; }
 
 [hidden] { display: none !important; }
 
-/* ---------- ط§ط³طھط¬ط§ط¨ط© ط§ظ„ط´ط§ط´ط§طھ ---------- */
-@media (min-width: 1180px) {
-  .stage-brand { display: block; }
-}
-
-@media (max-width: 900px) {
+/* ---------- استجابة الشاشات ---------- */
+@media (max-width: 859px) {
   body { padding: 14px; }
   .phone { width: min(420px, 100%); height: calc(100dvh - 28px); }
 }
@@ -4149,12 +4180,1259 @@ textarea::placeholder { color: #A9B1AC; }
   .confetti-layer { position: fixed; }
 }
 
-@media (max-height: 720px) and (min-width: 641px) {
+@media (max-height: 720px) and (min-width: 641px) and (max-width: 859px) {
   .phone { height: calc(100dvh - 20px); }
   .status-bar { display: none; }
   .phone-notch { top: 12px; height: 24px; width: 100px; }
   .app { border-radius: 40px; }
   .app-header { padding-top: 20px; }
+}
+
+/* ==========================================================================
+   واجهة سطح المكتب (Desktop Experience ≥ 860px)
+   نفس هوية جليس (الأخضر الملكي · الورق الدافئ · الذهب · خط أميري و IBM Plex)
+   بتخطيط عريض مريح للقراءة والاقتباس وكتابة المقالات واستعراض الواجهات
+   ========================================================================== */
+@media (min-width: 768px) {
+  body {
+    padding: 12px 16px;
+    align-items: stretch;
+  }
+
+  .stage {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .stage-brand {
+    display: none !important;
+  }
+
+  .phone {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    background: var(--paper);
+    box-shadow: none;
+      0 34px 90px rgba(5, 12, 9, 0.58);
+  }
+
+  .phone::before,
+  .phone::after,
+  .phone-notch,
+  .status-bar {
+    display: none !important;
+  }
+
+  .app {
+    border-radius: 28px;
+  }
+
+  /* ---------- بوابة الدخول والتسجيل على سطح المكتب ---------- */
+  .gate {
+    display: grid;
+    grid-template-columns: minmax(300px, 1fr) minmax(420px, 480px);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "head card"
+      "intro card"
+      "foot card";
+    align-items: center;
+    gap: 24px 56px;
+    padding: 52px 72px;
+  }
+
+  .gate-home {
+    top: 24px;
+    left: 28px;
+    padding: 10px 18px;
+    font-size: 13px;
+  }
+
+  .gate-head {
+    grid-area: head;
+    align-self: end;
+  }
+
+  .gate-head .brand-logo-md {
+    width: 156px;
+  }
+
+  .gate-badge {
+    font-size: 12px;
+    padding: 6px 14px;
+  }
+
+  .gate-body {
+    grid-column: 1 / -1;
+    display: contents;
+  }
+
+  .gate-salaam {
+    display: none;
+  }
+
+  .gate-body > h1 {
+    grid-area: intro;
+    align-self: start;
+    font-size: 52px;
+    line-height: 1.2;
+  }
+
+  .gate-body > h1 span {
+    font-size: 36px;
+    margin-top: 8px;
+  }
+
+  .gate-sub {
+    display: none;
+  }
+
+  .gate-card {
+    grid-area: card;
+    margin-top: 0;
+    padding: 30px 34px;
+    border-radius: 26px;
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+  }
+
+  .gate-card-head h2 { font-size: 19px; }
+  .gate-card-head p { font-size: 12.5px; }
+
+  .gate-proof {
+    grid-area: foot;
+    margin-top: 0;
+    font-size: 12.5px;
+  }
+
+  .gate-foot {
+    display: none;
+  }
+
+  /* شاشة سطح المكتب تملأ المتصفح (بدون هوامش/إطار جوال) */
+  body {
+    padding: 0;
+    background: var(--paper);
+  }
+/* ---------- الهيكل الرئيسي لسطح المكتب (شريط جانبي + ترويسة + مساحة عمل) ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 76px auto minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "nav"
+      "main";
+    height: 100%;
+    min-height: 0;
+    background:
+      radial-gradient(640px 360px at 15% -8%, rgba(197, 155, 99, 0.12), transparent 70%),
+      var(--paper);
+  }
+
+  /* الشريط الجانبي الأيمن */
+  .tabbar {
+    grid-area: nav;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 8px 24px;
+    background:
+      linear-gradient(90deg, #152B20 0%, #1E3A2B 50%, #102118 100%);
+    border-top: 0;
+    border-bottom: 1px solid rgba(197, 155, 99, 0.22);
+    box-shadow: 0 4px 18px rgba(9, 20, 14, 0.16);
+    z-index: 20;
+    flex-wrap: wrap;
+  }
+
+  .tabbar::before {
+    content: '';
+    display: block;
+    width: 34px;
+    height: 34px;
+    margin-inline-end: 6px;
+    background: url('logo-light.png?v=1') no-repeat center / contain;
+    filter: brightness(0) invert(1) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3));
+  }
+
+  .tabbar::after {
+    display: none;
+  }
+
+  .tab {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    color: rgba(248, 245, 238, 0.78);
+    transition: background 0.2s, color 0.2s, transform 0.2s, border-color 0.2s;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .tab .ic {
+    width: 22px;
+    height: 22px;
+    color: var(--gold);
+    stroke-width: 1.75;
+  }
+
+  .tab span:not(.nav-badge) {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.1px;
+  }
+
+  .tab:hover {
+    background: rgba(248, 245, 238, 0.1);
+    color: #fff;
+    transform: translateY(-2px);
+  }
+
+  .tab.active {
+    background: linear-gradient(135deg, rgba(197, 155, 99, 0.26), rgba(197, 155, 99, 0.10));
+    color: #fff;
+    border-color: rgba(197, 155, 99, 0.42);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .tab.active::after {
+    right: -1px;
+    bottom: 22%;
+    top: 22%;
+    width: 4px;
+    height: auto;
+    border-radius: 4px 0 0 4px;
+    background: var(--gold);
+    box-shadow: 0 0 10px rgba(197, 155, 99, 0.55);
+  }
+
+  .tab .nav-badge {
+    position: static;
+    margin-right: auto;
+    min-width: 22px;
+    height: 22px;
+    line-height: 22px;
+    font-size: 11px;
+    padding: 0 7px;
+  }
+
+  /* ترويسة سطح المكتب */
+  .app-header {
+    grid-area: header;
+    padding: 0 32px;
+    background: rgba(248, 245, 238, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 2px 14px rgba(30, 58, 43, 0.06);
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .brand-logo-sm {
+    width: 82px;
+  }
+
+  .app-header .brand::after {
+    content: 'مساحة الأعضاء · المجلس القرائي';
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    padding-right: 14px;
+    margin-right: 4px;
+    border-right: 1px solid var(--line-strong);
+  }
+
+  .header-actions {
+    gap: 12px;
+  }
+
+  .header-actions .icon-btn,
+  .header-actions .avatar-btn {
+    width: 42px;
+    height: 42px;
+    font-size: 15px;
+  }
+
+  /* عدّاد التنبيهات: يُثبَّت فوق زر الجرس */
+  .notify-btn .notify-count {
+    top: -3px;
+    inset-inline-start: -3px;
+    min-width: 19px;
+    height: 19px;
+    font-size: 10.5px;
+    padding: 0 5px;
+    line-height: 19px;
+    box-shadow: 0 0 0 2.5px var(--paper);
+  }
+
+  /* منطقة المحتوى الرئيسية */
+  .app-main {
+    grid-area: main;
+    padding: 30px 40px 52px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(30, 58, 43, 0.22) transparent;
+  }
+  .app-main::-webkit-scrollbar {
+    display: block;
+    width: 7px;
+  }
+  .app-main::-webkit-scrollbar-thumb {
+    background: rgba(30, 58, 43, 0.2);
+    border-radius: 99px;
+  }
+
+  .screen.active {
+    max-width: 1360px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ---------- تحسينات الخطوط والعناوين والأزرار لسطح المكتب ---------- */
+  .screen-head {
+    padding: 6px 0 20px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+  }
+  .eyebrow {
+    font-size: 11.5px;
+    margin-bottom: 4px;
+  }
+  .screen-head h1 {
+    font-size: 30px;
+  }
+
+  .sec-head {
+    padding: 28px 2px 14px;
+  }
+  .sec-head h3 {
+    font-size: 19px;
+    padding-right: 15px;
+  }
+  .sec-head h3::before {
+    top: 9px;
+    width: 4px;
+    height: 17px;
+  }
+  .sec-head p {
+    font-size: 12.5px;
+    padding-right: 15px;
+    margin-top: 2px;
+  }
+
+  .link-btn {
+    font-size: 13px;
+    gap: 4px;
+  }
+  .link-btn .ic {
+    width: 15px;
+    height: 15px;
+  }
+
+  .btn {
+    font-size: 14px;
+    padding: 12px 20px;
+    border-radius: 14px;
+  }
+  .btn-sm {
+    font-size: 12.5px;
+    padding: 9px 16px;
+    border-radius: 12px;
+  }
+
+  .chips-row,
+  .category-list {
+    gap: 9px;
+    padding: 4px 2px 14px;
+    flex-wrap: wrap;
+  }
+  .chip-filter {
+    font-size: 12.5px;
+    padding: 8px 16px;
+  }
+  .chip {
+    font-size: 11.5px;
+    padding: 5px 12px;
+  }
+
+  /* ---------- الشاشة الرئيسية (Home) على سطح المكتب ---------- */
+  .greeting {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 20px 28px;
+    padding: 8px 0 22px;
+  }
+  .greeting .date-label {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .greeting-title-row {
+    grid-column: 1;
+    display: block;
+  }
+  .greeting-title-row h1 {
+    font-size: 34px;
+    line-height: 1.25;
+  }
+  .greeting-title-row .consultation-header-btn {
+    margin-top: 12px;
+    padding: 10px 18px;
+    font-size: 13px;
+    gap: 7px;
+  }
+  .greeting-title-row .consultation-header-btn .ic {
+    width: 16px;
+    height: 16px;
+  }
+  .greeting-sub {
+    font-size: 15px;
+    margin-top: 6px;
+  }
+  .home-actions {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    align-self: start;
+    width: auto;
+    max-width: 460px;
+    gap: 12px;
+    margin: 0;
+    padding-top: 4px;
+  }
+  .home-actions .btn {
+    padding: 16px 22px;
+    font-size: 15px;
+  }
+
+  .home-consultations-list {
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 14px;
+  }
+
+  /* اقتباس + مقال جنب بعض (سطح المكتب فقط) */
+  .home-quotes-article {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .home-quotes-article .home-quotes-col,
+  .home-quotes-article .home-article-col {
+    min-width: 0;
+  }
+  .home-quotes-article .home-article {
+    max-width: none;
+  }
+  .home-consultation-item {
+    padding: 15px 18px;
+  }
+  .home-consultation-item .hc-top strong { font-size: 12.5px; }
+  .home-consultation-item .hc-top time { font-size: 10.5px; }
+  .home-consultation-item p { font-size: 12.5px; }
+  .home-consultation-item .hc-link { font-size: 11px; }
+
+  /* آخر الاقتباسات في الرئيسية — شبكة متكadaptive */
+  .home-latest-quotes {
+    grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+    gap: 16px;
+    align-items: stretch;
+  }
+  .home-latest-quotes .quote-card {
+    display: flex;
+    flex-direction: column;
+    padding: 18px 20px 15px;
+    border-radius: 18px;
+    transition: transform 0.22s var(--ease), box-shadow 0.22s;
+  }
+  .home-latest-quotes .quote-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-sm);
+  }
+  .home-latest-quotes .quote-card-compact .quote-text {
+    font-size: 17px;
+    line-height: 1.85;
+    -webkit-line-clamp: 4;
+  }
+  .home-latest-quotes .quote-card-compact .quote-source {
+    margin-top: auto;
+    padding-top: 10px;
+    font-size: 11px;
+  }
+  .home-latest-quotes .quote-card-compact .quote-foot {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+  .home-latest-quotes .quote-card-compact .quote-author .avatar-mini {
+    width: 28px;
+    height: 28px;
+    font-size: 10px;
+  }
+  .home-latest-quotes .quote-card-compact .quote-author strong { font-size: 11px; }
+  .home-latest-quotes .quote-card-compact .quote-author small { font-size: 9.5px; }
+  .home-latest-quotes .quote-card-compact .quote-actions button {
+    font-size: 10.5px;
+    padding: 5px 7px;
+  }
+  .home-latest-quotes .quote-card-compact .quote-actions .ic {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* بطاقة اللقاء الأسبوعي — تصميم أفقي فخم على سطح المكتب */
+  .meeting-card {
+    display: grid;
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    align-items: stretch;
+    margin-top: 22px;
+    border-radius: 24px;
+  }
+  .meeting-card-content {
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .meeting-card-kicker { font-size: 12px; }
+  .meeting-card-content h3 {
+    font-size: 22px;
+    margin: 10px 0 8px;
+  }
+  .meeting-description {
+    font-size: 13.5px;
+    line-height: 1.9;
+  }
+  .meeting-details-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .meeting-detail.meeting-location {
+    grid-column: auto;
+  }
+  .meeting-detail {
+    padding: 11px 12px;
+  }
+  .meeting-detail small { font-size: 10px; }
+  .meeting-detail b { font-size: 12px; }
+  .meeting-card-actions {
+    margin-top: 18px;
+    max-width: 460px;
+  }
+
+  /* شريط كتب الرئيسية */
+  #home-books.book-rail {
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+    gap: 18px;
+  }
+  #home-books.book-rail .book-mini h4 {
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  #home-books.book-rail .book-mini p {
+    font-size: 11px;
+  }
+
+  /* مقال الرئيسية */
+  .home-article {
+    padding: 24px 26px;
+    gap: 20px;
+    border-radius: 20px;
+    align-items: stretch;
+  }
+  .ha-thumb {
+    width: 96px;
+    height: 100%;
+    min-height: 120px;
+    border-radius: 16px;
+    align-self: stretch;
+  }
+  .ha-thumb svg { width: 32px; height: 32px; }
+  .ha-body h4 { font-size: 18px; line-height: 1.4; }
+  .ha-excerpt { font-size: 13px; line-height: 1.75; -webkit-line-clamp: 4; }
+  .ha-meta { font-size: 12px; margin-top: 10px; }
+
+  /* ---------- شاشة الاقتباسات (Quotes) على سطح المكتب ---------- */
+  .quote-promo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 26px 32px;
+    border-radius: 24px;
+    margin-bottom: 18px;
+  }
+  .quote-promo p {
+    max-width: 640px;
+    font-size: 23px;
+    line-height: 1.75;
+  }
+  .quote-promo-link {
+    margin-top: 0;
+    padding: 11px 20px;
+    border-radius: 999px;
+    background: rgba(197, 155, 99, 0.18);
+    border: 1px solid rgba(197, 155, 99, 0.42);
+    font-size: 13px;
+    flex: none;
+  }
+
+  .btn-member-stats {
+    padding: 10px 18px;
+    font-size: 12.5px;
+  }
+
+  .quotes-feed {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+    align-items: start;
+  }
+  .quote-card {
+    padding: 28px 30px 22px;
+    border-radius: 22px;
+    transition: transform 0.22s var(--ease), box-shadow 0.22s, border-color 0.22s;
+  }
+  .quote-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-sm);
+    border-color: rgba(197, 155, 99, 0.35);
+  }
+  .quote-card .quote-text {
+    font-size: calc(var(--quote-font, 19px) + 3px);
+    line-height: 1.95;
+  }
+  .quote-source {
+    font-size: 12.5px;
+    margin-top: 15px;
+  }
+  .quote-font-controls .font-size-btn {
+    width: 32px;
+    height: 30px;
+    font-size: 12.5px;
+  }
+  .quote-foot {
+    margin-top: 16px;
+    padding-top: 13px;
+  }
+  .quote-author .avatar-mini {
+    width: 38px;
+    height: 38px;
+    font-size: 13px;
+  }
+  .quote-author strong { font-size: 13.5px; }
+  .quote-author small { font-size: 11px; }
+  .quote-actions button {
+    font-size: 12px;
+    padding: 7px 10px;
+    gap: 4px;
+  }
+  .quote-actions .ic {
+    width: 16px;
+    height: 16px;
+  }
+  .quote-more {
+    font-size: 12px;
+    padding: 6px 16px;
+  }
+
+  /* ---------- شاشة المكتبة (Library) على سطح المكتب ---------- */
+  .library-intro {
+    font-size: 14px;
+    margin: -6px 0 18px;
+  }
+  #library-seg {
+    max-width: 420px;
+    margin-bottom: 20px;
+  }
+  #library-seg button {
+    font-size: 13.5px;
+    padding: 10px 16px;
+  }
+  .search-box {
+    max-width: 520px;
+    border-radius: 16px;
+    padding: 0 16px;
+    margin-bottom: 14px;
+  }
+  .search-box input {
+    font-size: 14px;
+    padding: 13px 0;
+  }
+  .library-tools {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .book-shelves {
+    gap: 28px;
+    margin-top: 10px;
+  }
+  .book-shelf-heading h3 {
+    font-size: 20px;
+  }
+  .book-shelf-heading p {
+    font-size: 11.5px;
+  }
+  .book-shelves .book-rail {
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 22px 14px;
+  }
+  .book-shelf-card {
+    flex: initial;
+    transition: transform 0.22s var(--ease);
+  }
+  .book-shelf-card:hover {
+    transform: translateY(-4px);
+  }
+  .book-shelf-card .book-mini h4 {
+    font-size: 14px;
+    min-height: 44px;
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .book-shelf-card .book-mini p {
+    font-size: 12px;
+    margin-top: 3px;
+  }
+  .book-shelf-rating { font-size: 11px; }
+  .book-shelf-rating .ic { width: 12px; height: 12px; }
+  .book-shelf-rating span { font-size: 10px; }
+  .book-in-my-library { font-size: 9.5px; }
+  .book-shelf-rate {
+    font-size: 10px;
+    padding: 5px 10px;
+  }
+  .book-shelf-edit,
+  .book-shelf-delete {
+    width: 27px;
+    height: 27px;
+  }
+  .book-shelf-edit .ic,
+  .book-shelf-delete .ic {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* مكتبتي الخاصة */
+  .reading-summary {
+    max-width: 640px;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .rs-item {
+    padding: 15px 12px;
+    border-radius: 16px;
+  }
+  .rs-item strong { font-size: 22px; }
+  .rs-item span { font-size: 11.5px; }
+
+  .my-books {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .my-book {
+    padding: 16px;
+    gap: 15px;
+    border-radius: 18px;
+  }
+  .my-book-cover {
+    width: 70px;
+    height: 104px;
+    font-size: 11px;
+  }
+  .my-book-top h4 { font-size: 14.5px; }
+  .my-book-top span { font-size: 11px; }
+  .my-status {
+    font-size: 10.5px;
+    padding: 3px 10px;
+  }
+  .my-progress-head { font-size: 11px; }
+  .my-progress-head b { font-size: 11.5px; }
+  .page-entry label { font-size: 11px; }
+
+  /* ---------- شاشة المقالات (Articles) على سطح المكتب ---------- */
+  .articles-note {
+    font-size: 13px;
+    padding: 13px 18px;
+    border-radius: 14px;
+    margin-bottom: 16px;
+  }
+  .articles-note .ic {
+    width: 18px;
+    height: 18px;
+  }
+  .articles-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+    align-items: stretch;
+  }
+  .article-row {
+    display: flex;
+    flex-direction: column;
+    padding: 26px 28px 22px;
+    border-radius: 22px;
+  }
+  .ar-reading-time { font-size: 12px; }
+  .ar-title {
+    font-size: 22px;
+    margin: 14px 0 10px;
+  }
+  .ar-excerpt {
+    font-size: calc(var(--article-font, 10px) + 4px);
+    line-height: 1.95;
+    flex: 1;
+  }
+  .ar-bottomline {
+    margin-top: 18px;
+    padding-top: 13px;
+  }
+  .ar-meta { font-size: 12.5px; }
+  .ar-save {
+    width: 34px;
+    height: 34px;
+  }
+  .ar-save .ic { width: 17px; height: 17px; }
+  .ar-save.ar-like span { font-size: 12px; }
+
+  /* ---------- شاشة الملف الشخصي (Profile) والفوتر على سطح المكتب ---------- */
+  .profile-screen {
+    margin: 0 auto;
+    padding: 0 0 32px;
+  }
+  .profile-top {
+    margin: 0;
+    padding: 18px 26px;
+    border-radius: 22px 22px 0 0;
+    font-size: 14px;
+  }
+  .profile-hero {
+    margin: 0;
+    padding: 8px 26px 32px;
+    border-radius: 0 0 24px 24px;
+  }
+  .profile-avatar {
+    width: 96px;
+    height: 96px;
+    font-size: 34px;
+  }
+  .profile-photo-change {
+    font-size: 11px;
+    padding: 6px 14px;
+  }
+  .profile-hero h2 { font-size: 24px; }
+  .profile-hero p { font-size: 12.5px; }
+  .profile-badges span {
+    font-size: 11px;
+    padding: 5px 12px;
+  }
+  .profile-stats {
+    gap: 14px;
+    margin-top: 20px;
+  }
+  .ps-item {
+    padding: 18px 12px;
+    border-radius: 16px;
+  }
+  .ps-item strong { font-size: 22px; }
+  .ps-item span { font-size: 11.5px; }
+  .goal-card,
+  .settings-card {
+    margin-top: 18px;
+  }
+  .switch-row {
+    padding: 16px 20px;
+  }
+  .switch-label {
+    font-size: 13.5px;
+  }
+
+  .app-footer {
+    width: 100%;
+    margin: 44px 0 0;
+    padding: 32px 34px 24px;
+    border-radius: 0;
+    background: linear-gradient(180deg, #1E3A2B 0%, #102118 100%);
+    color: rgba(248, 245, 238, 0.85);
+    border-top: 3px solid var(--gold);
+    border-bottom: none;
+  }
+  .app-footer .app-footer-heading strong { color: var(--gold); }
+  .app-footer .app-footer-link { color: rgba(248, 245, 238, 0.85); }
+  .app-footer .app-footer-link:hover { color: var(--gold); }
+  .app-footer .app-footer-copy { color: rgba(248, 245, 238, 0.6); }
+  .app-footer-heading strong { font-size: 15px; }
+  .app-footer-heading > span { font-size: 11.5px; }
+  .app-footer-links {
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .app-footer-link {
+    min-height: 46px;
+    padding: 0 18px 0 12px;
+    font-size: 12px;
+  }
+  .social-label small { font-size: 9.5px; }
+  .app-footer-guide {
+    max-width: 560px;
+    margin: 18px auto 0;
+    padding: 14px 22px;
+  }
+  .app-footer-guide strong { font-size: 13px; }
+  .app-footer-guide small { font-size: 11px; }
+  .app-footer-copy {
+    margin: 20px -34px 0;
+    padding: 14px 34px;
+    font-size: 10.5px;
+  }
+  .app-footer-version { font-size: 9.5px; }
+
+  /* ---------- النوافذ المنبثقة ومحررات الاقتباس والمقالات (Sheets / Studio Modals) ---------- */
+  .sheet-root {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: grid;
+    place-items: center;
+    padding: 28px;
+  }
+
+  .sheet-grabber {
+    display: none;
+  }
+
+  .sheet {
+    width: min(760px, 92vw);
+    max-height: min(88dvh, 860px);
+    padding: 26px 34px 30px;
+    border-radius: 26px;
+    box-shadow:
+      0 32px 80px rgba(9, 20, 14, 0.48),
+      0 0 0 1px rgba(197, 155, 99, 0.34);
+    transform: translateY(22px) scale(0.97);
+    opacity: 0;
+    transition: transform 0.3s var(--ease), opacity 0.25s ease;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(30, 58, 43, 0.2) transparent;
+  }
+  .sheet::-webkit-scrollbar {
+    display: block;
+    width: 6px;
+  }
+  .sheet::-webkit-scrollbar-thumb {
+    background: rgba(30, 58, 43, 0.2);
+    border-radius: 99px;
+  }
+
+  .sheet-root.open .sheet {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  .sheet.sheet-full {
+    width: min(920px, 94vw);
+    height: auto;
+    max-height: 90dvh;
+    border-radius: 28px;
+    padding: 32px 46px 38px;
+  }
+
+  .sheet-head {
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .sheet-head h2 {
+    font-size: 22px;
+  }
+  .sheet-head p {
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .sheet-close {
+    width: 38px;
+    height: 38px;
+  }
+  .sheet-close .ic {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* الحقول داخل النوافذ (ممتعة للكتابة والاقتباس) */
+  .sheet .field {
+    gap: 7px;
+    margin-bottom: 16px;
+  }
+  .sheet .field label,
+  .sheet .field-label {
+    font-size: 13px;
+  }
+  .sheet .field-hint {
+    font-size: 11.5px;
+  }
+  .sheet .input {
+    font-size: 14.5px;
+    padding: 12px 15px;
+    border-radius: 13px;
+  }
+
+  /* استوديو الاقتباس (#quote-form) */
+  #quote-text {
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.95;
+    min-height: 150px;
+    padding: 16px 20px;
+  }
+  .quote-preview-label {
+    font-size: 12px;
+    margin: 8px 0 9px;
+  }
+  .quote-preview {
+    padding: 22px 26px;
+    border-radius: 18px;
+  }
+  .quote-preview p {
+    font-size: 22px;
+    line-height: 1.9;
+  }
+  .quote-preview p.is-empty {
+    font-size: 16px;
+  }
+  .quote-preview span {
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  /* عدّاد الكلمات في الاستوديو */
+  .sheet .field-hint {
+    font-size: 11px;
+    letter-spacing: 0.2px;
+  }
+  #quote-counter,
+  #article-counter {
+    text-align: left;
+    color: var(--gold-700);
+    font-weight: 700;
+  }
+
+  /* استوديو كتابة المقالات (#article-form) */
+  .sheet:has(#article-form) {
+    width: min(880px, 94vw);
+  }
+  #article-title {
+    font-family: var(--serif);
+    font-size: 21px;
+    font-weight: 700;
+    padding: 14px 18px;
+  }
+  #article-body {
+    min-height: 320px;
+    padding: 18px 22px;
+    line-height: 2.05;
+    border-radius: 16px;
+  }
+
+  /* قارئ المقالات (Article Reader) */
+  .reader-title {
+    font-size: 32px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .reader-meta {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .reader-meta span {
+    font-size: 12px;
+  }
+  .reader-author {
+    padding: 12px 0 16px;
+    margin-bottom: 20px;
+  }
+  .reader-author .avatar-mini {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+  .reader-author strong { font-size: 14px; }
+  .reader-author small { font-size: 11px; }
+  .reader-body p {
+    font-size: calc(var(--reader-font, 14px) + 4px);
+    line-height: 2.15;
+    margin-bottom: 18px;
+  }
+
+  /* تفاصيل الكتاب داخل النافذة */
+  .book-detail-hero {
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 22px;
+  }
+  .book-detail-hero-info h2 { font-size: 26px; }
+  .book-detail-author { font-size: 14px; }
+  .book-detail-tabs button {
+    font-size: 12.5px;
+    padding: 10px 16px;
+  }
+  .book-detail-description p {
+    font-size: 14px;
+    line-height: 2;
+  }
+  .book-detail-facts span { font-size: 10px; }
+  .book-detail-facts b { font-size: 13px; }
+  .book-review-card strong { font-size: 12px; }
+  .book-review-card p { font-size: 12.5px; }
+  .book-related-quote p { font-size: 17px; }
+  .book-related-quote footer { font-size: 11px; }
+
+  /* نافذة «أكثر عن جليس» والواجهات الداخلية */
+  .more-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .more-item {
+    padding: 15px 16px;
+  }
+  .more-item:hover {
+    background: var(--green-50);
+    border-color: rgba(30, 58, 43, 0.22);
+    transform: translateY(-2px);
+  }
+  .more-icon {
+    width: 42px;
+    height: 42px;
+  }
+  .more-icon .ic { width: 20px; height: 20px; }
+  .more-body strong { font-size: 14.5px; }
+  .more-body p { font-size: 11.5px; margin-top: 3px; }
+
+  /* أرشيف النادي على سطح المكتب */
+  .recorded-meetings-toolbar p { font-size: 12.5px; }
+  .recorded-meeting-card {
+    grid-template-columns: minmax(0, 1fr) 96px;
+    padding: 16px 18px;
+    gap: 16px;
+  }
+  .recorded-meeting-media { min-height: 96px; }
+  .recorded-meeting-media > img,
+  .recorded-meeting-placeholder,
+  .recorded-meeting-media .archive-gallery:not(.is-multi) img {
+    height: 96px;
+  }
+  .recorded-meeting-content h3 { font-size: 17px; }
+  .rm-pill { font-size: 11px; padding: 4px 10px; }
+  .recorded-meeting-description { font-size: 12.5px; line-height: 1.85; padding: 10px 12px; }
+  .recorded-meeting-more { font-size: 11.5px; }
+  .recorded-meeting-speaker { font-size: 11.5px; }
+  .recorded-meeting-actions .btn { font-size: 11px; padding: 6px 12px; }
+
+  /* الاستشارات والنوافذ القرائية والأعضاء */
+  .consultation-card { padding: 16px 18px; }
+  .consultation-meta { font-size: 11px; }
+  .consultation-meta strong { font-size: 13px; }
+  .consultation-question { font-size: 14px; }
+  .consultation-answer { padding: 13px 15px; }
+  .consultation-answer small { font-size: 11px; }
+  .consultation-answer p { font-size: 13px; }
+  .consultation-answer-tools .btn { font-size: 11px; padding: 4px 10px; }
+
+  .reading-windows-gallery {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .reading-window-card-body strong { font-size: 13px; }
+  .reading-window-card-text { font-size: 11.5px; }
+
+  .members-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .member-main strong { font-size: 13px; }
+  .member-main small { font-size: 10.5px; }
+  .member-role { font-size: 10.5px; }
+  .member-tool-btn { font-size: 10px; padding: 5px 10px; }
+
+  .toast {
+    position: fixed;
+    bottom: 36px;
+    font-size: 13px;
+    padding: 12px 22px;
+  }
+}
+
+/* شاشات واسعة جدًا (≥1600px): ثلاثة أعمدة —充分利用 العرض */
+@media (min-width: 1600px) {
+  .quotes-feed,
+  .articles-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 26px;
+  }
+  .home-latest-quotes {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+  }
+  .my-books {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .book-shelves .book-rail {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 24px 16px;
+  }
+}
+
+/* شاشات متوسطة (860–1180): شريط أضيق ومحتوى أريح */
+@media (min-width: 860px) and (max-width: 1180px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 76px auto minmax(0, 1fr);
+    grid-template-areas: "header" "nav" "main";
+  }
+  .tab {
+    padding: 11px 13px;
+    gap: 10px;
+  }
+  .tab span:not(.nav-badge) {
+    font-size: 12.5px;
+  }
+  .app-main {
+    padding: 24px 26px 40px;
+  }
+  .screen.active {
+    max-width: 100%;
+  }
+  .sheet {
+    width: min(680px, 94vw);
+    padding: 22px 28px 26px;
+  }
+  .quotes-feed,
+  .articles-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .home-actions {
+    max-width: 380px;
+  }
+  .greeting-title-row,
+  .greeting-sub,
+  .greeting .date-label {
+    grid-column: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

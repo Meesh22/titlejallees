@@ -9,7 +9,7 @@
   <title>جليس | مساحة الأعضاء</title>
   <meta name="description" content="مساحة ثقافية تجمع محبي القراءة في منطقة القصيم، للتعلم والحوار حول الكتب والأفكار والتاريخ.">
   <meta name="theme-color" content="#1E3A2B">
-  <link rel="manifest" href="manifest.json?v=r47-20261113">
+  <link rel="manifest" href="manifest.json?v=r79-20261114">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="جليس">
@@ -42,7 +42,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=r54-20261113">
+  <link rel="stylesheet" href="app.css?v=r79-20261114">
 </head>
 <body>
 
@@ -229,11 +229,13 @@
                 <div class="verify-help">
                   <strong>ما وصلك الرمز؟</strong>
                   <ul>
-                    <li>افحص مجلد <b>المهملات / الرسائل غير المرغوبة (Spam)</b> و<b>الترويجات (Promotions)</b>.</li>
-                    <li>تأكد من كتابة البريد بشكل صحيح (نرسل الرمز إلى العنوان الذي كتبته).</li>
+                    <li>افحص مجلد <b>المهملات / الرسائل غير المرغوبة (Spam)</b> و<b>الترويجات (Promotions)</b> في بريدك.</li>
                     <li>أو اضغط <b>إعادة إرسال الرمز</b> — نفس الرمز يُرسل من جديد فورًا.</li>
-                    <li>وإن استمر الأمر، تواصل مع إدارة النادي ليصلك الرمز مباشرة.</li>
+                    <li>أو اطلب الرمز عبر واتساب — الإدارة تردّ عليك به مباشرة.</li>
                   </ul>
+                  <button class="btn btn-sm btn-ghost verify-whatsapp" type="button" id="verify-whatsapp">
+                    <svg class="ic"><use href="#i-send"/></svg> اطلب الرمز عبر واتساب
+                  </button>
                 </div>
                 <p class="form-error" id="verify-error" role="alert" hidden></p>
                 <button class="btn btn-gold btn-block" type="submit">
@@ -379,15 +381,15 @@
                   </button>
                 </div>
                 <p class="greeting-sub">أي كتاب تقرأ اليوم؟</p>
-              </div>
 
-              <div class="home-actions">
-                <button class="btn btn-gold" type="button" data-action="go-add-book-report">
-                  <svg class="ic"><use href="#i-plus"/></svg> أضف تقريرًا لكتاب
-                </button>
-                <button class="btn btn-on-dark" type="button" data-action="open-quote">
-                  <svg class="ic"><use href="#i-quote"/></svg> اقتبس
-                </button>
+                <div class="home-actions">
+                  <button class="btn btn-gold" type="button" data-action="go-add-book-report">
+                    <svg class="ic"><use href="#i-plus"/></svg> أضف تقريرًا لكتاب
+                  </button>
+                  <button class="btn btn-on-dark" type="button" data-action="open-quote">
+                    <svg class="ic"><use href="#i-quote"/></svg> اقتبس
+                  </button>
+                </div>
               </div>
 
               <section class="home-consultations" id="home-consultations" hidden>
@@ -398,11 +400,23 @@
                 <div class="home-consultations-list" id="home-consultations-list"></div>
               </section>
 
-              <div class="sec-head home-quotes-head">
-                <div><h3>آخر اقتباس</h3><p>أحدث ما شاركه أعضاء جليس</p></div>
-                <button class="link-btn" type="button" data-action="go-quotes">كل الاقتباسات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              <div class="home-quotes-article">
+                <div class="home-quotes-col">
+                  <div class="sec-head home-quotes-head">
+                    <div><h3>آخر اقتباس</h3><p>أحدث ما شاركه أعضاء جليس</p></div>
+                    <button class="link-btn" type="button" data-action="go-quotes">كل الاقتباسات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+                  </div>
+                  <div class="home-latest-quotes" id="home-latest-quotes"></div>
+                </div>
+
+                <div class="home-article-col">
+                  <div class="sec-head">
+                    <div><h3>المقال الأحدث</h3><p>آخر ما أضيف إلى مجلة جليس</p></div>
+                    <button class="link-btn" type="button" data-action="go-articles">المقالات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
+                  </div>
+                  <article class="home-article" id="home-article"></article>
+                </div>
               </div>
-              <div class="home-latest-quotes" id="home-latest-quotes"></div>
 
               <div id="meeting-event-card"></div>
 
@@ -411,12 +425,6 @@
                 <button class="link-btn" type="button" data-action="go-library">المكتبة <svg class="ic"><use href="#i-chevron-left"/></svg></button>
               </div>
               <div class="book-rail" id="home-books"></div>
-
-              <div class="sec-head">
-                <div><h3>المقال الأحدث</h3><p>آخر ما أضيف إلى مجلة جليس</p></div>
-                <button class="link-btn" type="button" data-action="go-articles">المقالات <svg class="ic"><use href="#i-chevron-left"/></svg></button>
-              </div>
-              <article class="home-article" id="home-article"></article>
             </section>
 
             <!-- ========== الاقتباسات ========== -->
@@ -662,6 +670,6 @@
     <div class="noscript">هذه المساحة تحتاج تفعيل جافاسكريبت في المتصفح.</div>
   </noscript>
 
-  <script src="app.js?v=r54-20261113"></script>
+  <script src="app.js?v=r79-20261114"></script>
 </body>
 </html>
