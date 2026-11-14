@@ -1382,16 +1382,20 @@ textarea::placeholder { color: #A9B1AC; }
 .meeting-pulse { width:7px; height:7px; border-radius:50%; background:#4e9b73; box-shadow:0 0 0 4px rgba(78,155,115,.13); }
 .meeting-card-content h3 { margin:8px 0 5px; color:var(--green-700); font-size:17px; line-height:1.45; font-weight:850; }
 .meeting-description { margin:0; color:var(--muted); font-size:11px; line-height:1.85; white-space:pre-line; }
-.meeting-details-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:13px; }
-.meeting-detail { min-width:0; display:flex; align-items:center; gap:8px; padding:9px; border-radius:12px; background:var(--paper-2); }
-.meeting-detail.meeting-location { grid-column:1 / -1; }
+.meeting-details-grid { display:grid; grid-template-columns:1fr; gap:8px; margin-top:13px; }
+.meeting-detail { min-width:0; display:flex; align-items:center; gap:8px; padding:10px 11px; border-radius:12px; background:var(--paper-2); }
+.meeting-detail.meeting-location { grid-column:auto; }
+.meeting-detail-date { align-items:flex-start; }
+.meeting-date-value { display:grid; gap:2px; }
+.meeting-date-greg { display:block; font-size:10px; line-height:1.55; }
+.meeting-date-hijri { display:block; color:var(--muted); font-size:8.5px; font-weight:700; line-height:1.5; }
 .meeting-detail-link { color:inherit; text-decoration:none; }
 .meeting-detail-link:hover b,.meeting-sheet-location-link:hover b { text-decoration:underline; text-underline-offset:2px; }
 .meeting-detail-icon { flex:none; display:grid; place-items:center; width:30px; height:30px; border-radius:10px; color:var(--green-700); background:rgba(197,155,99,.19); }
 .meeting-detail-icon .ic { width:15px; height:15px; }
 .meeting-detail small,.meeting-detail b { display:block; }
-.meeting-detail small { color:var(--muted-2); font-size:8px; margin-bottom:2px; }
-.meeting-detail b { color:var(--green-700); font-size:9.5px; line-height:1.5; overflow-wrap:anywhere; }
+.meeting-detail small { color:var(--muted-2); font-size:8.5px; margin-bottom:2px; }
+.meeting-detail b { color:var(--green-700); font-size:10px; line-height:1.6; overflow-wrap:anywhere; }
 .meeting-card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; }
 .meeting-card-actions .btn { flex:1; justify-content:center; }
 .btn-meeting-add { color:var(--green-700); background:var(--paper-2); border:1px solid var(--line); }
@@ -1517,6 +1521,15 @@ textarea::placeholder { color: #A9B1AC; }
 .deleted-item-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
 .deleted-item-restore, .deleted-item-purge { flex:none; min-height:27px; padding:5px 9px; color:var(--green-700); background:var(--green-50); font-size:8px; }
 .deleted-item-purge.danger { color:var(--clay); background:rgba(163,80,59,.12); }
+/* فحص سلة المحذوفات ومطابقتها مع الشيت */
+.trash-audit { display:grid; gap:6px; margin:0 0 10px; padding:10px 12px; border:1px solid var(--line); border-radius:13px; background:var(--paper-2); }
+.trash-audit-head { display:flex; align-items:center; gap:7px; color:var(--green-800); font-size:10px; }
+.trash-audit-dot { flex:none; width:8px; height:8px; border-radius:50%; }
+.trash-audit-dot.ok { background:#4e9b73; box-shadow:0 0 0 3px rgba(78,155,115,.15); }
+.trash-audit-dot.warn { background:#c98a3f; box-shadow:0 0 0 3px rgba(201,138,63,.18); }
+.trash-audit-meta { margin:0; color:var(--muted-2); font-size:8px; }
+.trash-audit-issues { display:grid; gap:4px; margin:0; padding-inline-start:14px; color:var(--clay); font-size:8.5px; line-height:1.7; }
+.trash-audit .btn { justify-self:start; }
 
 /* ط§ظ‚طھط¨ط§ط³ ط§ظ„ظٹظˆظ… */
 .daily-quote {
@@ -2258,6 +2271,39 @@ textarea::placeholder { color: #A9B1AC; }
 .club-program-card h3 { margin-top:2px; color:var(--green-800); font-size:10px; font-weight:800; }
 .club-program-card p { margin-top:3px; color:var(--muted); font-size:8px; line-height:1.7; }
 .club-program-card > .ic { flex:none; width:18px; height:18px; color:var(--green-600); }
+
+/* ---------- الأنشطة والبرامج (المجموعات ونسب الإنجاز) ---------- */
+.club-activities { display:grid; gap:16px; }
+.club-activity-section { display:grid; gap:8px; }
+.club-section-title { margin:0; padding:7px 12px; border-radius:10px; background:rgba(30,58,43,.06); color:var(--green-700); font-size:10px; font-weight:800; text-align:center; }
+.club-section-hint { margin:0; color:var(--muted-2); font-size:8.5px; line-height:1.7; text-align:center; }
+.club-loading { color:var(--muted); font-size:10px; text-align:center; padding:18px 0; }
+.club-empty { color:var(--muted-2); font-size:9px; margin:0; padding:10px; text-align:center; border:1px dashed var(--line); border-radius:12px; }
+.club-groups-list { display:grid; gap:10px; }
+.club-group-card { display:grid; gap:9px; padding:11px; border:1px solid var(--line); border-radius:14px; background:linear-gradient(135deg,#fff 0%,#f8f5ee 100%); }
+.club-group-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.club-group-head h4 { margin:0; color:var(--green-800); font-size:11.5px; font-weight:850; }
+.club-group-head p { margin:3px 0 0; color:var(--muted); font-size:8.5px; line-height:1.7; }
+.club-group-tools { display:flex; flex:none; gap:6px; }
+.club-group-tools .icon-btn { display:grid; place-items:center; width:26px; height:26px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--green-700); cursor:pointer; }
+.club-group-tools .icon-btn.danger { color:#8e403a; }
+.club-group-tools .icon-btn .ic { width:13px; height:13px; }
+.club-group-programs { display:grid; gap:7px; }
+.club-program-item { display:grid; gap:6px; padding:9px 10px; border:1px solid rgba(197,155,99,.35); border-radius:12px; background:#fff; }
+.club-program-item[role="button"] { cursor:pointer; }
+.club-program-item[role="button"]:hover { background:#fbf7ef; }
+.club-program-item-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.club-program-item-head strong { color:var(--green-800); font-size:10px; font-weight:850; }
+.club-percent { color:var(--gold-700); font-size:9px; font-weight:850; }
+.club-program-item p { margin:0; color:var(--muted); font-size:8.5px; line-height:1.7; white-space:pre-line; }
+.club-progress { height:6px; border-radius:99px; background:rgba(30,58,43,.09); overflow:hidden; }
+.club-progress span { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--gold),var(--green-600)); }
+.club-add-program { justify-self:start; }
+.range-input { width:100%; accent-color:var(--green-600); }
+.activity-detail { display:grid; gap:10px; }
+.activity-detail-text { margin:0; color:var(--muted); font-size:10.5px; line-height:1.95; white-space:pre-line; }
+.activity-detail-title { margin:4px 0 0; color:var(--green-700); font-size:10px; font-weight:850; }
+.activity-detail-list { display:grid; gap:5px; margin:0; padding-inline-start:16px; color:var(--green-800); font-size:9.5px; line-height:1.8; }
 
 /* ---------- نافذة قرائية ---------- */
 .reading-window { display: grid; gap: 12px; }
@@ -4734,6 +4780,8 @@ textarea::placeholder { color: #A9B1AC; }
   }
   .meeting-detail small { font-size: 10px; }
   .meeting-detail b { font-size: 12px; }
+  .meeting-date-greg { font-size: 12px; }
+  .meeting-date-hijri { font-size: 10px; }
   .meeting-card-actions {
     margin-top: 18px;
     max-width: 460px;

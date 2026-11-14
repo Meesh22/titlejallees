@@ -1,0 +1,158 @@
+/* سلة المحذوفات: التزامن مع الشيت، الشواهد، الاستعادة، الحذف النهائي */
+(async function () {
+  const src = await (await fetch('apps-script-final.js?t=' + Date.now())).text();
+  const results = [];
+  const ok = (name, cond, extra) => results.push({ name, pass: !!cond, extra: extra === undefined ? '' : String(extra) });
+
+  function MockSheet(name, rows, id) { this.name = name; this._rows = rows; this._id = id; }
+  MockSheet.prototype.getSheetId = function () { return this._id; };
+  MockSheet.prototype.getName = function () { return this.name; };
+  MockSheet.prototype.getLastRow = function () { return this._rows.length; };
+  MockSheet.prototype.getLastColumn = function () { return Math.max(1, (this._rows[0] || []).length); };
+  MockSheet.prototype.getMaxColumns = function () { return this.getLastColumn(); };
+  MockSheet.prototype.getRange = function (r, c, nr, nc) {
+    const s = this;
+    return {
+      getValues: () => { const o = []; for (let i = 0; i < nr; i++) { const line = []; for (let j = 0; j < nc; j++) line.push((s._rows[r - 1 + i] || [])[c - 1 + j] ?? ''); o.push(line); } return o; },
+      getValue: () => (s._rows[r - 1] || [])[c - 1] ?? '',
+      getDisplayValues: () => { const o = []; for (let i = 0; i < nr; i++) { const line = []; for (let j = 0; j < nc; j++) line.push(String((s._rows[r - 1 + i] || [])[c - 1 + j] ?? '')); o.push(line); } return o; },
+      setValues: (v) => { for (let i = 0; i < v.length; i++) for (let j = 0; j < v[i].length; j++) { const rr = r - 1 + i, cc = c - 1 + j; if (!s._rows[rr]) s._rows[rr] = []; s._rows[rr][cc] = v[i][j]; } },
+      setValue: (x) => { if (!s._rows[r - 1]) s._rows[r - 1] = []; s._rows[r - 1][c - 1] = x; },
+      setBackground: () => {}, setFontColor: () => {}
+    };
+  };
+  MockSheet.prototype.appendRow = function (row) { this._rows.push(row.slice()); };
+  MockSheet.prototype.deleteRow = function (r) { this._rows.splice(r - 1, 1); };
+  MockSheet.prototype.insertColumnsAfter = function () {};
+
+  const HEADERS = ['id', 'memberId', 'memberName', 'title', 'author', 'category', 'coverColor', 'report', 'pages', 'createdAt', 'coverImage', 'deletedAt', 'deletedBy', 'year', 'pdfUrl', 'coverColor2'];
+  const members = new MockSheet('الأعضاء', [['id', 'name', 'email', 'passwordHash', 'salt', 'role', 'status', 'createdAt', 'lastLogin', 'resetCode', 'resetExpires', 'phone', 'profilePhoto', 'memberType'],
+    ['m1', 'مشعل الحفير', 'a@b.c', 'h', 's', 'supervisor', 'active', 1, '', '', '', '0555000000', '', 'member']], 1);
+  const books = new MockSheet('المكتبة', [HEADERS.slice()], 2);
+  const oldBooks = new MockSheet('المكتبة القديمة', [HEADERS.slice()], 1035156833);
+  const log = new MockSheet('سجل المحذوفات', [['id', 'type', 'title', 'author', 'deletedAt', 'deletedBy']], 5);
+  const sheets = [members, books, oldBooks, log];
+
+  const ss = {
+    getId: () => 'SHEET-ID-1',
+    getSheets: () => sheets,
+    getSheetByName: (n) => sheets.find((s) => s.name === n) || null,
+    getSheetById: (id) => sheets.find((s) => s._id === id) || null,
+    insertSheet: (n) => { const s = new MockSheet(n, [[]], 900 + sheets.length); sheets.push(s); return s; },
+    deleteSheet: (s) => { const i = sheets.indexOf(s); if (i >= 0) sheets.splice(i, 1); },
+    setActiveSheet: () => {}, moveActiveSheet: () => {}
+  };
+  globalThis.SpreadsheetApp = { openById: () => ss, flush: () => {} };
+  globalThis.Logger = { log: () => {} };
+  const propStore = {};
+  globalThis.PropertiesService = {
+    getScriptProperties: () => ({
+      getProperty: (k) => (k in propStore ? propStore[k] : ''),
+      setProperty: (k, v) => { propStore[k] = String(v); },
+      deleteProperty: (k) => { delete propStore[k]; },
+      getProperties: () => Object.assign({}, propStore)
+    })
+  };
+  globalThis.Utilities = {
+    newBlob: (d, t, n) => ({ data: d, type: t, name: n }),
+    base64Decode: (s) => String(s), base64Encode: (s) => String(s),
+    getUuid: () => 'uuid-' + Math.random(), formatDate: () => '2026-01-01',
+    computeDigest: (a, s) => 'digest:' + String(s), base64EncodeWebSafe: (s) => String(s),
+    DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' }
+  };
+  globalThis.Session = { getScriptTimeZone: () => 'Asia/Riyadh', getEffectiveUser: () => ({ getEmail: () => 'owner@x.y' }) };
+  globalThis.MailApp = { sendEmail: () => {}, getRemainingDailyQuota: () => 100 };
+  globalThis.ScriptApp = {};
+  globalThis.UrlFetchApp = { fetch: () => ({ getResponseCode: () => 200, getContentText: () => '{}' }) };
+  globalThis.ContentService = { MimeType: { JSON: 'application/json' }, createTextOutput: (t) => ({ setMimeType: () => ({ __t: t }) }) };
+
+  let lockWaits = 0;
+  let lockReleases = 0;
+  globalThis.LockService = {
+    getScriptLock: () => ({
+      waitLock: () => { lockWaits += 1; },
+      releaseLock: () => { lockReleases += 1; }
+    })
+  };
+
+  (0, eval)(src);
+
+  const post = (action, data) => { try { return JSON.parse(doPost({ parameter: { action, data: JSON.stringify(data || {}) } }).__t); } catch (e) { return { success: false, error: String(e.message || e) }; } };
+  const get = (action, memberId) => { try { return JSON.parse(doGet({ parameter: { action, memberId: memberId || '' } }).__t); } catch (e) { return { success: false, error: String(e.message || e) }; } };
+  const addBook = (sheet, id, title, author, deleted) => {
+    sheet.appendRow([id, 'm1', 'مشعل', title, author, '', '#123456', '', 10, 100, '', deleted ? 999 : '', deleted ? 'مشرف' : '', '', '', '']);
+  };
+  const inLibrary = (title) => (get('getClubBooks').data || []).some((b) => b.title === title);
+  const inTrash = (title) => (get('getDeletedItems').data || []).filter((i) => i.type === 'book' && i.title === title);
+
+  /* ---------- ١) حذف كتاب بالمعرّف ---------- */
+  addBook(books, 'b1', 'كتاب حي', 'مؤلف');
+  const del = post('deleteClubBook', { id: 'b1', key: bookKey('كتاب حي', 'مؤلف'), deletedBy: 'مشرف' });
+  ok('حذف كتاب بالمعرّف', del.success === true && del.updated >= 1, JSON.stringify(del));
+  ok('اختفى الكتاب من المكتبة', !inLibrary('كتاب حي'));
+  ok('ظهر الكتاب في السلة', inTrash('كتاب حي').length === 1, JSON.stringify(inTrash('كتاب حي')));
+  ok('عنصر السلة يحمل مفتاح المطابقة', Boolean((inTrash('كتاب حي')[0] || {}).key));
+
+  /* ---------- ٢) نسختان لنفس الكتاب في ورقتين ---------- */
+  addBook(books, 'b2', 'كتاب مكرر', 'مؤلف');
+  addBook(oldBooks, 'b3', 'كتاب مكرر', 'مؤلف');
+  const twin = post('deleteClubBook', { id: 'b2', deletedBy: 'مشرف' });
+  ok('الحذف يوحّد النسخ في كل الأوراق', twin.updated === 2, twin.updated);
+  ok('النسخة الثانية لا تعود للظهور', !inLibrary('كتاب مكرر'));
+  ok('السلة تعرض الكتاب المكرر مرة واحدة', inTrash('كتاب مكرر').length === 1, inTrash('كتاب مكرر').length);
+
+  /* ---------- ٣) الحذف النهائي يحذف كل النسخ ---------- */
+  const twinItem = inTrash('كتاب مكرر')[0];
+  const purgeTwin = post('purgeDeletedItem', { type: 'book', id: twinItem.id, key: twinItem.key });
+  ok('الحذف النهائي يحذف كل النسخ', purgeTwin.success === true && purgeTwin.deleted === 2, JSON.stringify(purgeTwin));
+  ok('اختفى نهائيًا من السلة', inTrash('كتاب مكرر').length === 0);
+  ok('أُزيل شاهد الحذف بعد الحذف النهائي', !((get('getClubBooks').deletedKeys || []).includes(twinItem.key)));
+
+  /* ---------- ٤) شاهد يتيم يخفي كتابًا حيًّا ---------- */
+  addBook(books, 'b9', 'كتاب مستعاد', 'مؤلف');
+  log.appendRow([bookKey('كتاب مستعاد', 'مؤلف'), 'bookkey', 'كتاب مستعاد', 'مؤلف', 50, 'مشرف']);
+  ok('الشاهد اليتيم يخفي كتابًا حيًّا', !inLibrary('كتاب مستعاد'));
+  const audit1 = get('trashAudit').audit;
+  ok('الفحص يكشف الكتاب المخفي', audit1.hiddenLiveBooks >= 1, JSON.stringify(audit1.details.hidden));
+  ok('الفحص يعلن عدم التطابق', audit1.ok === false, JSON.stringify(audit1.issues));
+  const deniedRepair = post('repairTrash', { requesterName: 'عضو عادي' });
+  ok('الإصلاح محصور بالمشرفين', deniedRepair.success === false, deniedRepair.error || '');
+  const repair1 = post('repairTrash', { requesterName: 'مشعل الحفير' });
+  ok('الإصلاح نجح', repair1.success === true, repair1.error || JSON.stringify(repair1));
+  ok('عاد الكتاب الحي للظهور', inLibrary('كتاب مستعاد'));
+  ok('الفحص بعد الإصلاح سليم', get('trashAudit').audit.ok === true, JSON.stringify(get('trashAudit').audit.issues));
+
+  /* ---------- ٥) صف محذوف يدويًا بلا شاهد ---------- */
+  addBook(books, 'b7', 'كتاب يدوي', 'مؤلف', true);
+  const audit2 = get('trashAudit').audit;
+  ok('الفحص يكشف صفًا محذوفًا بلا شاهد', audit2.missingTombstones >= 1, JSON.stringify(audit2));
+  post('repairTrash', { requesterName: 'مشعل الحفير' });
+  const audit3 = get('trashAudit').audit;
+  ok('الإصلاح أضاف الشاهد الناقص', audit3.missingTombstones === 0, JSON.stringify(audit3));
+
+  /* ---------- ٦) معرّف الصف القديم يتغيّر بعد حذف صف أعلى ---------- */
+  addBook(books, '', 'كتاب بلا معرّف', 'مؤلف');
+  const legacy = (get('getClubBooks').data || []).find((b) => b.title === 'كتاب بلا معرّف');
+  const legacyDel = post('deleteClubBook', { id: legacy.id, key: bookKey('كتاب بلا معرّف', 'مؤلف'), deletedBy: 'مشرف' });
+  ok('حذف صف قديم بلا معرّف', legacyDel.success === true && legacyDel.updated >= 1, JSON.stringify(legacyDel));
+  const legacyBefore = inTrash('كتاب بلا معرّف')[0];
+  const firstDeleted = inTrash('كتاب حي')[0];
+  post('purgeDeletedItem', { type: 'book', id: firstDeleted.id, key: firstDeleted.key });
+  const legacyAfter = inTrash('كتاب بلا معرّف')[0];
+  ok('معرّف الصف القديم يتغيّر بعد تغيّر الترتيب', legacyAfter && legacyBefore && legacyAfter.id !== legacyBefore.id, `${legacyBefore && legacyBefore.id} -> ${legacyAfter && legacyAfter.id}`);
+  const restoreByKey = post('restoreClubBook', { id: 'legacy-2-999', key: legacyAfter.key });
+  ok('الاستعادة بالمفتاح تعمل بعد تغيّر الترتيب', restoreByKey.success === true && inLibrary('كتاب بلا معرّف'), JSON.stringify(restoreByKey));
+  ok('أُزيل شاهد الاستعادة', !((get('getClubBooks').deletedKeys || []).includes(legacyAfter.key)));
+
+  /* ---------- ٧) القفل يُحرَّر بعد كل عملية ---------- */
+  ok('استُخدم قفل التنفيذ', lockWaits > 0, lockWaits);
+  ok('حُرِّر القفل بعد كل عملية', lockReleases === lockWaits, `${lockReleases}/${lockWaits}`);
+
+  /* ---------- ٨) الحذف النهائي لعنصر غير موجود لا يكسر شيئًا ---------- */
+  const purgeGhost = post('purgeDeletedItem', { type: 'book', id: 'ghost-1', key: 'no|book' });
+  ok('الحذف النهائي لعنصر مفقود لا يكسر السلة', purgeGhost.success === true, JSON.stringify(purgeGhost));
+  ok('السلة بقيت متطابقة', get('trashAudit').audit.ok === true, JSON.stringify(get('trashAudit').audit.issues));
+
+  const passed = results.filter((r) => r.pass).length;
+  return { passed, total: results.length, failures: results.filter((r) => !r.pass) };
+})();

@@ -79,7 +79,9 @@ const MAIN_API_ACTIONS = new Set([
   'getSelectionQuotes', 'toggleSelectionQuote',
   'getWeeklyReports', 'saveWeeklyReport', 'deleteWeeklyReport', 'deleteAllWeeklyReports',
   'describeSpreadsheet', 'organizeSheets', 'dedupeClubBooks', 'getLikes', 'toggleLike',
-  'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile'
+  'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile',
+  'getActivities', 'saveActivity', 'deleteActivity',
+  'trashAudit', 'repairTrash', 'purgeDeletedItem'
 ]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
@@ -1663,6 +1665,9 @@ function renderMeetingCard() {
   if (!root || !state) return;
   const meeting = getCurrentMeeting();
   const dateLabel = meetingDateLabel(meeting.date);
+  const dateParts = String(dateLabel).split(' · ');
+  const gregLabel = dateParts[0] || '';
+  const hijriLabel = dateParts[1] || '';
   const timeLabel = meetingTimeLabel(meeting.time || meeting.date);
   const locationUrl = meetingLocationUrl(meeting.location);
   const cropStyle = meeting.image
@@ -1680,7 +1685,7 @@ function renderMeetingCard() {
         <h3>${esc(meeting.title || 'لقاء نادي جليس')}</h3>
         ${meeting.description ? `<p class="meeting-description">${esc(meeting.description)}</p>` : ''}
         <div class="meeting-details-grid">
-          <div class="meeting-detail"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-calendar"/></svg></span><span><small>التاريخ</small><b>${esc(dateLabel)}</b></span></div>
+          <div class="meeting-detail meeting-detail-date"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-calendar"/></svg></span><span><small>التاريخ</small><b class="meeting-date-value">${gregLabel ? `<span class="meeting-date-greg">${esc(gregLabel)}</span>` : ''}${hijriLabel ? `<span class="meeting-date-hijri">${esc(hijriLabel)}</span>` : ''}</b></span></div>
           ${timeLabel ? `<div class="meeting-detail"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-clock"/></svg></span><span><small>الوقت</small><b>${esc(timeLabel)}</b></span></div>` : ''}
           ${meeting.location ? `<a class="meeting-detail meeting-location meeting-detail-link" href="${esc(locationUrl)}" target="_blank" rel="noopener noreferrer"><span class="meeting-detail-icon"><svg class="ic"><use href="#i-pin"/></svg></span><span><small>المكان · افتح الخريطة</small><b>${esc(meeting.location)}</b></span></a>` : ''}
         </div>
@@ -6155,51 +6160,309 @@ function openClubActivitiesSheet() {
   openGuideSheet();
 }
 
+/* ===== الأنشطة والبرامج ===== */
+const CLUB_ACTIVITY_GROUPS = [
+  {
+    id: 'offline',
+    label: 'أنشطة غير حضورية',
+    items: [
+      { id: 'offline-1', number: 'غير حضوري ١', title: 'مجموعة النادي على الواتساب', details: 'بيئة محفزة على القراءة: تقارير كتب، اقتباسات، مشاركات واستشارات، وإعلانات أنشطة النادي.', items: [] },
+      { id: 'offline-2', number: 'غير حضوري ٢', title: 'المسابقات القرائية', details: 'مسابقات خاصة أو عامة، منها مسابقة ٥ كتب في ١٠ أيام (٦٦ متسابقًا، أكثر من ٣٠٠ كتاب).', items: [] },
+      { id: 'offline-3', number: 'غير حضوري ٣', title: 'برامج مجموعات مخصصة لقراءة كتاب', details: 'جامع السنة في ١٤ شهرًا (٥ صفحات يوميًا)، والملكة اللغوية عبر البخلاء والبيان والتبيين.', items: [] }
+    ]
+  },
+  {
+    id: 'onsite',
+    label: 'أنشطة حضورية',
+    items: [
+      { id: 'onsite-1', number: 'حضوري ١', title: 'جلسات مناقشة الكتب', details: 'قراءة الكتاب على مدى زمني محدد ثم الاجتماع لمناقشة ما فيه — ١٠ كتب في السنة الأولى.', items: [] },
+      { id: 'onsite-2', number: 'حضوري ٢', title: 'جلسات حضورية متنوعة', details: 'الاستضافات، الزيارات، الجلسة القرائية، لقاء القرّاء، لقاء عرض الكتب، وتخصص وقارئ.', items: [] }
+    ]
+  }
+];
+
+function clubActivityRequester() {
+  return (currentMember && currentMember.name) || '';
+}
+
+async function saveClubActivity(payload) {
+  const requesterName = clubActivityRequester();
+  const result = await cloudRequest('saveActivity', Object.assign({ requesterName, by: requesterName }, payload));
+  if (!result || result.success === false) {
+    toast((result && result.error) ? result.error : 'تعذر حفظ الأنشطة', 'info');
+    return false;
+  }
+  return true;
+}
+
+async function loadClubActivities() {
+  const result = await cloudRequest('getActivities');
+  if (!result || result.success === false) return { activities: [], groups: [] };
+  return {
+    activities: Array.isArray(result.activities) ? result.activities : [],
+    groups: Array.isArray(result.groups) ? result.groups : []
+  };
+}
+
 function openClubProgramsSheet() {
-  const groups = [
-    {
-      label: 'أنشطة غير حضورية',
-      items: [
-        { number: 'غير حضوري 1', title: 'مجموعة النادي على الواتساب', description: 'بيئة محفزة على القراءة: تقارير كتب، اقتباسات، مشاركات واستشارات، وإعلانات أنشطة النادي.' },
-        { number: 'غير حضوري 2', title: 'المسابقات القرائية', description: 'مسابقات خاصة أو عامة، منها مسابقة 5 كتب في 10 أيام (66 متسابقاً، أكثر من 300 كتاب).' },
-        { number: 'غير حضوري 3', title: 'برامج مجموعات مخصصة لقراءة كتاب', description: 'جامع السنة في 14 شهراً (5 صفحات يومياً)، والملكة اللغوية عبر البخلاء والبيان والتبيين.' }
-      ]
-    },
-    {
-      label: 'أنشطة حضورية',
-      items: [
-        { number: 'حضوري 1', title: 'جلسات مناقشة الكتب', description: 'قراءة الكتاب على مدى زمني محدد ثم الاجتماع لمناقشة ما فيه — 10 كتب في السنة الأولى.' },
-        { number: 'حضوري 2', title: 'جلسات حضورية متنوعة', description: 'الاستضافات، الزيارات، الجلسة القرائية، لقاء القرّاء، لقاء عرض الكتب، وتخصص وقارئ.' }
-      ]
-    }
-  ];
   openSheet(`
-    ${sheetHead('الأنشطة', 'الأنشطة الحضورية وغير الحضورية من الدليل التعريفي')}
-    <div class="club-programs-list">
-      ${groups.map((group) => `
-        <div class="club-program-group-label">${esc(group.label)}</div>
-        ${group.items.map((program, index) => `
-          <article class="club-program-card">
-            <span class="club-program-index">${toAr(index + 1)}</span>
-            <div>
-              <small>${esc(program.number)}</small>
-              <h3>${esc(program.title)}</h3>
-              <p>${esc(program.description)}</p>
-            </div>
-            <svg class="ic"><use href="#i-books"/></svg>
-          </article>`).join('')}
-      `).join('')}
-      <button class="btn btn-gold btn-block" type="button" data-action="open-guide">عرض الدليل التعريفي كاملًا</button>
+    ${sheetHead('الأنشطة', 'اضغط أي نشاط لقراءة تعريفه وتفاصيله')}
+    <div id="club-activities" class="club-activities">
+      <p class="club-loading">جارٍ تحميل الأنشطة…</p>
     </div>`, (root) => {
-    const cards = root.querySelectorAll('.club-program-card');
-    cards.forEach((card, i) => {
-      card.addEventListener('click', () => {
-        closeSheet();
-        openGuideSheet();
+    renderClubActivitiesSheet(root);
+  });
+}
+
+async function renderClubActivitiesSheet(root) {
+  const host = root.querySelector('#club-activities');
+  if (!host) return;
+  const { activities, groups } = await loadClubActivities();
+  if (!host.isConnected) return;
+
+  const overrides = {};
+  activities.forEach((row) => { overrides[row.id] = row; });
+  const supervisor = isSupervisor();
+
+  const activityCard = (item, index) => {
+    const row = overrides[item.id] || null;
+    const title = (row && row.title) || item.title;
+    const details = (row && row.details) || item.details;
+    return `
+      <article class="club-program-card" role="button" tabindex="0" data-activity="${esc(item.id)}">
+        <span class="club-program-index">${toAr(index + 1)}</span>
+        <div>
+          <small>${esc(item.number)}</small>
+          <h3>${esc(title)}</h3>
+          <p>${esc(details)}</p>
+        </div>
+        <svg class="ic"><use href="#i-chevron-left"/></svg>
+      </article>`;
+  };
+
+  const programCard = (group, program) => `
+    <div class="club-program-item"${supervisor ? ` role="button" tabindex="0" data-edit-program="${esc(program.id)}" data-group="${esc(group.id)}"` : ''}>
+      <div class="club-program-item-head">
+        <strong>${esc(program.title || 'برنامج')}</strong>
+        <span class="club-percent">${toAr(program.percent)}٪</span>
+      </div>
+      ${program.details ? `<p>${esc(program.details)}</p>` : ''}
+      <div class="club-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${clamp(Number(program.percent) || 0, 0, 100)}"><span style="width:${clamp(Number(program.percent) || 0, 0, 100)}%"></span></div>
+    </div>`;
+
+  const groupCard = (group) => `
+    <article class="club-group-card">
+      <div class="club-group-head">
+        <div>
+          <h4>${esc(group.title || 'مجموعة')}</h4>
+          ${group.details ? `<p>${esc(group.details)}</p>` : ''}
+        </div>
+        ${supervisor ? `<div class="club-group-tools">
+          <button class="icon-btn" type="button" data-edit-group="${esc(group.id)}" aria-label="تعديل المجموعة"><svg class="ic"><use href="#i-edit"/></svg></button>
+          <button class="icon-btn danger" type="button" data-delete-group="${esc(group.id)}" aria-label="حذف المجموعة"><svg class="ic"><use href="#i-trash"/></svg></button>
+        </div>` : ''}
+      </div>
+      <div class="club-group-programs">
+        ${(group.programs || []).length
+          ? group.programs.map((program) => programCard(group, program)).join('')
+          : '<p class="club-empty">لم تُضف برامج لهذه المجموعة بعد.</p>'}
+      </div>
+      ${supervisor ? `<button class="btn btn-sm btn-ghost club-add-program" type="button" data-add-program="${esc(group.id)}"><svg class="ic"><use href="#i-plus"/></svg> إضافة برنامج</button>` : ''}
+    </article>`;
+
+  host.innerHTML = `
+    ${CLUB_ACTIVITY_GROUPS.map((group) => `
+      <section class="club-activity-section">
+        <h3 class="club-section-title">${esc(group.label)}</h3>
+        <div class="club-programs-list">${group.items.map(activityCard).join('')}</div>
+      </section>`).join('')}
+
+    <section class="club-activity-section">
+      <h3 class="club-section-title">المجموعات والبرامج</h3>
+      <p class="club-section-hint">ينشئ المشرف المجموعات، ويضيف لكل مجموعة برامجها ونسبة الإنجاز.</p>
+      ${groups.length ? `<div class="club-groups-list">${groups.map(groupCard).join('')}</div>` : '<p class="club-empty">لا توجد مجموعات بعد.</p>'}
+      ${supervisor ? `<button class="btn btn-gold btn-block" type="button" id="club-add-group"><svg class="ic"><use href="#i-plus"/></svg> إضافة مجموعة</button>` : ''}
+    </section>`;
+
+  host.querySelectorAll('[data-activity]').forEach((card) => {
+    const open = () => {
+      const item = CLUB_ACTIVITY_GROUPS
+        .reduce((all, group) => all.concat(group.items), [])
+        .find((entry) => entry.id === card.dataset.activity);
+      if (item) openActivityDetails(item, overrides[item.id] || null);
+    };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+    });
+  });
+
+  host.querySelectorAll('[data-add-program]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const group = groups.find((entry) => entry.id === button.dataset.addProgram);
+      if (group) openProgramEditor(group, null);
+    });
+  });
+
+  host.querySelectorAll('[data-edit-group]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const group = groups.find((entry) => entry.id === button.dataset.editGroup);
+      if (group) openGroupEditor(group);
+    });
+  });
+
+  host.querySelectorAll('[data-delete-group]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const group = groups.find((entry) => entry.id === button.dataset.deleteGroup);
+      if (!group) return;
+      openConfirm({
+        title: 'حذف المجموعة',
+        text: `سيتم حذف «${group.title}» مع برامجها من العرض. هل تريد المتابعة؟`,
+        confirmLabel: 'حذف',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteActivity', { id: group.id, requesterName: clubActivityRequester(), by: clubActivityRequester() });
+          if (!result || result.success === false) { toast('تعذر حذف المجموعة', 'info'); return; }
+          toast('حُذفت المجموعة', 'check');
+          openClubProgramsSheet();
+        }
       });
     });
   });
+
+  host.querySelectorAll('[data-edit-program]').forEach((item) => {
+    const open = () => {
+      const group = groups.find((entry) => entry.id === item.dataset.group);
+      const program = group && group.programs.find((entry) => entry.id === item.dataset.editProgram);
+      if (group && program) openProgramEditor(group, program);
+    };
+    item.addEventListener('click', open);
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+    });
+  });
+
+  const addGroup = host.querySelector('#club-add-group');
+  if (addGroup) addGroup.addEventListener('click', () => openGroupEditor(null));
 }
+
+function openActivityDetails(item, row) {
+  const title = (row && row.title) || item.title;
+  const details = (row && row.details) || item.details || '';
+  const list = (row && Array.isArray(row.items)) ? row.items : [];
+  openSheet(`
+    ${sheetHead(title, item.number)}
+    <div class="activity-detail">
+      <p class="activity-detail-text">${esc(details || 'لم يُضف تعريف لهذا النشاط بعد.')}</p>
+      ${list.length ? `
+        <h4 class="activity-detail-title">يضم هذا النشاط</h4>
+        <ul class="activity-detail-list">${list.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
+      ${isSupervisor() ? `<button class="btn btn-gold btn-block" type="button" id="activity-edit"><svg class="ic"><use href="#i-edit"/></svg> تعديل التعريف والأنشطة</button>` : ''}
+    </div>`, (root) => {
+    const edit = root.querySelector('#activity-edit');
+    if (edit) edit.addEventListener('click', () => openActivityEditor(item, row));
+  });
+}
+
+function openActivityEditor(item, row) {
+  if (!isSupervisor()) { toast('تعديل الأنشطة متاح للمشرفين فقط', 'info'); return; }
+  const title = (row && row.title) || item.title;
+  const details = (row && row.details) || item.details || '';
+  const listText = ((row && Array.isArray(row.items)) ? row.items : []).join('\n');
+  openSheet(`
+    ${sheetHead('تعديل النشاط', item.number)}
+    <form id="activity-form" novalidate>
+      <div class="field"><label for="activity-title">عنوان النشاط</label><input class="input" id="activity-title" maxlength="200" required value="${esc(title)}"></div>
+      <div class="field"><label for="activity-details">التعريف والتفاصيل</label><textarea class="input" id="activity-details" rows="7" maxlength="5000">${esc(details)}</textarea></div>
+      <div class="field"><label for="activity-list">الأنشطة التي يضمها <span class="field-hint">(كل سطر نشاط مستقل)</span></label><textarea class="input" id="activity-list" rows="6" maxlength="3000" placeholder="مثال: قراءة كتاب شهريًا&#10;مناقشة أسبوعية">${esc(listText)}</textarea></div>
+      <button class="btn btn-gold btn-block" type="submit">حفظ التعديل</button>
+    </form>`, (root) => {
+    root.querySelector('#activity-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const value = root.querySelector('#activity-title').value.trim();
+      if (!value) { toast('اكتب عنوان النشاط', 'info'); return; }
+      const saved = await saveClubActivity({
+        id: item.id,
+        type: 'activity',
+        parentId: '',
+        title: value,
+        details: root.querySelector('#activity-details').value,
+        items: root.querySelector('#activity-list').value.split('\n')
+      });
+      if (!saved) return;
+      toast('تم حفظ النشاط', 'check');
+      openClubProgramsSheet();
+    });
+  });
+}
+
+function openGroupEditor(group) {
+  if (!isSupervisor()) { toast('تعديل المجموعات متاح للمشرفين فقط', 'info'); return; }
+  const editing = Boolean(group);
+  openSheet(`
+    ${sheetHead(editing ? 'تعديل المجموعة' : 'مجموعة جديدة', 'المجموعة وعاء يجمع عدة برامج')}
+    <form id="group-form" novalidate>
+      <div class="field"><label for="group-title">عنوان المجموعة</label><input class="input" id="group-title" maxlength="120" required value="${esc(editing ? group.title : '')}" placeholder="مثال: مجموعة القراءة الحرة"></div>
+      <div class="field"><label for="group-details">وصف المجموعة</label><textarea class="input" id="group-details" rows="4" maxlength="1000" placeholder="نبذة مختصرة عن المجموعة وأهدافها">${esc(editing ? group.details : '')}</textarea></div>
+      <button class="btn btn-gold btn-block" type="submit">${editing ? 'حفظ التعديل' : 'إضافة المجموعة'}</button>
+    </form>`, (root) => {
+    root.querySelector('#group-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#group-title').value.trim();
+      if (!title) { toast('اكتب عنوان المجموعة', 'info'); return; }
+      const saved = await saveClubActivity({
+        id: editing ? group.id : `group-${Date.now()}`,
+        type: 'group',
+        title,
+        details: root.querySelector('#group-details').value,
+        items: editing ? group.items : [],
+        sortOrder: editing ? group.sortOrder : Date.now()
+      });
+      if (!saved) return;
+      toast(editing ? 'تم تحديث المجموعة' : 'أُضيفت المجموعة', 'check');
+      openClubProgramsSheet();
+    });
+  });
+}
+
+function openProgramEditor(group, program) {
+  if (!isSupervisor()) { toast('تعديل البرامج متاح للمشرفين فقط', 'info'); return; }
+  const editing = Boolean(program);
+  const percent = editing ? clamp(Number(program.percent) || 0, 0, 100) : 0;
+  openSheet(`
+    ${sheetHead(editing ? 'تعديل البرنامج' : 'برنامج جديد', group.title || '')}
+    <form id="program-form" novalidate>
+      <div class="field"><label for="program-title">عنوان البرنامج</label><input class="input" id="program-title" maxlength="200" required value="${esc(editing ? program.title : '')}" placeholder="مثال: قراءة ٥ كتب في ١٠ أيام"></div>
+      <div class="field"><label for="program-details">تفاصيل البرنامج</label><textarea class="input" id="program-details" rows="6" maxlength="3000" placeholder="ماذا يشمل البرنامج؟ وما خطته؟">${esc(editing ? program.details : '')}</textarea></div>
+      <div class="field">
+        <label for="program-percent">نسبة الإنجاز: <strong id="program-percent-label">${toAr(percent)}٪</strong></label>
+        <input id="program-percent" type="range" min="0" max="100" step="1" value="${percent}" class="range-input">
+      </div>
+      <button class="btn btn-gold btn-block" type="submit">${editing ? 'حفظ التعديل' : 'إضافة البرنامج'}</button>
+    </form>`, (root) => {
+    const range = root.querySelector('#program-percent');
+    const label = root.querySelector('#program-percent-label');
+    range.addEventListener('input', () => { label.textContent = toAr(Number(range.value)) + '٪'; });
+    root.querySelector('#program-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#program-title').value.trim();
+      if (!title) { toast('اكتب عنوان البرنامج', 'info'); return; }
+      const saved = await saveClubActivity({
+        id: editing ? program.id : `program-${Date.now()}`,
+        type: 'program',
+        parentId: group.id,
+        title,
+        details: root.querySelector('#program-details').value,
+        percent: Number(range.value) || 0,
+        items: editing ? program.items : [],
+        sortOrder: editing ? program.sortOrder : Date.now()
+      });
+      if (!saved) return;
+      toast(editing ? 'تم تحديث البرنامج' : 'أُضيف البرنامج', 'check');
+      openClubProgramsSheet();
+    });
+  });
+}
+
 
 /* مقاس النافذة القرائية الثابت (كما في تصميم المشرف) */
 const READING_WINDOW_WIDTH = 1080;
@@ -7496,14 +7759,14 @@ function renderDeletedItems(root, items) {
       ? item.text
       : item.type === 'shelf'
         ? `${toAr(item.booksCount || 0)} كتاب مرتبط`
-        : item.category;
+        : (item.type === 'book' ? [item.author, item.category].filter(Boolean).join(' · ') : item.category);
     const deletedAt = Number(item.deletedAt)
       ? new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(new Date(Number(item.deletedAt)))
       : '';
     const icon = icons[item.type] || 'library';
     const key = `${item.type}:${item.id}`;
     return `
-      <article class="deleted-item-card" data-trash-key="${esc(key)}">
+      <article class="deleted-item-card" data-trash-key="${esc(key)}" data-book-key="${esc(item.type === 'book' ? (item.key || '') : '')}">
         <div class="deleted-item-head">
           <label class="trash-check">
             <input type="checkbox" data-trash-check value="${esc(key)}" aria-label="تحديد ${esc(title)}">
@@ -7541,6 +7804,42 @@ function updateTrashBulkBar(root, items) {
   if (count) count.textContent = toAr(valid.length);
 }
 
+function renderTrashAudit(root, audit, force) {
+  const box = root.querySelector('#trash-audit');
+  if (!box) return;
+  if (!audit || (!force && audit.ok && !audit.tombstones && !audit.deletedBookRows)) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  const issues = Array.isArray(audit.issues) ? audit.issues : [];
+  const ok = audit.ok !== false;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="trash-audit-head">
+      <span class="trash-audit-dot ${ok ? 'ok' : 'warn'}"></span>
+      <strong>${ok ? 'السلة متطابقة مع الشيت' : 'تحتاج السلة إلى إصلاح'}</strong>
+    </div>
+    <p class="trash-audit-meta">صفوف محذوفة: ${toAr(audit.deletedBookRows || 0)} · شواهد الحذف: ${toAr(audit.tombstones || 0)}</p>
+    ${issues.length ? `<ul class="trash-audit-issues">${issues.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
+    ${ok ? '' : '<button class="btn btn-sm btn-gold" type="button" id="trash-repair">إصلاح التطابق</button>'}`;
+  const repair = box.querySelector('#trash-repair');
+  if (repair) repair.addEventListener('click', async () => {
+    repair.disabled = true;
+    const requesterName = (currentMember && currentMember.name) || '';
+    const result = await cloudRequest('repairTrash', { requesterName, by: requesterName });
+    if (!result || result.success !== true) {
+      repair.disabled = false;
+      toast(result && result.error ? result.error : 'تعذر إصلاح السلة', 'info');
+      return;
+    }
+    toast(result.message || 'تم إصلاح السلة', 'check');
+    const refreshButton = root.querySelector('#refresh-trash');
+    if (refreshButton) refreshButton.click();
+    try { await refreshClubBooksFromCloud(); } catch (error) {}
+  });
+}
+
 function openTrashSheet() {
   if (!isSupervisor()) { toast('سلة المحذوفات للمشرفين فقط', 'info'); return; }
   openSheet(`
@@ -7548,12 +7847,14 @@ function openTrashSheet() {
     <div class="trash-toolbar">
       <span>السلة مشتركة بين مشرفي النادي</span>
       <div class="trash-toolbar-actions">
+        <button class="btn btn-sm btn-ghost" type="button" id="trash-audit-btn">فحص المطابقة</button>
         <button class="btn btn-sm btn-ghost" type="button" id="trash-select-all">تحديد الكل</button>
         <button class="icon-btn" type="button" id="refresh-trash" aria-label="تحديث سلة المحذوفات">
           <svg class="ic"><use href="#i-refresh"/></svg>
         </button>
       </div>
     </div>
+    <div id="trash-audit" class="trash-audit" hidden></div>
     <div id="trash-bulk-bar" class="trash-bulk-bar" hidden>
       <span>محدَّد: <b id="trash-selected-count">٠</b></span>
       <div>
@@ -7579,9 +7880,18 @@ function openTrashSheet() {
       }
       currentItems = result.data;
       renderDeletedItems(root, currentItems);
+      renderTrashAudit(root, result.audit || null);
     };
     const refreshButton = root.querySelector('#refresh-trash');
     if (refreshButton) refreshButton.addEventListener('click', refresh);
+
+    const auditButton = root.querySelector('#trash-audit-btn');
+    if (auditButton) auditButton.addEventListener('click', async () => {
+      const result = await cloudRequest('trashAudit');
+      if (!result || result.success !== true) { toast('تعذر فحص السلة', 'info'); return; }
+      renderTrashAudit(root, result.audit || null, true);
+      toast((result.audit && result.audit.ok) ? 'السلة متطابقة مع الشيت' : 'وجدنا اختلافًا بين السلة والشيت', (result.audit && result.audit.ok) ? 'check' : 'info');
+    });
 
     const selectAll = root.querySelector('#trash-select-all');
     if (selectAll) selectAll.addEventListener('click', () => {
@@ -7599,14 +7909,17 @@ function openTrashSheet() {
   });
 }
 
-async function restoreDeletedItem(type, encodedId, silent = false) {
+async function restoreDeletedItem(type, encodedId, silent = false, bookKey = '') {
   if (!isSupervisor()) { toast('الاستعادة للمشرفين فقط', 'info'); return false; }
   let id = encodedId || '';
   try { id = decodeURIComponent(id); } catch (error) {}
   const actions = { quote: 'restoreQuote', book: 'restoreClubBook', shelf: 'restoreLibraryCategory', article: 'restoreArticle', recording: 'restoreRecordedMeeting' };
   const action = actions[type];
   if (!action) return false;
-  const result = await cloudRequest(action, { id });
+  const payload = { id };
+  /* الكتب: المفتاح يجعل الاستعادة تعمل حتى لو تغيّر ترتيب الصفوف في الشيت */
+  if (type === 'book' && bookKey) payload.key = bookKey;
+  const result = await cloudRequest(action, payload);
   if (!result || result.success === false) {
     if (!silent) toast(result && result.error ? result.error : 'تعذرت الاستعادة', 'info');
     return false;
@@ -8604,9 +8917,11 @@ async function handleGlobalClick(event) {
     case 'open-trash':
       openTrashSheet();
       break;
-    case 'restore-deleted':
-      restoreDeletedItem(actionEl.dataset.type, id);
+    case 'restore-deleted': {
+      const card = actionEl.closest('[data-trash-key]');
+      restoreDeletedItem(actionEl.dataset.type, id, false, card ? card.dataset.bookKey : '');
       break;
+    }
     case 'bulk-restore': {
       if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
       const trashRoot = document.getElementById('sheet-root');
@@ -8623,7 +8938,8 @@ async function handleGlobalClick(event) {
             const split = key.split(':');
             const type = split.shift();
             const itemId = split.join(':');
-            const result = await restoreDeletedItem(type, itemId, true);
+            const card = trashRoot ? trashRoot.querySelector(`[data-trash-key="${key}"]`) : null;
+            const result = await restoreDeletedItem(type, itemId, true, card ? card.dataset.bookKey : '');
             if (result) done += 1;
           }
           toast(`تمت استعادة ${toAr(done)} عنصر`, 'check');
@@ -8649,7 +8965,10 @@ async function handleGlobalClick(event) {
             const split = key.split(':');
             const type = split.shift();
             const itemId = split.join(':');
-            const result = await cloudRequest('purgeDeletedItem', { type, id: itemId, by: (currentMember && currentMember.name) || 'مشرف' });
+            const card = trashRoot ? trashRoot.querySelector(`[data-trash-key="${key}"]`) : null;
+            const payload = { type, id: itemId, by: (currentMember && currentMember.name) || 'مشرف' };
+            if (type === 'book' && card && card.dataset.bookKey) payload.key = card.dataset.bookKey;
+            const result = await cloudRequest('purgeDeletedItem', payload);
             if (result && result.success === true) done += 1;
           }
           toast(`تم حذف ${toAr(done)} عنصر نهائيًا`, 'trash');
@@ -8662,13 +8981,16 @@ async function handleGlobalClick(event) {
     case 'purge-deleted': {
       if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
       const type = actionEl.dataset.type;
+      const purgeCard = actionEl.closest('[data-trash-key]');
       openConfirm({
         title: 'حذف نهائي',
         text: 'سيُحذف هذا العنصر نهائياً ولا يمكن استعادته. هل أنت متأكد؟',
         confirmLabel: 'حذف نهائي',
         danger: true,
         onConfirm: async () => {
-          const result = await cloudRequest('purgeDeletedItem', { type, id, by: (currentMember && currentMember.name) || 'مشرف' });
+          const payload = { type, id, by: (currentMember && currentMember.name) || 'مشرف' };
+          if (type === 'book' && purgeCard && purgeCard.dataset.bookKey) payload.key = purgeCard.dataset.bookKey;
+          const result = await cloudRequest('purgeDeletedItem', payload);
           if (!result || result.success === false) { toast('تعذر الحذف النهائي', 'info'); return; }
           toast('تم الحذف النهائي', 'trash');
           refreshJoinRequests();

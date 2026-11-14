@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-14-r52';
+const CODE_VERSION = 'jalees-2026-11-15-r55';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -18,6 +18,7 @@ const WEEKLY_REPORTS_SHEET = 'التقارير الأسبوعية';
 const DELETED_LOG_SHEET = 'سجل المحذوفات';
 const BOOK_SUMMARIES_SHEET = 'ملخصات الأعضاء';
 const NOTIFICATIONS_SHEET = 'التنبيهات';
+const ACTIVITIES_SHEET = 'الأنشطة والبرامج';
 
 const SPREADSHEET_ID = '1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g';
 
@@ -203,13 +204,245 @@ function deletedBookRegistry(ss) {
   const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
   rows.forEach((row) => {
     const type = String(row[1] || '');
+    /* المفتاح يُؤخذ من شواهد bookkey فقط — شاهد المعرّف قد يشير لصف تغيّر ترتيبه */
     if (type === 'bookkey') { if (row[0]) keys.add(String(row[0])); return; }
     if (type !== 'book') return;
     if (row[0]) ids.add(String(row[0]));
-    const key = bookKey(row[2], row[3]);
-    if (key && key !== '|') keys.add(key);
   });
   return { ids: ids, keys: keys };
+}
+
+/* إزالة شواهد الحذف بالمعرّف أو بمفتاح العنوان+المؤلف (يشمل الشواهد القديمة) */
+function clearDeletedLogByKey(ss, keys) {
+  if (!keys || !keys.size) return;
+  const sheet = getDeletedLogSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const type = String(rows[i][1] || '');
+    if (type !== 'book' && type !== 'bookkey') continue;
+    const id = String(rows[i][0] || '');
+    const key = type === 'bookkey' ? id : bookKey(rows[i][2], rows[i][3]);
+    if (keys.has(key)) sheet.deleteRow(i + 2);
+  }
+}
+
+/* ---- قفل التنفيذ: يمنع تعارض عمليتين من مشرفين على نفس الصفوف ---- */
+function withScriptLock(callback, waitMs) {
+  let lock = null;
+  try { lock = LockService.getScriptLock(); } catch (error) { lock = null; }
+  if (!lock) return callback();
+  let locked = false;
+  try {
+    lock.waitLock(Number(waitMs) || 25000);
+    locked = true;
+  } catch (error) {
+    locked = false;
+  }
+  try {
+    return callback();
+  } finally {
+    if (locked) {
+      try { lock.releaseLock(); } catch (error) { /* تجاهل */ }
+    }
+  }
+}
+
+/* ---- قراءة حالة كتب المكتبة: الحيّ منها والمحذوف، ومفاتيح العنوان+المؤلف ---- */
+function trashBookState(ss) {
+  const state = {
+    rows: 0,
+    liveRows: 0,
+    deletedRows: 0,
+    liveIds: new Set(),
+    liveKeys: new Set(),
+    deletedIds: new Set(),
+    deletedKeys: new Set(),
+    deletedKeyCounts: new Map(),
+    entries: []
+  };
+  libraryBookSheets(ss).forEach((sheet) => {
+    ensureBookDeleteColumns(sheet);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+    rows.forEach((row, index) => {
+      const title = String(row[3] || '').trim();
+      if (!title) return;
+      state.rows += 1;
+      const id = bookIdForRow(sheet, row[0], index);
+      const key = bookKey(row[3], row[4]);
+      const hasKey = Boolean(key && key !== '|');
+      const deleted = Boolean(row[11]);
+      if (deleted) {
+        state.deletedRows += 1;
+        state.deletedIds.add(id);
+        if (hasKey) {
+          state.deletedKeys.add(key);
+          state.deletedKeyCounts.set(key, (state.deletedKeyCounts.get(key) || 0) + 1);
+        }
+      } else {
+        state.liveRows += 1;
+        state.liveIds.add(id);
+        if (hasKey) state.liveKeys.add(key);
+      }
+      state.entries.push({
+        id: id,
+        key: hasKey ? key : '',
+        title: title,
+        author: String(row[4] || ''),
+        createdAt: Number(row[9]) || 0,
+        deleted: deleted
+      });
+    });
+  });
+  return state;
+}
+
+/* ---- فحص سلة المحذوفات: يكشف أي اختلاف بين الشيت والشواهد ---- */
+function trashAudit(ss) {
+  const state = trashBookState(ss);
+  const report = {
+    bookRows: state.rows,
+    liveBookRows: state.liveRows,
+    deletedBookRows: state.deletedRows,
+    tombstones: 0,
+    orphanTombstones: 0,
+    missingTombstones: 0,
+    duplicateTombstones: 0,
+    duplicateDeletedRows: 0,
+    hiddenLiveBooks: 0,
+    orphanIds: [],
+    issues: [],
+    details: { orphan: [], hidden: [], duplicateDeleted: [] }
+  };
+  const logSheet = getDeletedLogSheet(ss);
+  const lastRow = logSheet.getLastRow();
+  const tombIds = new Set();
+  const tombKeys = new Set();
+  const seen = new Set();
+  if (lastRow >= 2) {
+    const rows = logSheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    rows.forEach((row) => {
+      const id = String(row[0] || '').trim();
+      const type = String(row[1] || '').trim();
+      const title = String(row[2] || '');
+      if (!id) return;
+      report.tombstones += 1;
+      const fingerprint = type + '::' + id;
+      if (seen.has(fingerprint)) {
+        report.duplicateTombstones += 1;
+        return;
+      }
+      seen.add(fingerprint);
+      if (type === 'bookkey') {
+        tombKeys.add(id);
+        if (state.liveKeys.has(id)) {
+          report.hiddenLiveBooks += 1;
+          if (report.details.hidden.length < 20) report.details.hidden.push({ key: id, title: title });
+        }
+        if (!state.deletedKeys.has(id)) {
+          report.orphanTombstones += 1;
+          if (report.details.orphan.length < 20) report.details.orphan.push({ type: type, id: id, title: title });
+        }
+        return;
+      }
+      if (type === 'book') {
+        tombIds.add(id);
+        if (!state.deletedIds.has(id)) {
+          report.orphanTombstones += 1;
+          if (report.details.orphan.length < 20) report.details.orphan.push({ type: type, id: id, title: title });
+        }
+      }
+    });
+  }
+  state.deletedIds.forEach((id) => {
+    if (!tombIds.has(id)) report.missingTombstones += 1;
+  });
+  state.deletedKeyCounts.forEach((count, key) => {
+    if (count < 2) return;
+    report.duplicateDeletedRows += count - 1;
+    if (report.details.duplicateDeleted.length < 20) {
+      report.details.duplicateDeleted.push({ key: key, count: count });
+    }
+  });
+  report.orphanIds = report.details.orphan.map((item) => item.id);
+  if (report.hiddenLiveBooks) report.issues.push('كتب حيّة مخفية بسبب شاهد حذف قديم');
+  if (report.orphanTombstones) report.issues.push('شواهد حذف بلا صفوف في الشيت');
+  if (report.missingTombstones) report.issues.push('صفوف محذوفة بلا شاهد حذف');
+  if (report.duplicateTombstones) report.issues.push('شواهد حذف مكرّرة');
+  if (report.duplicateDeletedRows) report.issues.push('نسخ محذوفة مكرّرة لنفس الكتاب');
+  report.ok = report.issues.length === 0;
+  return report;
+}
+
+/* ---- إصلاح السلة: يزيل الشواهد اليتيمة ويضيف الناقصة ويزيل التكرار ---- */
+function repairTrash(ss) {
+  return withScriptLock(() => {
+    const before = trashAudit(ss);
+    const state = trashBookState(ss);
+    const logSheet = getDeletedLogSheet(ss);
+    const lastRow = logSheet.getLastRow();
+    const rows = lastRow >= 2 ? logSheet.getRange(2, 1, lastRow - 1, 6).getValues() : [];
+    const seen = new Set();
+    const kept = new Set();
+    const toDelete = [];
+    let removed = 0;
+    rows.forEach((row, index) => {
+      const id = String(row[0] || '').trim();
+      const type = String(row[1] || '').trim();
+      if (!id) {
+        toDelete.push(index + 2);
+        removed += 1;
+        return;
+      }
+      const fingerprint = type + '::' + id;
+      if (seen.has(fingerprint)) {
+        toDelete.push(index + 2);
+        removed += 1;
+        return;
+      }
+      seen.add(fingerprint);
+      let valid = true;
+      if (type === 'bookkey') {
+        /* الشاهد صالح فقط إن كان هناك صف محذوف فعلًا بهذا المفتاح */
+        valid = state.deletedKeys.has(id);
+      } else if (type === 'book') {
+        valid = state.deletedIds.has(id);
+      }
+      if (!valid) {
+        toDelete.push(index + 2);
+        removed += 1;
+        return;
+      }
+      kept.add(fingerprint);
+    });
+    for (let i = toDelete.length - 1; i >= 0; i--) {
+      try { logSheet.deleteRow(toDelete[i]); } catch (error) { /* تجاهل */ }
+    }
+    let added = 0;
+    state.deletedIds.forEach((id) => {
+      if (kept.has('book::' + id)) return;
+      logSheet.appendRow([id, 'book', '', '', Date.now(), 'إصلاح تلقائي']);
+      added += 1;
+    });
+    state.deletedKeys.forEach((key) => {
+      if (kept.has('bookkey::' + key)) return;
+      const entry = state.entries.find((item) => item.deleted && item.key === key);
+      logSheet.appendRow([key, 'bookkey', entry ? entry.title : '', entry ? entry.author : '', Date.now(), 'إصلاح تلقائي']);
+      added += 1;
+    });
+    const after = trashAudit(ss);
+    return output({
+      success: true,
+      before: { orphan: before.orphanTombstones, missing: before.missingTombstones, duplicates: before.duplicateTombstones, hidden: before.hiddenLiveBooks },
+      removed: removed,
+      added: added,
+      audit: after,
+      message: 'تم فحص السلة وإصلاح ' + (removed + added) + ' عنصر'
+    });
+  });
 }
 
 /* ---- ملخصات الأعضاء للكتب التي قرؤوها ---- */
@@ -256,6 +489,30 @@ function getReadingListsSheet(ss) {
   return getDataSheet(ss, READING_LISTS_SHEET, [
     'id', 'title', 'description', 'books', 'cover', 'createdAt', 'createdBy', 'deletedAt', 'deletedBy'
   ]);
+}
+
+/* ---- الأنشطة والبرامج: محتوى يحرّره المشرف (نشاط / مجموعة / برنامج) ---- */
+function getActivitiesSheet(ss) {
+  return getDataSheet(ss, ACTIVITIES_SHEET, [
+    'id', 'type', 'parentId', 'title', 'details', 'items', 'percent', 'sortOrder',
+    'createdBy', 'createdAt', 'updatedAt', 'deletedAt'
+  ]);
+}
+
+function activityPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function activityItemList(raw) {
+  if (Array.isArray(raw)) return raw.map((value) => String(value || '').trim()).filter(Boolean);
+  try {
+    const parsed = JSON.parse(String(raw || '[]'));
+    return Array.isArray(parsed) ? parsed.map((value) => String(value || '').trim()).filter(Boolean) : [];
+  } catch (error) {
+    return [];
+  }
 }
 
 /* ---- الإعجابات: جدول مشترك بين الاقتباسات والمقالات ---- */
@@ -1242,6 +1499,7 @@ function sendViaMailjet(settings, to, subject, intro, code, name) {
         From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
         To: [{ Email: to, Name: name || 'عضو جليس' }],
         Subject: subject,
+        Headers: { 'Reply-To': MAIL_REPLY },
         TextPart: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
         HTMLPart: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
           + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
@@ -1515,6 +1773,139 @@ function bookIdForRow(sheet, rawId, zeroBasedIndex) {
   return String(rawId || `legacy-${sheet.getSheetId()}-${zeroBasedIndex + 2}`);
 }
 
+/* ---- حذف/استعادة كتاب: يطابق المعرّف أو مفتاح العنوان+المؤلف ----
+   المطابقة بالمفتاح ضرورية لأن معرّفات الصفوف القديمة تتغيّر بتغيّر ترتيب الصفوف. */
+function deleteOrRestoreClubBook(ss, data, deleting) {
+  const bookId = String(data.id || '').trim();
+  const requestedKey = String(data.key || '').trim();
+  if (!bookId && !requestedKey) throw new Error('معرّف الكتاب مطلوب');
+  const sources = libraryBookSheets(ss);
+  const keys = new Set();
+  const matchedIds = new Set();
+  const matched = [];
+  let touched = 0;
+
+  sources.forEach((source) => {
+    ensureBookDeleteColumns(source);
+    const lastRow = source.getLastRow();
+    if (lastRow < 2) return;
+    const rows = source.getRange(2, 1, lastRow - 1, 5).getValues();
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const rowId = bookIdForRow(source, rows[i][0], i);
+      const rowKey = bookKey(rows[i][3], rows[i][4]);
+      const sameId = Boolean(bookId) && rowId === bookId;
+      const sameKey = Boolean(requestedKey) && rowKey === requestedKey;
+      if (!sameId && !sameKey) continue;
+      const row = i + 2;
+      source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
+      paintDeletedRow(source, row, deleting, 16);
+      if (rowKey && rowKey !== '|') keys.add(rowKey);
+      matchedIds.add(rowId);
+      if (deleting) matched.push({ title: String(rows[i][3] || ''), author: String(rows[i][4] || '') });
+      touched += 1;
+    }
+  });
+
+  /* توحيد الحذف: كل صف بنفس العنوان والمؤلف يُعلَّم محذوفًا — لا يبقى نسخ حيّة تعود للظهور */
+  if (deleting && keys.size) {
+    sources.forEach((source) => {
+      const lastRow = source.getLastRow();
+      if (lastRow < 2) return;
+      const rows = source.getRange(2, 1, lastRow - 1, 13).getValues();
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (!String(rows[i][3] || '').trim() || rows[i][11]) continue;
+        const rowKey = bookKey(rows[i][3], rows[i][4]);
+        if (!keys.has(rowKey)) continue;
+        const row = i + 2;
+        source.getRange(row, 12, 1, 2).setValues([[Date.now(), data.deletedBy || 'مشرف']]);
+        paintDeletedRow(source, row, true, 16);
+        touched += 1;
+      }
+    });
+  }
+
+  const first = matched[0] || { title: String(data.title || ''), author: String(data.author || '') };
+  if (deleting) {
+    if (bookId) logDeletedItem(ss, bookId, 'book', first.title, first.author, data.deletedBy || 'مشرف');
+    matchedIds.forEach((rowId) => {
+      if (rowId === bookId) return;
+      logDeletedItem(ss, rowId, 'book', first.title, first.author, data.deletedBy || 'مشرف');
+    });
+    if (requestedKey) logDeletedItem(ss, requestedKey, 'bookkey', first.title, first.author, data.deletedBy || 'مشرف');
+    keys.forEach((key) => {
+      if (key === requestedKey) return;
+      logDeletedItem(ss, key, 'bookkey', first.title, first.author, data.deletedBy || 'مشرف');
+    });
+  } else {
+    /* نزيل الشاهد بالمعرّف لكل الصفوف المطابقة — وإلا بقي الكتاب مخفيًا بمفتاح الشاهد القديم */
+    if (bookId) clearDeletedLog(ss, bookId, 'book');
+    matchedIds.forEach((rowId) => clearDeletedLog(ss, rowId, 'book'));
+    const restoreKeys = new Set(keys);
+    if (requestedKey) restoreKeys.add(requestedKey);
+    clearDeletedLogByKey(ss, restoreKeys);
+  }
+  if (!touched && !deleting) throw new Error('لم أجد الكتاب المطلوب');
+  return output({ success: true, updated: touched, message: deleting ? 'نُقل الكتاب إلى سلة المحذوفات' : 'تمت استعادة الكتاب' });
+}
+
+/* ---- الحذف النهائي: يحذف كل نسخ العنصر ثم ينظّف الشواهد ---- */
+function purgeDeletedItemNow(ss, data) {
+  const type = String(data.type || '').trim();
+  const id = String(data.id || '').trim();
+  const key = String(data.key || '').trim();
+  if (!id && !key) throw new Error('معرّف العنصر مطلوب');
+
+  let sources = [];
+  if (type === 'quote') sources = [getQuotesSheet(ss)];
+  else if (type === 'article') sources = [getArticlesSheet(ss)];
+  else if (type === 'recording') sources = [getRecordedMeetingsSheet(ss)];
+  else if (type === 'shelf') sources = [getLibraryCategoriesSheet(ss)];
+  else if (type === 'book') sources = libraryBookSheets(ss);
+  else if (type === 'summary') sources = [getBookSummariesSheet(ss)];
+  else if (type === 'consultation') sources = [getConsultationsSheet(ss)];
+  else if (type === 'list') sources = [getReadingListsSheet(ss)];
+  else if (type === 'window') sources = [getReadingTipsSheet(ss)];
+  else if (type === 'meeting') sources = [getMeetingsSheet(ss)];
+  else throw new Error('نوع غير مدعوم');
+
+  let deleted = 0;
+  const touchedKeys = new Set();
+  const touchedIds = new Set();
+
+  sources.filter(Boolean).forEach((source) => {
+    try { ensureBookDeleteColumns(source); } catch (error) { /* تجاهل */ }
+    const lastRow = source.getLastRow();
+    if (lastRow < 2) return;
+    const idIndex = (type === 'quote') ? 5 : 0;
+    const width = Math.min(Math.max(source.getLastColumn(), 6), 16);
+    const rows = source.getRange(2, 1, lastRow - 1, width).getDisplayValues();
+    for (let i = rows.length - 1; i >= 0; i--) {
+      /* الحذف النهائي يخصّ العناصر المحذوفة فقط — لا يمسّ صفًا حيًّا */
+      if (type === 'book' && !rows[i][11]) continue;
+      const fallback = 'sheet-' + (i + 1);
+      const rowId = (type === 'book')
+        ? bookIdForRow(source, rows[i][0], i)
+        : String(rows[i][idIndex] || (type === 'quote' ? fallback : ''));
+      const rowKey = (type === 'book') ? bookKey(rows[i][3], rows[i][4]) : '';
+      const sameKey = Boolean(key) && Boolean(rowKey) && rowKey === key;
+      if (rowId !== id && !sameKey) continue;
+      if (rowKey && rowKey !== '|') touchedKeys.add(rowKey);
+      if (rowId) touchedIds.add(rowId);
+      source.deleteRow(i + 2);
+      deleted += 1;
+    }
+  });
+
+  if (type === 'book') {
+    const keysToClear = new Set(touchedKeys);
+    if (key) keysToClear.add(key);
+    if (id) clearDeletedLog(ss, id, 'book');
+    touchedIds.forEach((rowId) => clearDeletedLog(ss, rowId, 'book'));
+    clearDeletedLogByKey(ss, keysToClear);
+  }
+  return output({ success: true, deleted: deleted, message: deleted ? 'تم الحذف النهائي' : 'العنصر غير موجود' });
+}
+
 function getLibraryCategoryNames(ss) {
   const sheet = getLibraryCategoriesSheet(ss);
   const categories = [];
@@ -1681,56 +2072,8 @@ function doPost(e) {
     }
 
     if (action === 'deleteClubBook' || action === 'restoreClubBook') {
-      const bookId = String(data.id || '');
-      if (!bookId) throw new Error('معرّف الكتاب مطلوب');
       const deleting = action === 'deleteClubBook';
-      const sources = libraryBookSheets(ss);
-
-      let touched = 0;
-      let deletedTitle = '';
-      let deletedAuthor = '';
-      const restoredKeys = [];
-      for (const source of sources) {
-        ensureBookDeleteColumns(source);
-        const lastRow = source.getLastRow();
-        if (lastRow < 2) continue;
-        const rows = source.getRange(2, 1, lastRow - 1, 5).getValues();
-        for (let i = rows.length - 1; i >= 0; i--) {
-          const rowId = bookIdForRow(source, rows[i][0], i);
-          const sameId = rowId === bookId;
-          const sameKey = data.key ? bookKey(rows[i][3], rows[i][4]) === String(data.key) : false;
-          if (!sameId && !sameKey) continue;
-          const row = i + 2;
-          source.getRange(row, 12, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
-          paintDeletedRow(source, row, deleting, 14);
-          if (deleting) {
-            if (!deletedTitle) { deletedTitle = String(rows[i][3] || ''); deletedAuthor = String(rows[i][4] || ''); }
-          } else {
-            /* نحفظ مفتاح الكتاب لنزيل شاهد الحذف الخاص به */
-            const rowKey = bookKey(rows[i][3], rows[i][4]);
-            if (rowKey && rowKey !== '|') restoredKeys.push(rowKey);
-          }
-          touched += 1;
-        }
-      }
-      if (deleting) {
-        /* شاهد دائم: حتى لو ضاع صف الكتاب يبقى محذوفًا في كل الأجهزة */
-        logDeletedItem(ss, bookId, 'book', deletedTitle || String(data.title || ''), deletedAuthor || String(data.author || ''), data.deletedBy || 'مشرف');
-        /* شاهد المفتاح يُشتق من صف الكتاب نفسه — حتى يتطابق مع الاسترجاع والحذف النهائي */
-        const rowKey = bookKey(deletedTitle || String(data.title || ''), deletedAuthor || String(data.author || ''));
-        if (rowKey && rowKey !== '|') {
-          logDeletedItem(ss, rowKey, 'bookkey', deletedTitle || String(data.title || ''), deletedAuthor || String(data.author || ''), data.deletedBy || 'مشرف');
-        }
-        /* مفتاح قديم أرسله المتصفح (عنوان تغيّر) لم يعد صالحًا */
-        if (data.key && rowKey && String(data.key) !== rowKey) clearDeletedLog(ss, String(data.key), 'bookkey');
-      } else {
-        /* إزالة الشاهد كاملًا — بالمعرّف وبالمفتاح — وإلا بقي الكتاب مخفيًا */
-        clearDeletedLog(ss, bookId, 'book');
-        if (data.key) clearDeletedLog(ss, String(data.key), 'bookkey');
-        restoredKeys.forEach((key) => clearDeletedLog(ss, key, 'bookkey'));
-      }
-      if (!touched && !deleting) throw new Error('لم أجد الكتاب المطلوب');
-      return output({ success: true, updated: touched, message: deleting ? 'نُقل الكتاب إلى سلة المحذوفات' : 'تمت استعادة الكتاب' });
+      return withScriptLock(() => deleteOrRestoreClubBook(ss, data, deleting));
     }
 
     if (action === 'saveJoinRequest') {
@@ -1993,49 +2336,14 @@ function doPost(e) {
 
     /* حذف نهائي من سلة المهملات (لا استعادة) */
     if (action === 'purgeDeletedItem') {
-      const type = String(data.type || '').trim();
-      const id = String(data.id || '').trim();
-      if (!id) throw new Error('معرّف العنصر مطلوب');
-      const sources = [];
-      if (type === 'quote') sources.push(ss.getSheetByName(QUOTES_SHEET));
-      else if (type === 'article') sources.push(getArticlesSheet(ss));
-      else if (type === 'recording') sources.push(getRecordedMeetingsSheet(ss));
-      else if (type === 'shelf') sources.push(getLibraryCategoriesSheet(ss));
-      else if (type === 'book') sources.push.apply(sources, libraryBookSheets(ss));
-      else if (type === 'summary') sources.push(getBookSummariesSheet(ss));
-      else if (type === 'consultation') sources.push(getConsultationsSheet(ss));
-      else if (type === 'list') sources.push(getReadingListsSheet(ss));
-      else if (type === 'window') sources.push(getReadingTipsSheet(ss));
-      else if (type === 'meeting') sources.push(getMeetingsSheet(ss));
+      return withScriptLock(() => purgeDeletedItemNow(ss, data));
+    }
 
-      let deleted = false;
-      sources.filter(Boolean).forEach((source) => {
-        if (deleted) return;
-        try { ensureBookDeleteColumns(source); } catch (error) { /* تجاهل */ }
-        const lastRow = source.getLastRow();
-        if (lastRow < 2) return;
-        const ids = source.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
-        for (let i = ids.length - 1; i >= 0; i--) {
-          /* عمود المعرّف يختلف: الاقتباسات في العمود ٦، والباقي في العمود ١ */
-          const idIndex = (type === 'quote') ? 5 : 0;
-          const fallback = 'sheet-' + (i + 1);
-          const rowId = (type === 'book')
-            ? bookIdForRow(source, ids[i][0], i)
-            : String(ids[i][idIndex] || (type === 'quote' ? fallback : ''));
-          if (rowId === id || (type === 'book' && String(ids[i][0] || '') === String(id))) {
-            if (type === 'book') {
-              /* الحذف النهائي يزيل شاهد المحذوفات حتى يمكن إضافة الكتاب نفسه لاحقًا */
-              const rowKey = bookKey(ids[i][3], ids[i][4]);
-              clearDeletedLog(ss, id, 'book');
-              if (rowKey && rowKey !== '|') clearDeletedLog(ss, rowKey, 'bookkey');
-            }
-            source.deleteRow(i + 2);
-            deleted = true;
-            return;
-          }
-        }
-      });
-      return output({ success: true, message: deleted ? 'تم الحذف النهائي' : 'العنصر غير موجود' });
+    /* فحص وإصلاح سلة المحذوفات ومطابقتها مع الشيت */
+    if (action === 'repairTrash') {
+      const requester = String(data.requesterName || data.by || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('إصلاح سلة المحذوفات متاح للمشرفين فقط');
+      return repairTrash(ss);
     }
 
     if (action === 'saveSelectionQuote') {
@@ -2990,6 +3298,67 @@ function doPost(e) {
       return output({ success: true, message: 'اللقاء غير موجود' });
     }
 
+    /* ===== الأنشطة والبرامج: يحرّرها المشرف ===== */
+    if (action === 'saveActivity') {
+      const requester = String(data.requesterName || data.by || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('تعديل الأنشطة متاح للمشرفين فقط');
+      const sheet = getActivitiesSheet(ss);
+      const type = ['activity', 'group', 'program'].indexOf(String(data.type || '')) >= 0 ? String(data.type) : 'activity';
+      const activityId = String(data.id || `${type}-${Date.now()}`).trim().slice(0, 80);
+      const lastRow = sheet.getLastRow();
+      let rowNumber = 0;
+      let existing = null;
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][0] || '') === activityId) {
+            rowNumber = i + 2;
+            existing = rows[i];
+            break;
+          }
+        }
+      }
+      const items = activityItemList(data.items !== undefined ? data.items : (existing ? existing[5] : []));
+      const rowData = [
+        activityId,
+        type,
+        String(data.parentId !== undefined ? data.parentId : (existing ? existing[2] : '')).trim().slice(0, 80),
+        String(data.title !== undefined ? data.title : (existing ? existing[3] : '')).trim().slice(0, 200),
+        String(data.details !== undefined ? data.details : (existing ? existing[4] : '')).trim().slice(0, 5000),
+        JSON.stringify(items.slice(0, 40)),
+        data.percent === undefined && existing ? activityPercent(existing[6]) : activityPercent(data.percent),
+        Number(data.sortOrder) || (existing ? Number(existing[7]) || 0 : Date.now()),
+        String(data.by || requester || (existing ? existing[8] : '')).slice(0, 120),
+        existing ? existing[9] : (data.createdAt || Date.now()),
+        Date.now(),
+        ''
+      ];
+      if (rowNumber) sheet.getRange(rowNumber, 1, 1, 12).setValues([rowData]);
+      else sheet.appendRow(rowData);
+      return output({ success: true, id: activityId, message: rowNumber ? 'تم تحديث المحتوى' : 'تمت الإضافة' });
+    }
+
+    if (action === 'deleteActivity') {
+      const requester = String(data.requesterName || data.by || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('حذف الأنشطة متاح للمشرفين فقط');
+      const activityId = String(data.id || '').trim();
+      const sheet = getActivitiesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (!activityId || lastRow < 2) return output({ success: true, removed: 0 });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      let removed = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const rowId = String(rows[i][0] || '');
+        const isTarget = rowId === activityId;
+        const isChildOfTarget = String(rows[i][2] || '') === activityId;
+        if (!isTarget && !isChildOfTarget) continue;
+        if (String(rows[i][11] || '')) continue;
+        sheet.getRange(i + 2, 12).setValue(Date.now());
+        removed += 1;
+      }
+      return output({ success: true, removed: removed });
+    }
+
     if (action === 'deleteArticle' || action === 'restoreArticle') {
       const sheet = getArticlesSheet(ss);
       const articleId = String(data.id || '');
@@ -3243,6 +3612,7 @@ function doGet(e) {
       return output({
         success: true,
         channel: settings.channel,
+        emailProvider: settings.emailProvider || 'email',
         telegramChat: settings.telegramChat,
         telegramChats: settings.telegramChats,
         ntfyTopic: settings.ntfyTopic,
@@ -3549,6 +3919,37 @@ function doGet(e) {
       return output({ success: true, data: tips });
     }
 
+    if (action === 'getActivities') {
+      const sheet = getActivitiesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, activities: [], groups: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      const rowsClean = rows.map((row) => ({
+        id: String(row[0] || ''),
+        type: String(row[1] || ''),
+        parentId: String(row[2] || ''),
+        title: String(row[3] || ''),
+        details: String(row[4] || ''),
+        items: activityItemList(row[5]),
+        percent: activityPercent(row[6]),
+        sortOrder: Number(row[7]) || 0,
+        createdBy: String(row[8] || ''),
+        createdAt: Number(row[9]) || 0,
+        updatedAt: Number(row[10]) || 0,
+        deletedAt: Number(row[11]) || 0
+      })).filter((row) => row.id && !row.deletedAt);
+      const activities = rowsClean.filter((row) => row.type === 'activity');
+      const groups = rowsClean
+        .filter((row) => row.type === 'group')
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((group) => Object.assign({}, group, {
+          programs: rowsClean
+            .filter((row) => row.type === 'program' && row.parentId === group.id)
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+        }));
+      return output({ success: true, activities: activities, groups: groups });
+    }
+
     if (action === 'getPendingMembers') {
       const sheet = getMembersSheet(ss);
       const lastRow = sheet.getLastRow();
@@ -3799,6 +4200,7 @@ function doGet(e) {
         });
       }
 
+      const trashBookKeys = new Set();
       libraryBookSheets(ss)
         .forEach(sheet => {
           ensureBookDeleteColumns(sheet);
@@ -3806,9 +4208,17 @@ function doGet(e) {
           if (lastRow < 2) return;
           const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
           rows.forEach((row, index) => {
-            if (!row[11]) return;
+            if (!row[11] || !String(row[3] || '').trim()) return;
+            const key = bookKey(row[3], row[4]);
+            const hasKey = Boolean(key && key !== '|');
+            /* نفس الكتاب محذوف في نسختين: يظهر مرة واحدة في السلة */
+            if (hasKey) {
+              if (trashBookKeys.has(key)) return;
+              trashBookKeys.add(key);
+            }
             deleted.push({
-              type: 'book', id: bookIdForRow(sheet, row[0], index), title: row[3] || 'كتاب',
+              type: 'book', id: bookIdForRow(sheet, row[0], index), key: hasKey ? key : '',
+              title: row[3] || 'كتاب', author: row[4] || '',
               category: row[5] || '', deletedAt: row[11], deletedBy: row[12] || ''
             });
           });
@@ -3853,7 +4263,11 @@ function doGet(e) {
       }
 
       deleted.sort((a, b) => (Number(b.deletedAt) || 0) - (Number(a.deletedAt) || 0));
-      return output({ success: true, data: deleted });
+      return output({ success: true, data: deleted, audit: trashAudit(ss) });
+    }
+
+    if (action === 'trashAudit') {
+      return output({ success: true, audit: trashAudit(ss) });
     }
 
     // قراءة الاقتباسات
