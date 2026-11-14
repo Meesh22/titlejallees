@@ -5479,13 +5479,24 @@ function openNotifySettingsSheet() {
       <div class="field">
         <label for="notify-channel">قناة الإرسال</label>
         <select class="input" id="notify-channel">
-          <option value="email">بريد النادي (يعمل فورًا)</option>
           <option value="telegram">تيليجرام (على الجوال مباشرة)</option>
           <option value="ntfy">ntfy (تطبيق مجاني على الجوال)</option>
-          <option value="resend">مزوّد بريد احترافي (Resend) — وصول مضمون</option>
-          <option value="brevo">Brevo / Sendinblue — ٣٠٠ رسالة/يوم بلا نطاق</option>
+          <option value="pushover">Pushover (تطبيق iOS/Android)</option>
+          <option value="email">بريد النادي (يعمل فورًا)</option>
           <option value="off">إيقاف الإرسال</option>
         </select>
+        <small class="field-hint">هذه القناة = **تحديثات المشرف** (تسجيل، انضمام، مقال، كتاب، etc.)</small>
+      </div>
+      <div class="field">
+        <label for="notify-email-provider">مزوّد البريد (رموز الأعضاء)</label>
+        <select class="input" id="notify-email-provider">
+          <option value="email">بريد النادي (MailApp)</option>
+          <option value="brevo">Brevo / Sendinblue — ٣٠٠ رسالة/يوم بلا phone</option>
+          <option value="mailjet">Mailjet — ٦,٠٠٠ رسالة/شهر (بلا phone، بلا domain)</option>
+          <option value="resend">Resend — وصول مضمون (يحتاج domain)</option>
+          <option value="off">إيقاف (لا رموز)</option>
+        </select>
+        <small class="field-hint">هذا المزوّد = **رموز الأعضاء** (registration codes) — مستقل عن قناة التحديثات</small>
       </div>
       <div class="field" data-ch="telegram">
         <label for="notify-tg-token">١) توكن البوت</label>
@@ -5515,6 +5526,21 @@ function openNotifySettingsSheet() {
       <div class="field" data-ch="brevo">
         <label for="notify-brevo-name">الاسم الظاهر للمرسل</label>
         <input class="input" id="notify-brevo-name" placeholder="نادي جليس القرائي">
+      </div>
+      <div class="field" data-ch="mailjet">
+        <label for="notify-mailjet-public">Mailjet Public Key</label>
+        <input class="input" id="notify-mailjet-public" dir="ltr" placeholder="xxxxxxxxxxxxxxxxxxxxxxxx">
+        <small class="field-hint">من Mailjet → Account → API Keys → Public key</small>
+      </div>
+      <div class="field" data-ch="mailjet">
+        <label for="notify-mailjet-private">Mailjet Private Key (Secret)</label>
+        <input class="input" id="notify-mailjet-private" dir="ltr" placeholder="xxxxxxxxxxxxxxxxxxxxxxxx">
+        <small class="field-hint">من Mailjet → Account → API Keys → Private/Secret key</small>
+      </div>
+      <div class="field" data-ch="mailjet">
+        <label for="notify-mailjet-from">البريد المرسل (موثّق في Mailjet)</label>
+        <input class="input" id="notify-mailjet-from" dir="ltr" placeholder="jjalees.com@gmail.com">
+        <small class="field-hint">هذا العنوان تضبطه في Mailjet: <b>Senders & Domains → Add a sender</b> ثم توثّقه.</small>
       </div>
       <div class="field" data-ch="resend">
         <label for="notify-resend-key">مفتاح مزوّد البريد (Resend)</label>
@@ -5557,18 +5583,35 @@ function openNotifySettingsSheet() {
     const channel = root.querySelector('#notify-channel');
     const typesBox = root.querySelector('#notify-types');
 
+    const emailProvider = root.querySelector('#notify-email-provider');
     const applyChannel = () => {
       root.querySelectorAll('[data-ch]').forEach((block) => {
-        block.hidden = block.dataset.ch !== channel.value;
+        const ch = block.dataset.ch;
+        // telegram/ntfy/pushover/email fields depend on the main channel
+        if (['telegram', 'ntfy', 'pushover', 'email', 'off'].indexOf(ch) >= 0) {
+          block.hidden = ch !== channel.value;
+        }
+      });
+    };
+    const applyEmailProvider = () => {
+      const prov = emailProvider.value;
+      root.querySelectorAll('[data-ch]').forEach((block) => {
+        const ch = block.dataset.ch;
+        if (['brevo', 'mailjet', 'resend'].indexOf(ch) >= 0) {
+          block.hidden = ch !== prov;
+        }
       });
     };
     applyChannel();
+    applyEmailProvider();
     channel.addEventListener('change', applyChannel);
+    emailProvider.addEventListener('change', applyEmailProvider);
 
     const readPayload = () => {
       const types = [...typesBox.querySelectorAll('input:checked')].map((i) => i.value);
       return {
         channel: channel.value,
+        emailProvider: root.querySelector('#notify-email-provider').value,
         telegramToken: root.querySelector('#notify-tg-token').value.trim(),
         telegramChat: root.querySelector('#notify-tg-chat').value.trim(),
         ntfyTopic: root.querySelector('#notify-ntfy').value.trim(),
@@ -5577,6 +5620,9 @@ function openNotifySettingsSheet() {
         brevoKey: root.querySelector('#notify-brevo-key').value.trim(),
         brevoFrom: root.querySelector('#notify-brevo-from').value.trim(),
         brevoName: root.querySelector('#notify-brevo-name').value.trim(),
+        mailjetPublic: root.querySelector('#notify-mailjet-public').value.trim(),
+        mailjetPrivate: root.querySelector('#notify-mailjet-private').value.trim(),
+        mailjetFrom: root.querySelector('#notify-mailjet-from').value.trim(),
         pushoverToken: root.querySelector('#notify-po-token').value.trim(),
         pushoverUser: root.querySelector('#notify-po-user').value.trim(),
         siteUrl: root.querySelector('#notify-url').value.trim(),
@@ -5616,6 +5662,7 @@ function openNotifySettingsSheet() {
       try { local = JSON.parse(localStorage.getItem('jalees-notify-settings') || '{}'); } catch (e) { local = {}; }
       const pick = (key, serverValue) => String((local && local[key]) || serverValue || '');
       if (loaded.channel) channel.value = loaded.channel;
+      if (loaded.emailProvider) root.querySelector('#notify-email-provider').value = loaded.emailProvider;
       root.querySelector('#notify-tg-token').value = pick('telegramToken', '');
       const chatIds = String((local && local.telegramChat) || (loaded.telegramChats || []).join(', ') || loaded.telegramChat || '');
       root.querySelector('#notify-tg-chat').value = chatIds;
@@ -5625,6 +5672,9 @@ function openNotifySettingsSheet() {
       root.querySelector('#notify-brevo-key').value = pick('brevoKey', '');
       root.querySelector('#notify-brevo-from').value = pick('brevoFrom', loaded.brevoFrom);
       root.querySelector('#notify-brevo-name').value = pick('brevoName', loaded.brevoName);
+      root.querySelector('#notify-mailjet-public').value = pick('mailjetPublic', '');
+      root.querySelector('#notify-mailjet-private').value = pick('mailjetPrivate', '');
+      root.querySelector('#notify-mailjet-from').value = pick('mailjetFrom', loaded.mailjetFrom);
       root.querySelector('#notify-po-token').value = pick('pushoverToken', '');
       root.querySelector('#notify-po-user').value = pick('pushoverUser', '');
       root.querySelector('#notify-url').value = pick('siteUrl', loaded.siteUrl);

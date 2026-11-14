@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-14-r50';
+const CODE_VERSION = 'jalees-2026-11-14-r52';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -589,6 +589,7 @@ function pushSettings() {
     .filter(Boolean);
   return {
     channel: (get('JALEES_PUSH_CHANNEL', 'email') || 'email').toLowerCase(),
+    emailProvider: (get('JALEES_EMAIL_PROVIDER', 'email') || 'email').toLowerCase(),
     telegramToken: get('JALEES_TELEGRAM_TOKEN', ''),
     telegramChat: chats[0] || '',
     telegramChats: chats,
@@ -598,6 +599,9 @@ function pushSettings() {
     brevoKey: get('JALEES_BREVO_KEY', ''),
     brevoFrom: get('JALEES_BREVO_FROM', ''),
     brevoName: get('JALEES_BREVO_NAME', 'نادي جليس القرائي'),
+    mailjetPublic: get('JALEES_MAILJET_PUBLIC', ''),
+    mailjetPrivate: get('JALEES_MAILJET_PRIVATE', ''),
+    mailjetFrom: get('JALEES_MAILJET_FROM', ''),
     pushoverToken: get('JALEES_PUSHOVER_TOKEN', ''),
     pushoverUser: get('JALEES_PUSHOVER_USER', ''),
     types: get('JALEES_PUSH_TYPES', ''),
@@ -614,7 +618,12 @@ function pushEnabledTypes() {
 /* ---- الإرسال الفعلي إلى الجوال (تيليجرام / ntfy / Pushover / بريد) ---- */
 function sendPushNotification(ss, type, title, body, link) {
   const settings = pushSettings();
-  const channel = settings.channel;
+  const originalChannel = settings.channel;
+  let channel = originalChannel;
+  /* backward compat: old settings used channel=resend/brevo/mailjet for email updates */
+  if (['resend', 'brevo', 'mailjet'].indexOf(channel) >= 0) {
+    channel = 'email';
+  }
   if (!channel || channel === 'off' || channel === 'none') {
     return { sent: false, channel: channel, detail: 'الإرسال مُعطّل' };
   }
@@ -700,80 +709,59 @@ function sendPushNotification(ss, type, title, body, link) {
     }
 
     /* مزوّدات البريد الاحترافية: تُرسل التنبيه إلى بريد النادي (نفس سلوك قناة البريد) */
-    if (channel === 'resend') {
-      if (!settings.resendKey || !settings.resendFrom) throw new Error('إعدادات مزوّد البريد ناقصة (المفتاح أو المرسل)');
-      const html = '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+    /* إرسال تحديثات المشرف عبر البريد (email provider) — مستقل عن قناة التحديثات */
+    if (channel === 'email' || channel === 'resend' || channel === 'brevo' || channel === 'mailjet') {
+      const provider = (['resend', 'brevo', 'mailjet'].indexOf(originalChannel) >= 0)
+        ? originalChannel
+        : ((settings.emailProvider && settings.emailProvider !== 'email') ? settings.emailProvider : 'email');
+      const html = '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">'
         + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>'
         + '<h2 style="margin:0 0 10px">' + String(title || 'جليس') + '</h2>'
         + '<p>' + String(body || '') + '</p>'
         + (link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : '') + '</div>';
-      const res = UrlFetchApp.fetch('https://api.resend.com/emails', {
-        method: 'post',
-        contentType: 'application/json',
-        headers: { Authorization: 'Bearer ' + settings.resendKey },
-        payload: JSON.stringify({
-          from: settings.resendFrom,
-          to: [MAIL_FROM],
-          subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
-          text: text,
-          html: html
-        }),
-        muteHttpExceptions: true
-      });
-      const status = res.getResponseCode();
-      const responseBody = String(res.getContentText() || '');
-      if (status < 200 || status >= 300) throw new Error('مزوّد البريد ' + status + ': ' + responseBody.slice(0, 160));
-      return { sent: true, channel: channel, detail: 'أُرسل عبر مزوّد البريد' };
-    }
-
-    if (channel === 'brevo') {
-      if (!settings.brevoKey || !settings.brevoFrom) throw new Error('إعدادات Brevo ناقصة (المفتاح أو المرسل)');
-      const html = '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
-        + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>'
-        + '<h2 style="margin:0 0 10px">' + String(title || 'جليس') + '</h2>'
-        + '<p>' + String(body || '') + '</p>'
-        + (link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : '') + '</div>';
-      const res = UrlFetchApp.fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'post',
-        contentType: 'application/json',
-        headers: { 'api-key': settings.brevoKey },
-        payload: JSON.stringify({
-          sender: { name: settings.brevoName || 'نادي جليس القرائي', email: settings.brevoFrom },
-          to: [{ email: MAIL_FROM }],
-          subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
-          htmlContent: html,
-          textContent: text
-        }),
-        muteHttpExceptions: true
-      });
-      const status = res.getResponseCode();
-      const responseBody = String(res.getContentText() || '');
-      if (status < 200 || status >= 300) throw new Error('Brevo ' + status + ': ' + responseBody.slice(0, 160));
-      return { sent: true, channel: channel, detail: 'أُرسل عبر Brevo' };
-    }
-
-    if (channel === 'email') {
-      const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">
-        <p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>
-        <h2 style="margin:0 0 10px">${title || 'جليس'}</h2>
-        <p>${body || ''}</p>
-        ${link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : ''}
-      </div>`;
       const plain = ['نادي جليس القرائي', title || 'جليس', body || '', link || ''].filter(Boolean).join('\n');
-      const opts = {
-        to: MAIL_FROM,
-        subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
-        body: plain,
-        htmlBody: html
-      };
-      /* ملاحظة: MailApp لا يقبل إلا وسوم معروفة — الرابط يوضع داخل النص لا كخاصية */
-      try {
-        MailApp.sendEmail(opts);
-      } catch (firstError) {
-        MailApp.sendEmail({ to: MAIL_FROM, subject: opts.subject, body: plain, htmlBody: html });
+      if (provider === 'resend' && settings.resendKey && settings.resendFrom) {
+        const res = UrlFetchApp.fetch('https://api.resend.com/emails', {
+          method: 'post', contentType: 'application/json',
+          headers: { Authorization: 'Bearer ' + settings.resendKey },
+          payload: JSON.stringify({ from: settings.resendFrom, to: [MAIL_FROM], subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), text: plain, html: html }),
+          muteHttpExceptions: true
+        });
+        const status = res.getResponseCode();
+        const responseBody = String(res.getContentText() || '');
+        if (status < 200 || status >= 300) throw new Error('مزوّد البريد ' + status + ': ' + responseBody.slice(0, 160));
+        return { sent: true, channel: 'email', detail: 'أُرسل عبر مزوّد البريد' };
       }
-      return { sent: true, channel: channel, detail: 'أُرسل إلى بريد النادي' };
+      if (provider === 'brevo' && settings.brevoKey && settings.brevoFrom) {
+        const res = UrlFetchApp.fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'post', contentType: 'application/json',
+          headers: { 'api-key': settings.brevoKey },
+          payload: JSON.stringify({ sender: { name: settings.brevoName || 'نادي جليس القرائي', email: settings.brevoFrom }, to: [{ email: MAIL_FROM }], subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), htmlContent: html, textContent: plain }),
+          muteHttpExceptions: true
+        });
+        const status = res.getResponseCode();
+        const responseBody = String(res.getContentText() || '');
+        if (status < 200 || status >= 300) throw new Error('Brevo ' + status + ': ' + responseBody.slice(0, 160));
+        return { sent: true, channel: 'email', detail: 'أُرسل عبر Brevo' };
+      }
+      if (provider === 'mailjet' && settings.mailjetPublic && settings.mailjetPrivate && settings.mailjetFrom) {
+        const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
+        const res = UrlFetchApp.fetch('https://api.mailjet.com/v3.1/send', {
+          method: 'post', contentType: 'application/json',
+          headers: { Authorization: 'Basic ' + auth },
+          payload: JSON.stringify({ Messages: [{ From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' }, To: [{ Email: MAIL_FROM }], Subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), TextPart: plain, HTMLPart: html }] }),
+          muteHttpExceptions: true
+        });
+        const status = res.getResponseCode();
+        const responseBody = String(res.getContentText() || '');
+        if (status < 200 || status >= 300) throw new Error('Mailjet ' + status + ': ' + responseBody.slice(0, 160));
+        return { sent: true, channel: 'email', detail: 'أُرسل عبر Mailjet' };
+      }
+      const opts = { to: MAIL_FROM, subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), body: plain, htmlBody: html };
+      try { MailApp.sendEmail(opts); } catch (firstError) { MailApp.sendEmail({ to: MAIL_FROM, subject: opts.subject, body: plain, htmlBody: html }); }
+      return { sent: true, channel: 'email', detail: 'أُرسل إلى بريد النادي' };
     }
+
 
     return { sent: false, channel: channel, detail: 'قناة غير معروفة' };
   } catch (error) {
@@ -1241,14 +1229,50 @@ function sendViaBrevo(settings, to, subject, intro, code, name) {
   return true;
 }
 
+/* ---- إرسال عبر Mailjet (REST API v3.1) ---- */
+function sendViaMailjet(settings, to, subject, intro, code, name) {
+  if (!settings || !settings.mailjetPublic || !settings.mailjetPrivate || !settings.mailjetFrom) return false;
+  const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
+  const res = UrlFetchApp.fetch('https://api.mailjet.com/v3.1/send', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Basic ' + auth },
+    payload: JSON.stringify({
+      Messages: [{
+        From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
+        To: [{ Email: to, Name: name || 'عضو جليس' }],
+        Subject: subject,
+        TextPart: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
+        HTMLPart: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+          + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
+          + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
+          + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
+          + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>'
+      }]
+    }),
+    muteHttpExceptions: true
+  });
+  const status = res.getResponseCode();
+  const body = String(res.getContentText() || '');
+  if (status < 200 || status >= 300) throw new Error('Mailjet ' + status + ': ' + body.slice(0, 160));
+  return true;
+}
+
 function sendCodeEmail(email, name, code, subject, intro) {
-  /* إن كان مزوّد البريد مضبوطًا نستخدمه — وصوله مضمون */
+  /* مزوّد البريد (مستقل عن قناة التحديثات) — وصول مضمون */
   try {
     const providerSettings = pushSettings();
-    if (providerSettings.channel === 'resend' && sendViaResend(providerSettings, email, subject, intro, code, name)) {
+    /* backward compat: if emailProvider not set, fall back to channel */
+    const provider = (providerSettings.emailProvider && providerSettings.emailProvider !== 'email')
+      ? providerSettings.emailProvider
+      : (['resend', 'brevo', 'mailjet'].indexOf(providerSettings.channel) >= 0 ? providerSettings.channel : (providerSettings.emailProvider || 'email'));
+    if (provider === 'resend' && sendViaResend(providerSettings, email, subject, intro, code, name)) {
       return true;
     }
-    if (providerSettings.channel === 'brevo' && sendViaBrevo(providerSettings, email, subject, intro, code, name)) {
+    if (provider === 'brevo' && sendViaBrevo(providerSettings, email, subject, intro, code, name)) {
+      return true;
+    }
+    if (provider === 'mailjet' && sendViaMailjet(providerSettings, email, subject, intro, code, name)) {
       return true;
     }
   } catch (providerError) {
@@ -3046,6 +3070,10 @@ function doPost(e) {
       return output({
         success: true,
         channel: settings.channel,
+        emailProvider: settings.emailProvider || 'email',
+        telegramChat: settings.telegramChat || '',
+        telegramChats: String(settings.telegramChat || '').split(',').map((v) => v.trim()).filter(Boolean),
+        siteUrl: settings.siteUrl || '',
         hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
         hasNtfy: Boolean(settings.ntfyTopic),
         hasPushover: Boolean(settings.pushoverToken && settings.pushoverUser),
@@ -3053,6 +3081,8 @@ function doPost(e) {
         hasBrevo: Boolean(settings.brevoKey && settings.brevoFrom),
         brevoFrom: settings.brevoFrom,
         brevoName: settings.brevoName,
+        hasMailjet: Boolean(settings.mailjetPublic && settings.mailjetPrivate && settings.mailjetFrom),
+        mailjetFrom: settings.mailjetFrom,
         types: [...pushEnabledTypes()],
         allTypes: Object.keys(NOTIFICATION_TYPES),
         labels: NOTIFICATION_TYPES
@@ -3063,22 +3093,42 @@ function doPost(e) {
       const channel = String(data.channel || 'off').toLowerCase();
       const props = PropertiesService.getScriptProperties();
       const set = (key, value) => { try { props.setProperty(key, String(value || '')); } catch (error) {} };
+      /* الأسرار: لا نمسحها إن لم ترسلها الواجهة (نسخة قديمة) أو جاءت فارغة */
+      const setSecret = (key, value) => {
+        const v = String(value === undefined || value === null ? '' : value).trim();
+        if (!v) return;
+        set(key, v);
+      };
+      /* حقول اختيارية: تُحفظ فقط إن أرسلتها الواجهة */
+      const setIfPresent = (propKey, dataObj, field, transform) => {
+        if (!Object.prototype.hasOwnProperty.call(dataObj, field)) return;
+        const raw = dataObj[field] === undefined || dataObj[field] === null ? '' : dataObj[field];
+        const v = transform ? transform(raw) : String(raw).trim();
+        if (!v) return;
+        set(propKey, v);
+      };
       set('JALEES_PUSH_CHANNEL', channel);
-      set('JALEES_TELEGRAM_TOKEN', String(data.telegramToken || '').trim());
+      setIfPresent('JALEES_EMAIL_PROVIDER', data, 'emailProvider', (v) => String(v || 'email').toLowerCase());
+      setSecret('JALEES_TELEGRAM_TOKEN', data.telegramToken);
       /* عدة محادثات: نفصلها ونخزّنها موحّدة */
       const chatList = String(data.telegramChat || '').split(/[,;\n\r]+/).map((v) => v.trim()).filter(Boolean);
-      set('JALEES_TELEGRAM_CHAT', chatList.join(','));
-      set('JALEES_NTFY_TOPIC', String(data.ntfyTopic || '').trim());
-      set('JALEES_RESEND_KEY', String(data.resendKey || '').trim());
-      set('JALEES_RESEND_FROM', String(data.resendFrom || '').trim());
-      set('JALEES_BREVO_KEY', String(data.brevoKey || '').trim());
-      set('JALEES_BREVO_FROM', String(data.brevoFrom || '').trim());
-      set('JALEES_BREVO_NAME', String(data.brevoName || 'نادي جليس القرائي').trim());
-      set('JALEES_PUSHOVER_TOKEN', String(data.pushoverToken || '').trim());
-      set('JALEES_PUSHOVER_USER', String(data.pushoverUser || '').trim());
-      set('JALEES_SITE_URL', String(data.siteUrl || '').trim());
-      const types = Array.isArray(data.types) ? data.types.map((t) => String(t)).filter(Boolean) : [];
-      set('JALEES_PUSH_TYPES', types.join(','));
+      if (chatList.length) set('JALEES_TELEGRAM_CHAT', chatList.join(','));
+      setSecret('JALEES_NTFY_TOPIC', data.ntfyTopic);
+      setSecret('JALEES_RESEND_KEY', data.resendKey);
+      setIfPresent('JALEES_RESEND_FROM', data, 'resendFrom');
+      setSecret('JALEES_BREVO_KEY', data.brevoKey);
+      setIfPresent('JALEES_BREVO_FROM', data, 'brevoFrom');
+      setIfPresent('JALEES_BREVO_NAME', data, 'brevoName', (v) => String(v || 'نادي جليس القرائي').trim());
+      setSecret('JALEES_MAILJET_PUBLIC', data.mailjetPublic);
+      setSecret('JALEES_MAILJET_PRIVATE', data.mailjetPrivate);
+      setIfPresent('JALEES_MAILJET_FROM', data, 'mailjetFrom');
+      setSecret('JALEES_PUSHOVER_TOKEN', data.pushoverToken);
+      setIfPresent('JALEES_PUSHOVER_USER', data, 'pushoverUser');
+      setIfPresent('JALEES_SITE_URL', data, 'siteUrl');
+      if (Array.isArray(data.types)) {
+        const types = data.types.map((t) => String(t)).filter(Boolean);
+        set('JALEES_PUSH_TYPES', types.join(','));
+      }
       return output({ success: true, message: 'تم حفظ إعدادات التنبيهات', channel: channel });
     }
 
@@ -3200,6 +3250,8 @@ function doGet(e) {
         hasBrevo: Boolean(settings.brevoKey && settings.brevoFrom),
         brevoFrom: settings.brevoFrom,
         brevoName: settings.brevoName,
+        hasMailjet: Boolean(settings.mailjetPublic && settings.mailjetPrivate && settings.mailjetFrom),
+        mailjetFrom: settings.mailjetFrom,
         siteUrl: settings.siteUrl,
         hasTelegram: Boolean(settings.telegramToken && settings.telegramChat),
         hasNtfy: Boolean(settings.ntfyTopic),

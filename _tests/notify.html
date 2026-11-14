@@ -169,6 +169,13 @@
     const brevoPush = httpCalls.find((c) => c.url.indexOf('api.brevo.com') >= 0);
     ok('تنبيه Brevo إلى بريد النادي', !!brevoPush && String(brevoPush.options.payload).indexOf('jjalees.com@gmail.com') >= 0, brevoPush ? String(brevoPush.options.payload).slice(0, 160) : '');
 
+    await api('saveNotifySettings', { channel: 'mailjet', mailjetPublic: 'mj_push', mailjetPrivate: 'mj_push_priv', mailjetFrom: 'jjalees.com@gmail.com', types: ['register'] });
+    httpCalls.length = 0;
+    const testMailjet = await api('testNotification', {});
+    ok('تنبيه Mailjet ناجح', testMailjet.success === true && testMailjet.pushed === true, JSON.stringify(testMailjet));
+    const mailjetPush = httpCalls.find((c) => c.url.indexOf('api.mailjet.com') >= 0);
+    ok('تنبيه Mailjet إلى بريد النادي', !!mailjetPush && String(mailjetPush.options.payload).indexOf('jjalees.com@gmail.com') >= 0, mailjetPush ? String(mailjetPush.options.payload).slice(0, 160) : '');
+
     /* ===== 5ب) مشاركة البوت مع عدة مشرفين ===== */
     await api('saveNotifySettings', { channel: 'telegram', telegramToken: 'TOKEN123', telegramChat: '111, 222, -100333', types: ['register'] });
     httpCalls.length = 0;
@@ -240,6 +247,18 @@
     ok('الرمز داخل نص الرسالة', !!brevoCall && String(brevoCall.options.payload).match(/[0-9]{6}/) !== null, brevoCall ? String(brevoCall.options.payload).slice(0, 200) : '');
     const brevoSettings = await api('getNotifySettings');
     ok('Brevo مضبوط ويظهر للمشرف', brevoSettings.hasBrevo === true && String(brevoSettings.brevoFrom).indexOf('jjalees.com') >= 0, JSON.stringify(brevoSettings).slice(0, 160));
+
+    /* ===== 8هـ) مزوّد بريد (Mailjet) ===== */
+    await api('saveNotifySettings', { channel: 'mailjet', mailjetPublic: 'mj_pub_test', mailjetPrivate: 'mj_priv_test', mailjetFrom: 'jjalees.com@gmail.com', types: ['register'] });
+    httpCalls.length = 0;
+    const mailjetReq = await api('requestRegistrationCode', { name: 'عضو اختبار ميلجت', phone: '0508889999', email: 'mailjettest@example.com', password: 'كلمةسر456' });
+    ok('طلب رمز عبر Mailjet', mailjetReq.success === true, mailjetReq.error || '');
+    const mailjetCall = httpCalls.filter((c) => c.url.indexOf('api.mailjet.com') >= 0).pop();
+    ok('اتصل بخادم Mailjet', !!mailjetCall, JSON.stringify(httpCalls.map((c) => c.url)));
+    ok('ترويسة Basic Auth صحيحة', !!mailjetCall && String(mailjetCall.options.headers.Authorization || '').indexOf('Basic ') >= 0, mailjetCall ? JSON.stringify(mailjetCall.options.headers).slice(0, 120) : '');
+    ok('الرمز داخل نص الرسالة', !!mailjetCall && String(mailjetCall.options.payload).match(/[0-9]{6}/) !== null, mailjetCall ? String(mailjetCall.options.payload).slice(0, 200) : '');
+    const mailjetSettings = await api('getNotifySettings');
+    ok('Mailjet مضبوط ويظهر للمشرف', mailjetSettings.hasMailjet === true && String(mailjetSettings.mailjetFrom).indexOf('jjalees.com') >= 0, JSON.stringify(mailjetSettings).slice(0, 160));
 
     /* ===== 9) رمز طلب التسجيل يصل في تنبيه تيليجرام ===== */
     await api('saveNotifySettings', { channel: 'telegram', telegramToken: 'TOKEN123', telegramChat: '998877', types: ['register'] });
