@@ -81,7 +81,7 @@ const MAIN_API_ACTIONS = new Set([
   'describeSpreadsheet', 'organizeSheets', 'dedupeClubBooks', 'getLikes', 'toggleLike',
   'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile',
   'getActivities', 'saveActivity', 'deleteActivity',
-  'trashAudit', 'repairTrash', 'purgeDeletedItem'
+  'trashAudit', 'repairTrash', 'purgeDeletedItem', 'mailjetHealth'
 ]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
@@ -5480,7 +5480,11 @@ function openNotifySettingsSheet() {
   if (!isSupervisor()) { toast('الإعدادات للمشرفين فقط', 'info'); return; }
   openSheet(`
     ${sheetHead('إعدادات تنبيهات الجوال', 'أين تريد أن تصلك التنبيهات')}
-    <form id="notify-settings-form" class="meeting-form" novalidate>
+    <div class="notify-loading" id="notify-settings-loading">
+      <span class="notify-loading-dot"></span>
+      <span>جارٍ التحقق من الإعدادات المحفوظة…</span>
+    </div>
+    <form id="notify-settings-form" class="meeting-form" novalidate hidden>
       <div class="field">
         <label for="notify-channel">قناة الإرسال</label>
         <select class="input" id="notify-channel">
@@ -5497,7 +5501,7 @@ function openNotifySettingsSheet() {
         <select class="input" id="notify-email-provider">
           <option value="email">بريد النادي (MailApp)</option>
           <option value="brevo">Brevo / Sendinblue — ٣٠٠ رسالة/يوم بلا phone</option>
-          <option value="mailjet">Mailjet — ٦,٠٠٠ رسالة/شهر (بلا phone، بلا domain)</option>
+          <option value="mailjet">Mailjet — ٦,٠٠٠ رسالة/شهر (يحتاج توثيق النطاق)</option>
           <option value="resend">Resend — وصول مضمون (يحتاج domain)</option>
           <option value="off">إيقاف (لا رموز)</option>
         </select>
@@ -5544,8 +5548,12 @@ function openNotifySettingsSheet() {
       </div>
       <div class="field" data-ch="mailjet">
         <label for="notify-mailjet-from">البريد المرسل (موثّق في Mailjet)</label>
-        <input class="input" id="notify-mailjet-from" dir="ltr" placeholder="jjalees.com@gmail.com">
-        <small class="field-hint">هذا العنوان تضبطه في Mailjet: <b>Senders & Domains → Add a sender</b> ثم توثّقه.</small>
+        <input class="input" id="notify-mailjet-from" dir="ltr" placeholder="no-reply@jjalees.com">
+        <small class="field-hint">استخدم عنوانًا على نطاق النادي بعد توثيقه: <b>no-reply@jjalees.com</b>. لا تستخدم بريدًا مجانيًا مثل Gmail — الرسائل منه تصل للمهملات.</small>
+      </div>
+      <div class="field" data-ch="mailjet">
+        <button class="btn btn-sm btn-ghost" type="button" id="notify-mailjet-check"><svg class="ic"><use href="#i-check"/></svg> فحص جاهزية الإرسال</button>
+        <div class="notify-health" id="notify-mailjet-health" hidden></div>
       </div>
       <div class="field" data-ch="resend">
         <label for="notify-resend-key">مفتاح مزوّد البريد (Resend)</label>
@@ -5659,9 +5667,46 @@ function openNotifySettingsSheet() {
       }
     });
 
-    /* تحميل الإعدادات المحفوظة (من الخادم + ما ذُكر على هذا الجهاز) */
+    /* فحص جاهزية الإرسال: يُظهر سبب وصول الرسائل للمهملات بدل التخمين */
+    const healthBox = root.querySelector('#notify-mailjet-health');
+    const checkBtn = root.querySelector('#notify-mailjet-check');
+    if (checkBtn && healthBox) checkBtn.addEventListener('click', async () => {
+      healthBox.hidden = false;
+      healthBox.innerHTML = '<p class="notify-health-loading">جارٍ فحص Mailjet والنطاق…</p>';
+      checkBtn.disabled = true;
+      const payload = readPayload();
+      await cloudRequest('saveNotifySettings', payload);
+      try { localStorage.setItem('jalees-notify-settings', JSON.stringify(payload)); } catch (e) {}
+      const result = await cloudRequest('mailjetHealth', {});
+      checkBtn.disabled = false;
+      const health = result && result.success === true ? result.health : null;
+      if (!health) {
+        healthBox.innerHTML = '<p class="notify-health-bad">تعذّر الفحص — تحقق من المفاتيح والاتصال</p>';
+        return;
+      }
+      const line = (label, ok, extra) => `<li class="${ok ? 'ok' : 'bad'}"><span>${ok ? '✓' : '✕'}</span> ${esc(label)}${extra ? ` <small>${esc(extra)}</small>` : ''}</li>`;
+      healthBox.innerHTML = `
+        <div class="notify-health-head ${health.ok ? 'ok' : 'bad'}">${health.ok ? 'الإرسال جاهز' : 'الإرسال غير جاهز — الرسائل ستصل للمهملات'}</div>
+        <ul class="notify-health-list">
+          ${line('البريد المرسل: ' + (health.from || '—'), health.senderActive, health.senderStatus || (health.senderFound ? '' : 'غير مضاف في Mailjet'))}
+          ${line('توثيق النطاق ' + (health.domain || ''), health.domainAuthenticated, (health.authenticatedDomains || []).join('، '))}
+          ${line('سجل SPF', health.spf)}
+          ${line('سجل DKIM من Mailjet', health.dkim)}
+          ${line('سجل DMARC', health.dmarc)}
+        </ul>
+        ${health.issues && health.issues.length ? `<ul class="notify-health-issues">${health.issues.map((issue) => `<li>${esc(issue)}</li>`).join('')}</ul>` : ''}`;
+    });
+    /* تحميل الإعدادات المحفوظة (من الخادم + ما ذُكر على هذا الجهاز)
+       لا نُظهر النموذج قبل وصع القيم — حتى لا تظهر القناة الافتراضية ثم تتغيّر أمام المشرف */
     (async () => {
-      const settings = await cloudRequest('getNotifySettings');
+      const loading = root.querySelector('#notify-settings-loading');
+      const form = root.querySelector('#notify-settings-form');
+      const reveal = () => {
+        if (loading) loading.hidden = true;
+        if (form) form.hidden = false;
+      };
+      let settings = null;
+      try { settings = await cloudRequest('getNotifySettings'); } catch (e) { settings = null; }
       const loaded = settings && settings.success === true ? settings : {};
       let local = {};
       try { local = JSON.parse(localStorage.getItem('jalees-notify-settings') || '{}'); } catch (e) { local = {}; }
@@ -5690,6 +5735,14 @@ function openNotifySettingsSheet() {
         return `<label class="notify-type"><input type="checkbox" value="${esc(type)}" ${enabled.has(type) ? 'checked' : ''}> ${esc(label)}</label>`;
       }).join('');
       applyChannel();
+      applyEmailProvider();
+      if (!loaded.success) fail('لم أستطع قراءة الإعدادات من الخادم — القيم المعروضة محفوظة على هذا الجهاز فقط');
+      reveal();
+      /* عند اختيار Mailjet: نفحص الجاهزية تلقائيًا — حتى لا يكتشف العضو المهملات بالصدفة */
+      if (root.querySelector('#notify-email-provider').value === 'mailjet') {
+        const autoCheck = root.querySelector('#notify-mailjet-check');
+        if (autoCheck) autoCheck.click();
+      }
     })();
   });
 }

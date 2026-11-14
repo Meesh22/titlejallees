@@ -506,6 +506,19 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .notify-type input { accent-color: var(--green-600); }
 .notify-actions { display: flex; gap: 8px; margin-top: 12px; }
 .notify-actions .btn { flex: 1; }
+/* حالة التحقق قبل ظهور النموذج — تمنع ظهور قيمة قديمة ثم تبديلها */
+.notify-loading {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 120px; padding: 18px 8px;
+  color: var(--muted-2); font-size: 10px; font-weight: 700;
+}
+.notify-loading[hidden] { display: none; }
+.notify-loading-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold-500, #c59b63);
+  animation: notify-pulse 1s ease-in-out infinite;
+}
+@keyframes notify-pulse { 0%,100% { opacity:.35; transform:scale(.85); } 50% { opacity:1; transform:scale(1); } }
 
 /* طلبات التسجيل المعلّقة مع الرموز */
 .pending-registrations {
@@ -540,6 +553,22 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .notify-guide p { font-size: 9.5px; line-height: 1.85; color: var(--muted); margin: 0 0 3px; }
 .notify-guide p:last-child { margin-bottom: 0; }
 .notify-guide b { color: var(--gold-700); font-weight: 700; }
+
+/* نتيجة فحص جاهزية الإرسال */
+.notify-health { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #FCFBF5; }
+.notify-health[hidden] { display: none; }
+.notify-health-loading { margin: 0; color: var(--muted-2); font-size: 9.5px; text-align: center; }
+.notify-health-bad { margin: 0; color: var(--clay); font-size: 9.5px; font-weight: 700; }
+.notify-health-head { font-size: 10px; font-weight: 800; margin-bottom: 6px; }
+.notify-health-head.ok { color: var(--green-700); }
+.notify-health-head.bad { color: var(--clay); }
+.notify-health-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.notify-health-list li { display: flex; align-items: flex-start; gap: 6px; font-size: 9px; line-height: 1.6; color: var(--muted); }
+.notify-health-list li span { flex: none; font-weight: 900; }
+.notify-health-list li.ok span { color: #4e9b73; }
+.notify-health-list li.bad span { color: var(--clay); }
+.notify-health-list li small { color: var(--muted-2); font-size: 8px; }
+.notify-health-issues { margin: 7px 0 0; padding-inline-start: 14px; display: grid; gap: 3px; color: var(--clay); font-size: 8.5px; line-height: 1.7; }
 
 .avatar-btn {
   width: 38px;

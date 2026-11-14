@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-15-r55';
+const CODE_VERSION = 'jalees-2026-11-15-r56';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -862,8 +862,16 @@ function pushSettings() {
     pushoverToken: get('JALEES_PUSHOVER_TOKEN', ''),
     pushoverUser: get('JALEES_PUSHOVER_USER', ''),
     types: get('JALEES_PUSH_TYPES', ''),
-    siteUrl: get('JALEES_SITE_URL', '')
+    siteUrl: normalizeSiteUrl(get('JALEES_SITE_URL', ''))
   };
+}
+
+/* رابط الموقع: نضيف https:// تلقائيًا — الروابط بلا بروتوكول تُصنّف مشبوهة في البريد */
+function normalizeSiteUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return 'https://' + url.replace(/^\/+/, '');
 }
 
 function pushEnabledTypes() {
@@ -1486,6 +1494,99 @@ function sendViaBrevo(settings, to, subject, intro, code, name) {
   return true;
 }
 
+/* ---- فحص جاهزية الإرسال: المرسل في Mailjet + توثيق النطاق + DMARC ---- */
+function dnsTxtRecords(name) {
+  try {
+    const res = UrlFetchApp.fetch(
+      'https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(name) + '&type=TXT',
+      { headers: { accept: 'application/dns-json' }, muteHttpExceptions: true }
+    );
+    const body = JSON.parse(String(res.getContentText() || '{}'));
+    return (body.Answer || []).map((a) => String(a.data || '').replace(/^"|"$/g, '').replace(/"\s*"/g, ''));
+  } catch (error) {
+    return [];
+  }
+}
+
+function mailjetHealth(settings) {
+  const from = String((settings && settings.mailjetFrom) || '').trim();
+  const health = {
+    configured: Boolean(settings && settings.mailjetPublic && settings.mailjetPrivate && from),
+    from: from,
+    domain: from.indexOf('@') >= 0 ? from.split('@').pop().toLowerCase() : '',
+    senderActive: false,
+    senderStatus: '',
+    senderFound: false,
+    domainAuthenticated: false,
+    authenticatedDomains: [],
+    spf: false,
+    dkim: false,
+    dmarc: false,
+    issues: [],
+    ok: false
+  };
+  if (!health.configured) {
+    health.issues.push('بيانات Mailjet غير مكتملة (المفاتيح أو البريد المرسل)');
+    return health;
+  }
+
+  const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
+  const api = (path) => {
+    const res = UrlFetchApp.fetch('https://api.mailjet.com' + path, {
+      headers: { Authorization: 'Basic ' + auth }, muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    let body = {};
+    try { body = JSON.parse(String(res.getContentText() || '{}')); } catch (error) { body = {}; }
+    return { code: code, body: body };
+  };
+
+  const senders = api('/v3/REST/sender?Limit=100');
+  if (senders.code >= 200 && senders.code < 300) {
+    (senders.body.Data || []).forEach((sender) => {
+      const email = String(sender.Email || '').toLowerCase();
+      if (email !== from.toLowerCase()) return;
+      health.senderFound = true;
+      health.senderStatus = String(sender.Status || '');
+      health.senderActive = /^active$/i.test(health.senderStatus);
+    });
+    if (!health.senderFound) health.issues.push('البريد المرسل غير مضاف في Mailjet');
+    else if (!health.senderActive) health.issues.push('البريد المرسل غير مُفعّل في Mailjet (' + (health.senderStatus || 'غير معروف') + ')');
+  } else {
+    health.issues.push('تعذّر قراءة مرسلي Mailjet — تحقق من المفاتيح');
+  }
+
+  const domains = api('/v3/REST/dns?Limit=50');
+  if (domains.code >= 200 && domains.code < 300) {
+    health.authenticatedDomains = (domains.body.Data || [])
+      .map((item) => String(item.Domain || '').toLowerCase())
+      .filter(Boolean);
+    health.domainAuthenticated = health.authenticatedDomains.indexOf(health.domain) >= 0;
+    if (!health.domainAuthenticated) health.issues.push('نطاق ' + health.domain + ' غير موثّق في Mailjet (SPF/DKIM)');
+  } else {
+    health.issues.push('تعذّر قراءة نطاقات Mailjet الموثّقة');
+  }
+
+  if (health.domain && ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'icloud.com'].indexOf(health.domain) >= 0) {
+    health.issues.push('البريد المرسل على نطاق مجاني — استخدم عنوانًا على نطاق النادي');
+  }
+
+  const spfRecords = dnsTxtRecords(health.domain);
+  health.spf = spfRecords.some((record) => /v=spf1/i.test(record));
+  if (!health.spf) health.issues.push('لا يوجد سجل SPF للنطاق');
+
+  const dkimRecords = dnsTxtRecords('mailjet._domainkey.' + health.domain);
+  health.dkim = dkimRecords.some((record) => /p=/i.test(record));
+  if (!health.dkim) health.issues.push('لا يوجد سجل DKIM من Mailjet للنطاق');
+
+  const dmarcRecords = dnsTxtRecords('_dmarc.' + health.domain);
+  health.dmarc = dmarcRecords.some((record) => /v=DMARC1/i.test(record));
+  if (!health.dmarc) health.issues.push('لا يوجد سجل DMARC للنطاق');
+
+  health.ok = health.issues.length === 0;
+  return health;
+}
+
 /* ---- إرسال عبر Mailjet (REST API v3.1) ---- */
 function sendViaMailjet(settings, to, subject, intro, code, name) {
   if (!settings || !settings.mailjetPublic || !settings.mailjetPrivate || !settings.mailjetFrom) return false;
@@ -1534,7 +1635,8 @@ function sendCodeEmail(email, name, code, subject, intro) {
       return true;
     }
   } catch (providerError) {
-    /* نكمل بالبريد العادي إن فشل المزوّد */
+    /* نسجّل فشل المزوّد قبل اللجوء للبريد العادي — حتى لا يختفي السبب */
+    try { logMailAttempt(resolveSpreadsheet(), email, 'provider-failed', String((providerError && providerError.message) || providerError).slice(0, 180), ''); } catch (logError) { /* تجاهل */ }
   }
 
   const plainBody = [
@@ -3493,12 +3595,16 @@ function doPost(e) {
       setIfPresent('JALEES_MAILJET_FROM', data, 'mailjetFrom');
       setSecret('JALEES_PUSHOVER_TOKEN', data.pushoverToken);
       setIfPresent('JALEES_PUSHOVER_USER', data, 'pushoverUser');
-      setIfPresent('JALEES_SITE_URL', data, 'siteUrl');
+      setIfPresent('JALEES_SITE_URL', data, 'siteUrl', normalizeSiteUrl);
       if (Array.isArray(data.types)) {
         const types = data.types.map((t) => String(t)).filter(Boolean);
         set('JALEES_PUSH_TYPES', types.join(','));
       }
       return output({ success: true, message: 'تم حفظ إعدادات التنبيهات', channel: channel });
+    }
+
+    if (action === 'mailjetHealth') {
+      return output({ success: true, health: mailjetHealth(pushSettings()) });
     }
 
     if (action === 'testNotification') {

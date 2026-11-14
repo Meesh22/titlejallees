@@ -1,5 +1,5 @@
 /* عامل الخدمة: يتيح تثبيت الموقع على الجوال واستقبال التنبيهات */
-const CACHE = 'jalees-v46';
+const CACHE = 'jalees-v47';
 const CORE = ['./', './index.html', './app.js', './app.css', './logo-icon.png', './manifest.json'];
 
 self.addEventListener('install', (event) => {
