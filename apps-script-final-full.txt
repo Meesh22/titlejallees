@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-15-r56';
+const CODE_VERSION = 'jalees-2026-11-15-r57';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -1541,18 +1541,24 @@ function mailjetHealth(settings) {
     return { code: code, body: body };
   };
 
-  const senders = api('/v3/REST/sender?Limit=100');
+  const senders = api('/v3/REST/sender?Limit=50');
+  let sendersSeen = -1;
   if (senders.code >= 200 && senders.code < 300) {
-    (senders.body.Data || []).forEach((sender) => {
-      const email = String(sender.Email || '').toLowerCase();
-      if (email !== from.toLowerCase()) return;
+    const list = (senders.body.Data || []);
+    sendersSeen = list.length;
+    list.forEach((sender) => {
+      const email = String(sender.Email || '').replace(/\s/g, '').toLowerCase();
+      if (email !== from.replace(/\s/g, '').toLowerCase()) return;
       health.senderFound = true;
       health.senderStatus = String(sender.Status || '');
       health.senderActive = /^active$/i.test(health.senderStatus);
     });
-    if (!health.senderFound) health.issues.push('البريد المرسل غير مضاف في Mailjet');
-    else if (!health.senderActive) health.issues.push('البريد المرسل غير مُفعّل في Mailjet (' + (health.senderStatus || 'غير معروف') + ')');
+    /* تشخيص للدعم الفني: أضف عدد المرسلين الذين رآهم السكربت */
+    if (!health.senderFound) health.sendersSeen = sendersSeen;
+    if (!health.senderFound) health.issues.push('لم أستطع التحقق من المرسل داخل Mailjet (مرسلون ظاهرون: ' + sendersSeen + ') — أكّد تفعيله من رسالة Mailjet؛ لا يمكن إرسال رموز قبل التفعيل من بريدك');
+    else if (!health.senderActive) health.issues.push('البريد المرسل غير مُفعّل في Mailjet (' + (health.senderStatus || 'غير معروف') + ') — انقر رابط التفعيل في رسالة Mailjet');
   } else {
+    health.sendersSeen = 0;
     health.issues.push('تعذّر قراءة مرسلي Mailjet — تحقق من المفاتيح');
   }
 

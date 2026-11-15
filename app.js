@@ -5711,23 +5711,25 @@ function openNotifySettingsSheet() {
       let local = {};
       try { local = JSON.parse(localStorage.getItem('jalees-notify-settings') || '{}'); } catch (e) { local = {}; }
       const pick = (key, serverValue) => String((local && local[key]) || serverValue || '');
+      /* الحقول غير السرية: الخادم هو المرجع — حتى لا تطغى نسخة قديمة في المتصفح على ما حفظه المشرف */
+      const pickServer = (key, serverValue) => String(serverValue || (local && local[key]) || '');
       if (loaded.channel) channel.value = loaded.channel;
       if (loaded.emailProvider) root.querySelector('#notify-email-provider').value = loaded.emailProvider;
       root.querySelector('#notify-tg-token').value = pick('telegramToken', '');
-      const chatIds = String((local && local.telegramChat) || (loaded.telegramChats || []).join(', ') || loaded.telegramChat || '');
+      const chatIds = String((loaded.telegramChats || []).join(', ') || loaded.telegramChat || (local && local.telegramChat) || '');
       root.querySelector('#notify-tg-chat').value = chatIds;
-      root.querySelector('#notify-ntfy').value = pick('ntfyTopic', loaded.ntfyTopic);
+      root.querySelector('#notify-ntfy').value = pickServer('ntfyTopic', loaded.ntfyTopic);
       root.querySelector('#notify-resend-key').value = pick('resendKey', '');
-      root.querySelector('#notify-resend-from').value = pick('resendFrom', '');
+      root.querySelector('#notify-resend-from').value = pickServer('resendFrom', loaded.resendFrom);
       root.querySelector('#notify-brevo-key').value = pick('brevoKey', '');
-      root.querySelector('#notify-brevo-from').value = pick('brevoFrom', loaded.brevoFrom);
-      root.querySelector('#notify-brevo-name').value = pick('brevoName', loaded.brevoName);
+      root.querySelector('#notify-brevo-from').value = pickServer('brevoFrom', loaded.brevoFrom);
+      root.querySelector('#notify-brevo-name').value = pickServer('brevoName', loaded.brevoName);
       root.querySelector('#notify-mailjet-public').value = pick('mailjetPublic', '');
       root.querySelector('#notify-mailjet-private').value = pick('mailjetPrivate', '');
-      root.querySelector('#notify-mailjet-from').value = pick('mailjetFrom', loaded.mailjetFrom);
+      root.querySelector('#notify-mailjet-from').value = pickServer('mailjetFrom', loaded.mailjetFrom);
       root.querySelector('#notify-po-token').value = pick('pushoverToken', '');
       root.querySelector('#notify-po-user').value = pick('pushoverUser', '');
-      root.querySelector('#notify-url').value = pick('siteUrl', loaded.siteUrl);
+      root.querySelector('#notify-url').value = pickServer('siteUrl', loaded.siteUrl);
       const allTypes = loaded.allTypes || Object.keys(NOTIFY_ICONS);
       const enabled = new Set(loaded.types && loaded.types.length ? loaded.types : allTypes);
       typesBox.innerHTML = allTypes.map((type) => {
