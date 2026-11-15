@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-15-r57';
+const CODE_VERSION = 'jalees-2026-11-15-r59';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -643,6 +643,23 @@ function ensureMeetingCropColumns(sheet) {
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('imageScale');
 }
 
+/* التاريخ كنص «yyyy-mm-dd» دائمًا — يمنع تحويل جوجل شيت له لقيمة تاريخية تعود بيوم عند الحفظ */
+function dateOnlyText(value) {
+  if (!value && value !== 0) return '';
+  if (value instanceof Date) {
+    try {
+      const tz = Session.getScriptTimeZone ? Session.getScriptTimeZone() : 'Asia/Riyadh';
+      return Utilities.formatDate(value, tz || 'Asia/Riyadh', 'yyyy-MM-dd');
+    } catch (error) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return value.getFullYear() + '-' + pad(value.getMonth() + 1) + '-' + pad(value.getDate());
+    }
+  }
+  const text = String(value).trim();
+  const match = text.match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : text;
+}
+
 function getRecordedMeetingsSheet(ss) {
   const target = resolveSpreadsheet(ss);
   let sheet = target.getSheetByName(RECORDED_MEETINGS_SHEET);
@@ -822,6 +839,7 @@ const NOTIFICATION_TYPES = {
   archive: { label: 'أرشيف', icon: 'library' },
   window: { label: 'نافذة قرائية', icon: 'quote' },
   selection: { label: 'اقتباس مختار', icon: 'quote' },
+  quote: { label: 'اقتباس', icon: 'quote' },
   summary: { label: 'ملخص', icon: 'book' },
   member: { label: 'عضو', icon: 'user' }
 };
@@ -979,7 +997,9 @@ function sendPushNotification(ss, type, title, body, link) {
       const provider = (['resend', 'brevo', 'mailjet'].indexOf(originalChannel) >= 0)
         ? originalChannel
         : ((settings.emailProvider && settings.emailProvider !== 'email') ? settings.emailProvider : 'email');
+      const logo = getMailLogo();
       const html = '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">'
+        + (logo ? mailLogoHtml() : '')
         + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>'
         + '<h2 style="margin:0 0 10px">' + String(title || 'جليس') + '</h2>'
         + '<p>' + String(body || '') + '</p>'
@@ -1011,10 +1031,25 @@ function sendPushNotification(ss, type, title, body, link) {
       }
       if (provider === 'mailjet' && settings.mailjetPublic && settings.mailjetPrivate && settings.mailjetFrom) {
         const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
+        const message = {
+          From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
+          To: [{ Email: MAIL_FROM }],
+          Subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
+          TextPart: plain,
+          HTMLPart: html
+        };
+        if (logo) {
+          message.InlinedAttachments = [{
+            ContentType: 'image/png',
+            Filename: MAIL_LOGO_NAME,
+            Base64Content: logo.base64,
+            ContentID: MAIL_LOGO_CID
+          }];
+        }
         const res = UrlFetchApp.fetch('https://api.mailjet.com/v3.1/send', {
           method: 'post', contentType: 'application/json',
           headers: { Authorization: 'Basic ' + auth },
-          payload: JSON.stringify({ Messages: [{ From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' }, To: [{ Email: MAIL_FROM }], Subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), TextPart: plain, HTMLPart: html }] }),
+          payload: JSON.stringify({ Messages: [message] }),
           muteHttpExceptions: true
         });
         const status = res.getResponseCode();
@@ -1023,6 +1058,7 @@ function sendPushNotification(ss, type, title, body, link) {
         return { sent: true, channel: 'email', detail: 'أُرسل عبر Mailjet' };
       }
       const opts = { to: MAIL_FROM, subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), body: plain, htmlBody: html };
+      if (logo) opts.inlineImages = { [MAIL_LOGO_CID]: Utilities.newBlob(logo.bytes, 'image/png', MAIL_LOGO_NAME) };
       try { MailApp.sendEmail(opts); } catch (firstError) { MailApp.sendEmail({ to: MAIL_FROM, subject: opts.subject, body: plain, htmlBody: html }); }
       return { sent: true, channel: 'email', detail: 'أُرسل إلى بريد النادي' };
     }
@@ -1593,28 +1629,58 @@ function mailjetHealth(settings) {
   return health;
 }
 
+/* ---- شعار البريد: يُرفق داخليًا (CID) ليظهر في كل عملاء البريد حتى عند حظر الصور الخارجية ---- */
+const MAIL_LOGO_CID = 'jaleeslogo';
+const MAIL_LOGO_NAME = 'logo.png';
+
+function getMailLogo() {
+  try {
+    const site = String((pushSettings().siteUrl || 'https://jjalees.com')).replace(/\/+$/, '') || 'https://jjalees.com';
+    const res = UrlFetchApp.fetch(site + '/logo.png', { muteHttpExceptions: true });
+    if (res.getResponseCode() < 200 || res.getResponseCode() >= 300) return null;
+    const bytes = res.getBlob().getBytes();
+    if (!bytes || !bytes.length || bytes.length > 512 * 1024) return null;
+    return { base64: Utilities.base64Encode(bytes), bytes: bytes };
+  } catch (error) {
+    return null;
+  }
+}
+
+function mailLogoHtml() {
+  return '<div style="text-align:center;padding:2px 0 12px"><img src="cid:' + MAIL_LOGO_CID + '" width="84" alt="نادي جليس القرائي" style="display:block;margin:0 auto"></div>';
+}
+
 /* ---- إرسال عبر Mailjet (REST API v3.1) ---- */
 function sendViaMailjet(settings, to, subject, intro, code, name) {
   if (!settings || !settings.mailjetPublic || !settings.mailjetPrivate || !settings.mailjetFrom) return false;
   const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
+  const logo = getMailLogo();
+  const message = {
+    From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
+    To: [{ Email: to, Name: name || 'عضو جليس' }],
+    Subject: subject,
+    Headers: { 'Reply-To': MAIL_REPLY },
+    TextPart: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
+    HTMLPart: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
+      + (logo ? mailLogoHtml() : '')
+      + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
+      + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
+      + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
+      + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>'
+  };
+  if (logo) {
+    message.InlinedAttachments = [{
+      ContentType: 'image/png',
+      Filename: MAIL_LOGO_NAME,
+      Base64Content: logo.base64,
+      ContentID: MAIL_LOGO_CID
+    }];
+  }
   const res = UrlFetchApp.fetch('https://api.mailjet.com/v3.1/send', {
     method: 'post',
     contentType: 'application/json',
     headers: { Authorization: 'Basic ' + auth },
-    payload: JSON.stringify({
-      Messages: [{
-        From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
-        To: [{ Email: to, Name: name || 'عضو جليس' }],
-        Subject: subject,
-        Headers: { 'Reply-To': MAIL_REPLY },
-        TextPart: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
-        HTMLPart: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
-          + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
-          + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
-          + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
-          + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>'
-      }]
-    }),
+    payload: JSON.stringify({ Messages: [message] }),
     muteHttpExceptions: true
   });
   const status = res.getResponseCode();
@@ -1655,7 +1721,9 @@ function sendCodeEmail(email, name, code, subject, intro) {
     '',
     'الرمز صالح لمدة ١٥ دقيقة. إذا لم تطلب هذا الرمز، تجاهله.'
   ].join('\n');
+  const logo = getMailLogo();
   const htmlBody = `<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">
+      ${logo ? mailLogoHtml() : ''}
       <p>مرحباً ${name}،</p>
       <p>${intro}</p>
       <p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">${code}</p>
@@ -1681,6 +1749,9 @@ function sendCodeEmail(email, name, code, subject, intro) {
     const opts = { ...base };
     if (bcc) opts.bcc = bcc;
     if (withFrom) opts.from = MAIL_FROM;
+    if (logo) {
+      opts.inlineImages = { [MAIL_LOGO_CID]: Utilities.newBlob(logo.bytes, 'image/png', MAIL_LOGO_NAME) };
+    }
     return opts;
   };
 
@@ -3345,7 +3416,7 @@ function doPost(e) {
       if (!recordId) throw new Error('معرّف التسجيل مطلوب');
 
       const rowData = [
-        recordId, data.title || '', data.description || '', data.recordedAt || '',
+        recordId, data.title || '', data.description || '', dateOnlyText(data.recordedAt),
         data.speaker || '', Number(data.views) || 0, data.duration || '',
         data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || '',
         '', '', data.type || '', data.location || '', storeImageList(data.images, 'recording')
@@ -3355,12 +3426,16 @@ function doPost(e) {
         const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === recordId) {
-            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            const row = i + 2;
+            sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
+            /* نكتب التاريخ كنص حرفيًا حتى لا يتحول لتاريخ شيت ويفقد يومًا */
+            sheet.getRange(row, 4).setNumberFormat('@').setValue(dateOnlyText(data.recordedAt));
             return output({ success: true, message: 'تم تحديث التسجيل' });
           }
         }
       }
       sheet.appendRow(rowData);
+      sheet.getRange(sheet.getLastRow(), 4).setNumberFormat('@').setValue(dateOnlyText(data.recordedAt));
       notifySupervisors(
         ss, 'archive',
         'مدخل جديد في الأرشيف',
@@ -3686,16 +3761,26 @@ function doPost(e) {
     const sheet = getQuotesSheet(ss);
 
     ensureQuoteDeleteColumns(sheet);
+    const quoteId = String(data.id || `q-${Date.now()}`);
     sheet.appendRow([
       data.created_at || new Date().toLocaleString('ar-SA'),
       data.author_name || '',
       data.page_number || data.page_numbe || '',
       data.book_title || '',
       data.quote_text || '',
-      data.id || `q-${Date.now()}`,
+      quoteId,
       '', '', data.book_author || ''
     ]);
-    return output({ status: 'success', message: 'تم حفظ الاقتباس' });
+    /* إشعار المشرفين عند نشر اقتباس جديد — كان يُحفظ بدون أي تنبيه */
+    try {
+      notifySupervisors(
+        ss, 'quote',
+        'اقتباس جديد من ' + (String(data.author_name || '').trim() || 'عضو'),
+        String(data.quote_text || '').slice(0, 140),
+        '', '', String(data.author_name || 'عضو')
+      );
+    } catch (notifyError) { /* التنبيه لا يمنع الحفظ */ }
+    return output({ status: 'success', id: quoteId, message: 'تم حفظ الاقتباس' });
   } catch (error) {
     return output({ success: false, status: 'error', error: error.toString() });
   }
@@ -4281,7 +4366,7 @@ function doGet(e) {
         if (!row[0]) return;
         if (row[11]) { deletedIds.push(String(row[0])); return; }
         recordings.push({
-          id: row[0], title: row[1], description: row[2], recordedAt: row[3],
+          id: row[0], title: row[1], description: row[2], recordedAt: dateOnlyText(row[3]),
           speaker: row[4], views: Number(row[5]) || 0, duration: row[6],
           videoUrl: row[7], image: row[8], createdAt: row[9], createdBy: row[10],
           type: row[13] || '', location: row[14] || '', images: parseImageList(row[15])

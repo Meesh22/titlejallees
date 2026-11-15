@@ -3817,6 +3817,16 @@ textarea::placeholder { color: #A9B1AC; }
   color: var(--green-700);
 }
 .sheet-close .ic { width: 15px; height: 15px; }
+/* مجموعة أزرار رأس النافذة: زر رجوع بجانب إغلاق */
+.sheet-head-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.sheet-back {
+  flex: none; width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(30, 58, 43, 0.06);
+  color: var(--green-700);
+}
+.sheet-back .ic { width: 15px; height: 15px; }
 
 .book-sheet-top { display: flex; gap: 14px; }
 .book-sheet-cover { flex: none; width: 98px; }

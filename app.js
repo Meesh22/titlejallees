@@ -1443,19 +1443,22 @@ function openArchivePhotosViewer(id) {
         <h2>${esc(record.title || 'صور اللقاء')}</h2>
         <p>${toAr(gallery.length)} صورة</p>
       </div>
-      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
-        <svg class="ic"><use href="#i-close"/></svg>
-      </button>
+      <div class="sheet-head-actions">
+        <button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>
+        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+          <svg class="ic"><use href="#i-close"/></svg>
+        </button>
+      </div>
     </div>
     <div class="archive-photos-viewer">
       ${gallery.map((src, index) => `<img src="${esc(src)}" alt="صورة ${toAr(index + 1)}" loading="lazy" decoding="async">`).join('')}
-    </div>`, null, { fullscreen: true });
+    </div>`, null, { fullscreen: true, backTo: openMeetingArchiveSheet });
 }
 
 function openMeetingArchiveSheet() {
   const localMeetings = (state.recordedMeetings || []).slice().sort((a, b) => recordedMeetingTimestamp(b) - recordedMeetingTimestamp(a));
   openSheet(`
-    ${sheetHead('أرشيف النادي', 'كل لقاءات جليس السابقة بصورها ومعلوماتها — مناقشات كتب وزيارات واستضافات')}
+    ${sheetHead('أرشيف النادي', 'كل لقاءات جليس السابقة بصورها ومعلوماتها — مناقشات كتب وزيارات واستضافات', { back: true })}
     <div class="recorded-meetings-toolbar">
       <p>سجلّ النادي الكامل: تضع الإدارة كل لقاء سابق مع صوره وتفاصيله.</p>
       ${isSupervisor() ? `<button class="btn btn-sm btn-primary" type="button" data-action="add-recorded-meeting"><svg class="ic"><use href="#i-plus"/></svg> إضافة لقاء</button>` : ''}
@@ -1475,7 +1478,7 @@ function openMeetingArchiveSheet() {
       if (currentMember && currentMember.id !== 'guest') await saveState();
       renderRecordedMeetings(root, state.recordedMeetings);
     });
-  });
+  }, { backTo: openMoreSheet });
 }
 
 function openRecordedMeetingComposer(recordId = '') {
@@ -4233,25 +4236,31 @@ function celebrate() {
   setTimeout(() => { layer.innerHTML = ''; }, 2200);
 }
 
-function sheetHead(title, subtitle = '') {
+function sheetHead(title, subtitle = '', opts = {}) {
   return `
     <div class="sheet-head">
       <div>
         <h2>${esc(title)}</h2>
         ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
       </div>
-      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
-        <svg class="ic"><use href="#i-close"/></svg>
-      </button>
+      <div class="sheet-head-actions">
+        ${opts.back ? '<button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>' : ''}
+        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+          <svg class="ic"><use href="#i-close"/></svg>
+        </button>
+      </div>
     </div>`;
 }
 
 let sheetGeneration = 0;
+/* مكدس رجوع النوافذ: السهم يعود للقائمة/العرض السابق بدل سلوك × */
+let sheetBacks = [];
 
 function openSheet(html, onOpen, options = {}) {
   const root = $('#sheet-root');
   const fullscreen = Boolean(options.fullscreen);
   sheetGeneration += 1;
+  if (typeof options.backTo === 'function') sheetBacks.push(options.backTo);
   root.innerHTML = `
     <div class="sheet-backdrop" data-close-sheet></div>
     <div class="sheet ${fullscreen ? 'sheet-full' : ''}" role="dialog" aria-modal="true">
@@ -4268,6 +4277,11 @@ function openSheet(html, onOpen, options = {}) {
 }
 
 function closeSheet() {
+  sheetBacks = [];
+  closeSheetInner();
+}
+
+function closeSheetInner() {
   const root = $('#sheet-root');
   const generation = sheetGeneration;
   root.classList.remove('open');
@@ -4278,6 +4292,13 @@ function closeSheet() {
       root.innerHTML = '';
     }
   }, 320);
+}
+
+/* الرجوع لنافذة سابقة: أغلق الحالية ثم أعد فتح السابقة بدل الخروج للرئيسية */
+function stepBackSheet() {
+  const prev = sheetBacks.pop();
+  closeSheetInner();
+  if (prev) setTimeout(prev, 80);
 }
 
 function openConfirm({ title, text, confirmLabel = 'تأكيد', danger = true, onConfirm }) {
@@ -5953,7 +5974,7 @@ async function setJoinRequestStatus(button, status) {
 function openJoinRequestsSheet() {
   if (!isSupervisor()) { toast('غير مصرح', 'info'); return; }
   openSheet(`
-    ${sheetHead('طلبات الانضمام', 'حسابات الأعضاء الجدد وطلبات الزوار')}
+    ${sheetHead('طلبات الانضمام', 'حسابات الأعضاء الجدد وطلبات الزوار', { back: true })}
     <div class="join-section">
       <h3 class="join-section-title">حسابات بانتظار الموافقة</h3>
       <div class="notif-list" id="pending-members-list"><div class="empty"><svg class="ic"><use href="#i-user"/></svg><h4>جارٍ التحميل…</h4></div></div>
@@ -5961,7 +5982,7 @@ function openJoinRequestsSheet() {
     <div class="join-section">
       <h3 class="join-section-title">طلبات الزوار للانضمام</h3>
       <div class="notif-list" id="join-requests-list"><div class="empty"><svg class="ic"><use href="#i-users"/></svg><h4>جارٍ التحميل…</h4></div></div>
-    </div>`);
+    </div>`, null, { backTo: openMoreSheet });
   refreshJoinRequests();
 }
 
@@ -6261,12 +6282,12 @@ async function loadClubActivities() {
 
 function openClubProgramsSheet() {
   openSheet(`
-    ${sheetHead('الأنشطة', 'اضغط أي نشاط لقراءة تعريفه وتفاصيله')}
+    ${sheetHead('الأنشطة', 'اضغط أي نشاط لقراءة تعريفه وتفاصيله', { back: true })}
     <div id="club-activities" class="club-activities">
       <p class="club-loading">جارٍ تحميل الأنشطة…</p>
     </div>`, (root) => {
     renderClubActivitiesSheet(root);
-  });
+  }, { backTo: openMoreSheet });
 }
 
 async function renderClubActivitiesSheet(root) {
@@ -6595,7 +6616,7 @@ async function openSheetsOrganizer() {
 /* ===== ملخصات الكتب — قائمة مستقلة ينشر فيها الأعضاء ملخصاتهم ===== */
 function openBookSummariesSheet() {
   openSheet(`
-    ${sheetHead('ملخصات الكتب', 'قائمة مستقلة ينشر فيها الأعضاء ملخصاتهم للكتب التي قرؤوها')}
+    ${sheetHead('ملخصات الكتب', 'قائمة مستقلة ينشر فيها الأعضاء ملخصاتهم للكتب التي قرؤوها', { back: true })}
     <div class="book-summaries-toolbar">
       <p>قرأت كتابًا؟ شارك ملخصك مع أعضاء النادي.</p>
       <button class="btn btn-sm btn-primary" type="button" data-action="add-book-summary"><svg class="ic"><use href="#i-plus"/></svg> نشر ملخص</button>
@@ -6608,7 +6629,7 @@ function openBookSummariesSheet() {
       closeSheet();
       openBookSummaryComposer();
     });
-  });
+  }, { backTo: openMoreSheet });
 }
 
 async function loadBookSummaries(container) {
@@ -6733,8 +6754,8 @@ function bindGalleryPicker(gallery, images, onChange) {
 async function openWeeklyReportSheet() {
   weeklyReportsMode = 'recent';
   openSheet(`
-    ${sheetHead('التقارير الأسبوعية', 'تقارير النادي الأسبوعية — أحدث ٣ تقارير أولًا')}
-    <div id="weekly-report" class="weekly-report"><div class="recorded-meetings-loading">جارٍ تحميل التقارير…</div></div>`);
+    ${sheetHead('التقارير الأسبوعية', 'تقارير النادي الأسبوعية — أحدث ٣ تقارير أولًا', { back: true })}
+    <div id="weekly-report" class="weekly-report"><div class="recorded-meetings-loading">جارٍ تحميل التقارير…</div></div>`, null, { backTo: openMoreSheet });
   await loadWeeklyReports();
 }
 
@@ -6759,7 +6780,14 @@ function weeklyRangeLabel(report) {
 
 function weeklyReportImages(report) {
   const list = Array.isArray(report.images) ? report.images.filter(Boolean) : [];
-  return list.length ? list : (report.image ? [report.image] : []);
+  /* بعض المداخل حُفظت نفس الصورة مرتين — نعرض كل صورة مرة واحدة فقط */
+  const unique = [];
+  const seen = new Set();
+  list.forEach((src) => {
+    const key = String(src);
+    if (key && !seen.has(key)) { seen.add(key); unique.push(src); }
+  });
+  return unique.length ? unique : (report.image ? [report.image] : []);
 }
 
 function weeklyReportCardHTML(report) {
@@ -6768,9 +6796,9 @@ function weeklyReportCardHTML(report) {
   return `
     <article class="weekly-report-card">
       <button class="weekly-report-open" type="button" data-action="open-weekly-report" data-id="${esc(report.id)}" aria-label="عرض ${esc(label)}">
-        <span class="weekly-report-media${images.length > 1 ? ' is-multi' : ''}">
+        <span class="weekly-report-media">
           ${images.length
-            ? images.slice(0, 2).map((src, index) => `<img src="${esc(imageThumb(src, 520))}" alt="${esc(label)} — صورة ${toAr(index + 1)}" loading="lazy" decoding="async">`).join('')
+            ? `<img src="${esc(imageThumb(images[0], 520))}" alt="${esc(label)}" loading="lazy" decoding="async">`
             : '<span class="weekly-report-placeholder"></span>'}
           <span class="weekly-report-week">${toAr(report.weekNo)}</span>
         </span>
@@ -6827,13 +6855,16 @@ function openWeeklyReportViewer(id) {
         <h2>${esc(weeklyReportLabel(report))}</h2>
         ${range ? `<p>${esc(range)}</p>` : ''}
       </div>
-      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
-        <svg class="ic"><use href="#i-close"/></svg>
-      </button>
+      <div class="sheet-head-actions">
+        <button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>
+        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+          <svg class="ic"><use href="#i-close"/></svg>
+        </button>
+      </div>
     </div>
     <div class="archive-photos-viewer">
       ${images.map((src, index) => `<img src="${esc(src)}" alt="${esc(weeklyReportLabel(report))} — ${toAr(index + 1)}" loading="lazy" decoding="async">`).join('')}
-    </div>`, null, { fullscreen: true });
+    </div>`, null, { fullscreen: true, backTo: openWeeklyReportSheet });
 }
 
 function openWeeklyReportComposer() {
@@ -6939,7 +6970,7 @@ function openReadingWindowSheet() {
 
 function openClubSelectionsSheet(activeTab = 'quotes') {
   openSheet(`
-    ${sheetHead('مختارات النادي', 'اقتباسات مختارة ونوافذ قرائية وقوائم قراءة يختارها المشرف')}
+    ${sheetHead('مختارات النادي', 'اقتباسات مختارة ونوافذ قرائية وقوائم قراءة يختارها المشرف', { back: true })}
     <div class="selections">
       <div class="chips-row selections-tabs" id="selections-tabs" role="tablist">
         ${SELECTIONS_TABS.map((tab) => `<button class="chip-filter${tab.key === activeTab ? ' active' : ''}" type="button" data-selection-tab="${tab.key}" role="tab" aria-selected="${tab.key === activeTab}">${esc(tab.label)}</button>`).join('')}
@@ -6964,7 +6995,7 @@ function openClubSelectionsSheet(activeTab = 'quotes') {
       button.addEventListener('click', () => render(button.dataset.selectionTab));
     });
     render(activeTab);
-  });
+  }, { backTo: openMoreSheet });
 }
 
 function selectionQuoteCardHTML(item) {
@@ -7244,9 +7275,12 @@ function openReadingWindowViewer(id) {
         <h2>${esc(tip.title || 'نافذة قرائية')}</h2>
         <p>${esc(readingWindowDate(tip.createdAt) || 'نافذة قرائية')}</p>
       </div>
-      <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
-        <svg class="ic"><use href="#i-close"/></svg>
-      </button>
+      <div class="sheet-head-actions">
+        <button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>
+        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
+          <svg class="ic"><use href="#i-close"/></svg>
+        </button>
+      </div>
     </div>
     <div class="reading-window-viewer">
       ${tip.image ? `<img class="reading-window-viewer-image" src="${esc(tip.image)}" alt="${esc(tip.title || 'نافذة قرائية')}">` : ''}
@@ -7258,7 +7292,7 @@ function openReadingWindowViewer(id) {
       const ok = await deleteReadingWindow(del.dataset.id);
       if (ok) { closeSheet(); setTimeout(() => openReadingWindowSheet(), 340); }
     });
-  }, { fullscreen: true });
+  }, { fullscreen: true, backTo: openReadingWindowSheet });
 }
 
 async function loadReadingTips(container) {
@@ -7436,7 +7470,7 @@ function openReadingTipComposer() {
 
 function openMoreSheet() {
   openSheet(`
-    ${sheetHead('المزيد', 'خدمات وبرامج النادي')}
+    ${sheetHead('المزيد', 'خدمات وبرامج النادي', { back: true })}
     <div class="more-list">
       <button class="more-item" type="button" data-action="meeting-archive">
         <span class="more-icon"><svg class="ic"><use href="#i-calendar"/></svg></span>
@@ -7567,7 +7601,7 @@ async function loadApprovedMembers(root) {
 
 function openMembersSheet() {
   openSheet(`
-    ${sheetHead('أعضاء جليس', 'الأعضاء المسجلون رسميًا بعد قبول حساباتهم')}
+    ${sheetHead('أعضاء جليس', 'الأعضاء المسجلون رسميًا بعد قبول حساباتهم', { back: true })}
     <div class="members-head">
       <span class="eyebrow" id="members-count">جارٍ التحميل…</span>
       <button class="icon-btn" type="button" id="refresh-members" aria-label="تحديث قائمة الأعضاء">
@@ -7579,7 +7613,7 @@ function openMembersSheet() {
     const btn = root.querySelector('#refresh-members');
     if (btn) btn.addEventListener('click', () => loadApprovedMembers(root));
     loadApprovedMembers(root);
-  });
+  }, { backTo: openMoreSheet });
 }
 
 function consultationDateLabel(value) {
@@ -7898,7 +7932,7 @@ function renderTrashAudit(root, audit, force) {
 function openTrashSheet() {
   if (!isSupervisor()) { toast('سلة المحذوفات للمشرفين فقط', 'info'); return; }
   openSheet(`
-    ${sheetHead('سلة المحذوفات', 'حدّد عدة عناصر ثم استعدِها أو احذفها دفعة واحدة')}
+    ${sheetHead('سلة المحذوفات', 'حدّد عدة عناصر ثم استعدِها أو احذفها دفعة واحدة', { back: true })}
     <div class="trash-toolbar">
       <span>السلة مشتركة بين مشرفي النادي</span>
       <div class="trash-toolbar-actions">
@@ -7961,7 +7995,7 @@ function openTrashSheet() {
     });
 
     await refresh();
-  });
+  }, { backTo: openMoreSheet });
 }
 
 async function restoreDeletedItem(type, encodedId, silent = false, bookKey = '') {
@@ -8543,6 +8577,9 @@ async function handleGlobalClick(event) {
 
   const closer = target.closest('[data-close-sheet]');
   if (closer) { closeSheet(); return; }
+
+  const back = target.closest('[data-sheet-back]');
+  if (back) { stepBackSheet(); return; }
 
   const nav = target.closest('[data-nav]');
   if (nav) { closeSheet(); go(nav.dataset.nav); return; }
@@ -9681,20 +9718,6 @@ async function init() {
 
   const verifyBack = document.getElementById('verify-back');
   if (verifyBack) verifyBack.addEventListener('click', () => showGateView('register'));
-
-  /* طلب الرمز عبر واتساب — لا يعتمد على البريد إطلاقًا */
-  const verifyWhatsapp = document.getElementById('verify-whatsapp');
-  if (verifyWhatsapp) {
-    verifyWhatsapp.addEventListener('click', () => {
-      const email = (pendingRegister && pendingRegister.email) || ($('#verify-email') && $('#verify-email').textContent) || '';
-      const name = (pendingRegister && pendingRegister.name) || '';
-      const message = 'مرحبًا، أرغب بالتسجيل في نادي جليس القرائي.'
-        + (name ? '\nالاسم: ' + name : '')
-        + (email ? '\nالبريد: ' + email : '')
-        + '\nمن فضلكم أرسلوا لي رمز التحقق.';
-      window.open('https://wa.me/966545946169?text=' + encodeURIComponent(message), '_blank', 'noopener');
-    });
-  }
 
   const verifyResend = document.getElementById('verify-resend');
   if (verifyResend) {
