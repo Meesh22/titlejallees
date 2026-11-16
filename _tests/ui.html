@@ -283,14 +283,16 @@
     openWeeklyReportSheet();
     await wait(700);
     const clearBtn = $('[data-action="weekly-clear"]');
-    ok('زر حذف كل التقارير موجود', !!clearBtn);
-    if (clearBtn) {
-      clearBtn.click();
-      await wait(300);
+    ok('زر حذف كل التقارير غير موجود (حُذف حسب طلب المشرف)', !clearBtn);
+    const perReportDelete = $('[data-action="delete-weekly-report"][data-id]');
+    ok('زر حذف لكل تقرير موجود', !!perReportDelete);
+    if (perReportDelete) {
+      perReportDelete.click();
+      await wait(250);
       await confirmYes();
       await wait(900);
       const weeks2 = await api('getWeeklyReports');
-      ok('حُذفت كل التقارير الأسبوعية', (weeks2.data || []).length === 0, JSON.stringify((weeks2.data || []).map((w) => w.weekNo)));
+      ok('حُذف التقرير الأسبوعي المحدد', !(weeks2.data || []).some((w) => Number(w.weekNo) === 301), JSON.stringify((weeks2.data || []).map((w) => w.weekNo)));
     }
 
     openRecordedMeetingComposer();

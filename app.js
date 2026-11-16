@@ -1,7 +1,7 @@
 /**
  * ==========================================================================
  * جليس | مساحة الأعضاء
- * تطبيق أعضاء نادي جليس القرائي — JavaScript خالص (بدون مكتبات)
+ * تطبيق أعضاء نادي جليس — JavaScript خالص (بدون مكتبات)
  * ==========================================================================
  */
 'use strict';
@@ -81,7 +81,8 @@ const MAIN_API_ACTIONS = new Set([
   'describeSpreadsheet', 'organizeSheets', 'dedupeClubBooks', 'getLikes', 'toggleLike',
   'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile',
   'getActivities', 'saveActivity', 'deleteActivity',
-  'trashAudit', 'repairTrash', 'purgeDeletedItem', 'mailjetHealth'
+  'trashAudit', 'repairTrash', 'purgeDeletedItem', 'mailjetHealth',
+  'getCompetitions', 'saveCompetition', 'deleteCompetition', 'joinCompetition', 'leaveCompetition'
 ]);
 const SHARED_QUOTES_KEY = 'jalees-shared-quotes-v3';
 let deletedQuoteIds = new Set();
@@ -196,9 +197,8 @@ function pruneQuotesEverywhere(texts) {
 }
 
 const CLUB = {
-  name: 'نادي جليس القرائي',
-  tagline: 'لأن القراءة تجمعنا',
-  city: 'منطقة القصيم'
+  name: 'نادي جليس',
+  tagline: 'أصدقاء القراءة'
 };
 
 /* قائمة أعضاء النادي — الاسم هو العضوية.
@@ -314,11 +314,14 @@ function findMemberByName(value) {
   return null;
 }
 
-const SUPERVISORS = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي'];
+const SUPERVISORS = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي', 'عبدالله يوسف الحجيلان', 'عبدالله الحجيلان'];
 function isGuest() { return !currentMember || currentMember.id === 'guest'; }
 
 function isSupervisor() {
   if (!currentMember) return false;
+  const role = String(currentMember.role || '').toLowerCase();
+  /* أي عضو دوره مشرف (من الشيت أو من المشرفين المعيّنين) له كامل صلاحيات المشرف */
+  if (role === 'supervisor' || role === 'مشرف') return true;
   return SUPERVISORS.some((name) => normalizeName(name) === normalizeName(currentMember.name));
 }
 
@@ -1070,7 +1073,7 @@ function readFileAsDataUrl(file) {
 
 async function uploadFileToCloud(file) {
   if (!file) return '';
-  if (file.size > 6 * 1024 * 1024) throw new Error('حجم الملف كبير — الحد ٦ ميجابايت');
+  if (file.size > 20 * 1024 * 1024) throw new Error('حجم الملف كبير — الحد ٢٠ ميجابايت');
   const data = await readFileAsDataUrl(file);
   const result = await cloudRequest('uploadFile', { data, name: file.name || '', mime: file.type || '' });
   if (!result || result.success !== true || !result.url) {
@@ -3346,11 +3349,11 @@ function openAddBook() {
         <div class="image-preview crop-preview-wrap" id="image-preview" hidden></div>
         <small id="add-book-image-status" class="meeting-image-status"></small>
       </div>
-      <div class="field">
-        <label for="add-book-pdf">ملف الكتاب PDF (اختياري)</label>
+      ${isSupervisor() ? `<div class="field">
+        <label for="add-book-pdf">ملف الكتاب PDF (للمشرفين فقط · اختياري)</label>
         <input class="input" id="add-book-pdf" type="file" accept="application/pdf,.pdf">
         <small id="add-book-pdf-status" class="meeting-image-status">يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.</small>
-      </div>
+      </div>` : ''}
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> إضافة الكتاب
       </button>
@@ -3450,12 +3453,17 @@ function openAddBook() {
       const pdfFile = root.querySelector('#add-book-pdf').files && root.querySelector('#add-book-pdf').files[0];
       if (pdfFile) {
         const pdfStatus = root.querySelector('#add-book-pdf-status');
+        if (!isSupervisor()) { toast('رفع ملف PDF متاح للمشرفين فقط', 'info'); return; }
         pdfStatus.textContent = 'جارٍ رفع ملف PDF…';
         try {
           pdfUrl = await uploadFileToCloud(pdfFile);
           pdfStatus.textContent = 'تم رفع الملف بنجاح.';
         } catch (error) {
+          /* لا نحفظ الكتاب بدون ملفه — وإلا سيضاف بلا PDF بلا سبب */
           pdfStatus.textContent = error.message || 'تعذر رفع الملف';
+          pdfStatus.style.color = 'var(--clay)';
+          toast('تعذر رفع ملف PDF — لم يُحفظ الكتاب. حاول مرة أخرى أو تجاوز الملف بحفظ بدون PDF.', 'info');
+          return;
         }
       }
 
@@ -3629,6 +3637,9 @@ function openEditClubBook(bookId) {
           pdfStatus.textContent = 'تم رفع الملف بنجاح.';
         } catch (error) {
           pdfStatus.textContent = error.message || 'تعذر رفع الملف';
+          pdfStatus.style.color = 'var(--clay)';
+          toast('تعذر رفع ملف PDF — لم تُحفظ التعديلات. حاول مرة أخرى.', 'info');
+          return;
         }
       }
 
@@ -3865,7 +3876,9 @@ function renderMyBooks() {
       <div class="page-entry">
         <label for="page-input-${book.id}">آخر صفحة وصلت إليها</label>
         <div class="page-entry-row">
+          <button class="page-step page-step-plus" type="button" data-pagestep="1" data-id="${book.id}" aria-label="صفحة أكثر" title="صفحة أكثر"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
           <input class="input page-input" id="page-input-${book.id}" type="number" inputmode="numeric" min="0" max="${book.pages}" step="1" value="${item.currentPage}" data-pageinput="${book.id}" aria-label="اكتب آخر صفحة وصلت إليها في ${esc(book.title)}">
+          <button class="page-step page-step-minus" type="button" data-pagestep="-1" data-id="${book.id}" aria-label="صفحة أقل" title="صفحة أقل"><svg class="ic"><use href="#i-chevron-right"/></svg></button>
           <span class="page-total">من ${toAr(book.pages)}</span>
           <button class="btn btn-primary page-save" type="button" data-action="save-page" data-id="${book.id}">حفظ</button>
         </div>
@@ -3903,6 +3916,27 @@ function renderMyBooks() {
         </div>
       </article>`;
   }).join('');
+
+  /* أزرار زيادة/إنقاص الصفحة (صغيران) — ثم زر حفظ بالضغط على «حفظ» */
+  const myBooksList = $('#my-books');
+  if (myBooksList) {
+    myBooksList.querySelectorAll('[data-pagestep]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const bookId = button.dataset.id;
+        const delta = Number(button.dataset.pagestep) || 0;
+        const input = document.getElementById(`page-input-${bookId}`);
+        if (!input) return;
+        const max = Number(input.max) || 9999;
+        const nextValue = Math.max(0, Math.min(max, (Number(input.value) || 0) + delta));
+        input.value = String(nextValue);
+        const range = myBooksList.querySelector(`[data-progress="${CSS.escape(bookId)}"]`);
+        if (range) {
+          range.value = String(nextValue);
+          range.style.setProperty('--p', (max ? Math.round((nextValue / max) * 100) : 0) + '%');
+        }
+      });
+    });
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -4244,7 +4278,7 @@ function sheetHead(title, subtitle = '', opts = {}) {
         ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
       </div>
       <div class="sheet-head-actions">
-        ${opts.back ? '<button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>' : ''}
+        ${opts.back === false ? '' : '<button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>'}
         <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق">
           <svg class="ic"><use href="#i-close"/></svg>
         </button>
@@ -4719,6 +4753,7 @@ function loadShareImage(src) {
   return new Promise((resolve, reject) => {
     if (!src) { resolve(null); return; }
     const image = new Image();
+    image.crossOrigin = 'anonymous'; /* بدونها تتلوث اللوحة ويفشل toBlob */
     image.onload = () => resolve(image);
     image.onerror = reject;
     image.src = src;
@@ -4774,7 +4809,13 @@ async function createArticleShareCard(article) {
   context.beginPath();
   context.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
   context.clip();
-  const authorImage = await loadShareImage(photo);
+  let authorImage = null;
+  try {
+    authorImage = await loadShareImage(photo);
+  } catch (imageError) {
+    /* إذا فشلت الصورة — نعرض الحروف بدل أن يتعطل كل شيء */
+    authorImage = null;
+  }
   if (authorImage) {
     drawCoverImage(context, authorImage, avatarX, avatarY, avatarSize);
   } else {
@@ -4799,7 +4840,7 @@ async function createArticleShareCard(article) {
   context.textAlign = 'left';
   context.fillStyle = '#667269';
   context.font = '600 20px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('نادي جليس القرائي · لأن القراءة تجمعنا', 120, 558);
+  context.fillText('نادي جليس · أصدقاء القراءة', 120, 558);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('تعذر إنشاء صورة المقال')), 'image/png');
@@ -4825,8 +4866,14 @@ async function shareArticle(article) {
     const blob = await createArticleShareCard(article);
     const file = new File([blob], 'مقال-جليس.png', { type: 'image/png' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title: article.title, text: shareText, url: shareUrl, files: [file] });
-      return;
+      try {
+        /* الرابط ضمن النص لأن كروم أندرويد يرفض files + url معًا في بعض الأجهزة */
+        await navigator.share({ title: article.title, text: shareText + '\n' + shareUrl, files: [file] });
+        return;
+      } catch (filesError) {
+        if (filesError && filesError.name === 'AbortError') return;
+        /* إذا فشلت المشاركة بالوسائط نكمل بمشاركة نص/رابط أو نسخ */
+      }
     }
     if (navigator.share) {
       try {
@@ -4901,7 +4948,7 @@ async function createQuoteShareCard(quote) {
   context.textAlign = 'right';
   context.fillStyle = '#F8F5EE';
   context.font = '700 32px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('اقتباس من نادي جليس القرائي', 1020, 66);
+  context.fillText('اقتباس من نادي جليس', 1020, 66);
   context.fillStyle = '#C59B63';
   context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
   context.fillText('من هامش الكتب', 1020, 112);
@@ -4943,7 +4990,12 @@ async function createQuoteShareCard(quote) {
   context.beginPath();
   context.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
   context.clip();
-  const authorImage = await loadShareImage(photoByName(author) || memberPhoto(author, ''));
+  let authorImage = null;
+  try {
+    authorImage = await loadShareImage(photoByName(author) || memberPhoto(author, ''));
+  } catch (imageError) {
+    authorImage = null;
+  }
   if (authorImage) {
     drawCoverImage(context, authorImage, avatarX, avatarY, avatarSize);
   } else {
@@ -4969,7 +5021,7 @@ async function createQuoteShareCard(quote) {
   context.textAlign = 'left';
   context.fillStyle = '#667269';
   context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('نادي جليس القرائي · لأن القراءة تجمعنا', 140, footY + 90);
+  context.fillText('نادي جليس · أصدقاء القراءة', 140, footY + 90);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('تعذر إنشاء بطاقة الاقتباس')), 'image/png');
@@ -4995,8 +5047,12 @@ async function shareQuote(quote) {
     const blob = await createQuoteShareCard(quote);
     const file = new File([blob], 'اقتباس-جليس.png', { type: 'image/png' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title: 'اقتباس من جليس', text: shareText, url: shareUrl, files: [file] });
-      return;
+      try {
+        await navigator.share({ title: 'اقتباس من جليس', text: shareText + '\n' + shareUrl, files: [file] });
+        return;
+      } catch (filesError) {
+        if (filesError && filesError.name === 'AbortError') return;
+      }
     }
     if (navigator.share) {
       try {
@@ -5122,7 +5178,7 @@ function openArticleSheet(id) {
           <button class="reader-author-name" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">
             <strong>${esc(authorNameOf(article))}</strong>
           </button>
-          <small>عضو في نادي جليس القرائي</small>
+          <small>عضو في نادي جليس</small>
         </div>
       </div>
       <div class="reader-body" data-reader-article="${esc(article.id)}" style="--reader-font:${readerSize}px">${body}</div>
@@ -5555,7 +5611,7 @@ function openNotifySettingsSheet() {
       </div>
       <div class="field" data-ch="brevo">
         <label for="notify-brevo-name">الاسم الظاهر للمرسل</label>
-        <input class="input" id="notify-brevo-name" placeholder="نادي جليس القرائي">
+        <input class="input" id="notify-brevo-name" placeholder="نادي جليس">
       </div>
       <div class="field" data-ch="mailjet">
         <label for="notify-mailjet-public">Mailjet Public Key</label>
@@ -6063,7 +6119,7 @@ function openViewRatingsSheet(bookId) {
 
 function openGuideSheet() {
   openSheet(`
-    ${sheetHead('الدليل التعريفي', 'نادي جليس القرائي · 1445هـ - 2024م')}
+    ${sheetHead('الدليل التعريفي', 'نادي جليس · 1445هـ - 2024م')}
     <div class="guide-sheet">
       <div class="guide-hero">
         <div class="guide-hero-logo"><img src="logo.png?v=1" alt="شعار جليس"></div>
@@ -6108,7 +6164,7 @@ function openGuideSheet() {
         <h4>برامج النادي وأنشطته (بشكل مُجمَل)</h4>
         <p>يمكن تقسيم أنشطة النادي إلى:</p>
         <div class="guide-sub">
-          <strong>أ. أنشطة غير حضورية وتشمل:</strong>
+          <strong>أ. أنشطة عن بُعد وتشمل:</strong>
           <ol class="guide-list">
             <li>مجموعة النادي على الواتساب.</li>
             <li>المسابقات القرائية.</li>
@@ -6240,7 +6296,7 @@ function openClubActivitiesSheet() {
 const CLUB_ACTIVITY_GROUPS = [
   {
     id: 'offline',
-    label: 'أنشطة غير حضورية',
+    label: 'أنشطة عن بُعد',
     items: [
       { id: 'offline-1', number: 'غير حضوري ١', title: 'مجموعة النادي على الواتساب', details: 'بيئة محفزة على القراءة: تقارير كتب، اقتباسات، مشاركات واستشارات، وإعلانات أنشطة النادي.', items: [] },
       { id: 'offline-2', number: 'غير حضوري ٢', title: 'المسابقات القرائية', details: 'مسابقات خاصة أو عامة، منها مسابقة ٥ كتب في ١٠ أيام (٦٦ متسابقًا، أكثر من ٣٠٠ كتاب).', items: [] },
@@ -6425,6 +6481,7 @@ function openActivityDetails(item, row) {
   const title = (row && row.title) || item.title;
   const details = (row && row.details) || item.details || '';
   const list = (row && Array.isArray(row.items)) ? row.items : [];
+  const isCompetitions = item.id === 'offline-2';
   openSheet(`
     ${sheetHead(title, item.number)}
     <div class="activity-detail">
@@ -6433,9 +6490,206 @@ function openActivityDetails(item, row) {
         <h4 class="activity-detail-title">يضم هذا النشاط</h4>
         <ul class="activity-detail-list">${list.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
       ${isSupervisor() ? `<button class="btn btn-gold btn-block" type="button" id="activity-edit"><svg class="ic"><use href="#i-edit"/></svg> تعديل التعريف والأنشطة</button>` : ''}
+      ${isCompetitions ? `
+        <div id="competitions-section" class="competitions">
+          <div class="competitions-head">
+            <h4 class="competitions-title">المسابقات القرائية</h4>
+            ${isSupervisor() ? '<button class="btn btn-sm btn-gold" type="button" id="comp-add"><svg class="ic"><use href="#i-plus"/></svg> إضافة مسابقة</button>' : ''}
+          </div>
+          <div id="competitions-list" class="competitions-list"><p class="deleted-items-loading">جارٍ تحميل المسابقات…</p></div>
+        </div>` : ''}
     </div>`, (root) => {
     const edit = root.querySelector('#activity-edit');
     if (edit) edit.addEventListener('click', () => openActivityEditor(item, row));
+    if (isCompetitions) {
+      renderCompetitions(root, item);
+      const add = root.querySelector('#comp-add');
+      if (add) add.addEventListener('click', () => openCompetitionComposer(null, item));
+    }
+  });
+}
+
+/* ====== المسابقات القرائية ====== */
+function competitionStatusLabel(status) {
+  return status === 'started' ? 'بدأت' : status === 'finished' ? 'انتهت' : 'ستبدأ';
+}
+function competitionStatusClass(status) {
+  return status === 'started' ? 'is-live' : status === 'finished' ? 'is-done' : 'is-soon';
+}
+
+async function loadCompetitions() {
+  const result = await cloudRequest('getCompetitions');
+  return result && result.success === true && Array.isArray(result.data) ? result.data : [];
+}
+
+function competitionRangeLabel(comp) {
+  const fmt = (v) => {
+    const d = new Date(String(v || ''));
+    if (Number.isNaN(d.getTime())) return String(v || '');
+    return new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', { day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+  };
+  if (comp.startDate && comp.endDate) return `من ${fmt(comp.startDate)} إلى ${fmt(comp.endDate)}`;
+  if (comp.startDate) return `تبدأ ${fmt(comp.startDate)}`;
+  if (comp.endDate) return `تنتهي ${fmt(comp.endDate)}`;
+  return '';
+}
+
+function competitionCardHTML(comp) {
+  const status = String(comp.status || 'upcoming');
+  const label = competitionStatusLabel(status);
+  const range = competitionRangeLabel(comp);
+  const isMember = currentMember && currentMember.id !== 'guest';
+  const joined = isMember && (comp.participants || []).some((p) => p && String(p.memberId) === currentMember.id);
+  const count = Number(comp.participantsCount || (comp.participants ? comp.participants.length : 0)) || 0;
+  return `
+    <article class="competition-card" data-comp-id="${esc(comp.id)}">
+      ${comp.image ? `<img class="competition-image" src="${esc(comp.image)}" alt="${esc(comp.title)}" loading="lazy" decoding="async">` : ''}
+      <div class="competition-body">
+        <div class="competition-top">
+          <span class="competition-status ${competitionStatusClass(status)}">${esc(label)}</span>
+          ${range ? `<span class="competition-range" dir="rtl">${esc(range)}</span>` : ''}
+        </div>
+        <h5 class="competition-title">${esc(comp.title)}</h5>
+        ${comp.description ? `<p class="competition-desc">${esc(comp.description)}</p>` : ''}
+        ${comp.details ? `<p class="competition-details">${esc(comp.details)}</p>` : ''}
+        ${comp.prize ? `<div class="competition-prize"><svg class="ic"><use href="#i-sparkles"/></svg><span>الجائزة: ${esc(comp.prize)}</span></div>` : ''}
+        <div class="competition-foot">
+          <span class="competition-count">المتسابقون: ${toAr(count)}</span>
+          ${isSupervisor() ? `<span class="competition-tools">
+            <button class="icon-btn" type="button" data-comp-edit="${esc(comp.id)}" aria-label="تعديل المسابقة"><svg class="ic"><use href="#i-edit"/></svg></button>
+            <button class="icon-btn danger" type="button" data-comp-delete="${esc(comp.id)}" aria-label="حذف المسابقة"><svg class="ic"><use href="#i-trash"/></svg></button>
+          </span>` : ''}
+        </div>
+        ${status === 'finished'
+          ? '<div class="competition-ended">انتهت هذه المسابقة — شاركتم في فرحة ختامها</div>'
+          : isMember
+            ? `<button type="button" class="btn btn-block competition-join${joined ? ' is-joined' : ' btn-gold'}" data-comp-toggle="${esc(comp.id)}" data-joined="${joined ? '1' : '0'}">${joined ? 'أنت مشارك — إلغاء الاشتراك' : 'اشترك في المسابقة'}</button>`
+            : '<div class="competition-ended">سجل دخولك لتشارك</div>'}
+      </div>
+    </article>`;
+}
+
+async function renderCompetitions(root, item) {
+  const host = root.querySelector('#competitions-list');
+  if (!host) return;
+  host.innerHTML = '<p class="deleted-items-loading">جارٍ تحميل المسابقات…</p>';
+  const competitions = await loadCompetitions();
+  if (!host.isConnected) return;
+  if (!competitions.length) {
+    host.innerHTML = emptyHTML('sparkles', 'لا توجد مسابقات بعد', isSupervisor() ? 'أضف أول مسابقة من الزر أعلاه.' : 'ستظهر مسابقات النادي هنا عند إطلاقها.');
+  } else {
+    host.innerHTML = competitions.map(competitionCardHTML).join('');
+  }
+  host.querySelectorAll('[data-comp-toggle]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const joining = button.dataset.joined !== '1';
+      button.disabled = true;
+      const result = await cloudRequest(joining ? 'joinCompetition' : 'leaveCompetition', {
+        id: button.dataset.compToggle,
+        memberId: currentMember ? currentMember.id : '',
+        memberName: currentMember && currentMember.name ? currentMember.name : ''
+      });
+      if (!result || result.success !== true) {
+        button.disabled = false;
+        toast(cleanServerError(result, joining ? 'تعذر الاشتراك' : 'تعذر إلغاء الاشتراك'), 'info');
+        return;
+      }
+      toast(result.message || (joining ? 'انضممت إلى المسابقة' : 'ألغيت اشتراكك'), 'check');
+      renderCompetitions(root, item);
+    });
+  });
+  host.querySelectorAll('[data-comp-edit]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const comps = await loadCompetitions();
+      const comp = comps.find((c) => String(c.id) === String(button.dataset.compEdit));
+      if (comp) openCompetitionComposer(comp, item);
+    });
+  });
+  host.querySelectorAll('[data-comp-delete]').forEach((button) => {
+    button.addEventListener('click', () => {
+      openConfirm({
+        title: 'حذف المسابقة',
+        text: 'ستُحذف هذه المسابقة وكل مشاركيها. هل تريد المتابعة؟',
+        confirmLabel: 'حذف المسابقة',
+        onConfirm: async () => {
+          const requesterName = (currentMember && currentMember.name) || '';
+          const result = await cloudRequest('deleteCompetition', { id: button.dataset.compDelete, requesterName: requesterName, by: requesterName });
+          if (!result || result.success !== true) { toast('تعذر حذف المسابقة', 'info'); return; }
+          toast('حُذفت المسابقة', 'check');
+          renderCompetitions(root, item);
+        }
+      });
+    });
+  });
+}
+
+function openCompetitionComposer(comp, item) {
+  if (!isSupervisor()) { toast('إضافة المسابقات للمشرفين فقط', 'info'); return; }
+  const editing = Boolean(comp);
+  openSheet(`
+    ${sheetHead(editing ? 'تعديل المسابقة' : 'إضافة مسابقة قرائية', editing ? 'حدّث بيانات المسابقة' : 'أدخل تفاصيل المسابقة وصورتها')}
+    <form id="competition-form" novalidate>
+      <div class="field"><label for="comp-title">عنوان المسابقة</label><input class="input" id="comp-title" maxlength="160" required placeholder="مسابقة ٥ كتب في ١٠ أيام" value="${esc(editing ? comp.title : '')}"></div>
+      <div class="field"><label for="comp-desc">نبذة مختصرة</label><textarea class="input" id="comp-desc" rows="2" maxlength="400">${esc(editing ? comp.description : '')}</textarea></div>
+      <div class="field"><label for="comp-details">تفاصيل المسابقة والقواعد</label><textarea class="input" id="comp-details" rows="6" maxlength="3000" placeholder="عدد الكتب، المدة، كيفية المشاركة…">${esc(editing ? comp.details : '')}</textarea></div>
+      <div class="field"><label for="comp-prize">الجائزة</label><input class="input" id="comp-prize" maxlength="300" placeholder="كتاب + هدية…" value="${esc(editing ? comp.prize : '')}"></div>
+      <div class="field-row">
+        <div class="field"><label for="comp-start">تاريخ البدء</label><input class="input" id="comp-start" type="date" dir="ltr" value="${esc(editing ? comp.startDate : '')}"></div>
+        <div class="field"><label for="comp-end">تاريخ الانتهاء</label><input class="input" id="comp-end" type="date" dir="ltr" value="${esc(editing ? comp.endDate : '')}"></div>
+      </div>
+      <div class="field">
+        <label for="comp-status">حالة المسابقة</label>
+        <select class="input" id="comp-status">
+          <option value="upcoming" ${(!comp || comp.status === 'upcoming') ? 'selected' : ''}>ستبدأ</option>
+          <option value="started" ${comp && comp.status === 'started' ? 'selected' : ''}>بدأت</option>
+          <option value="finished" ${comp && comp.status === 'finished' ? 'selected' : ''}>منتهية</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="comp-image">صورة المسابقة (اختياري)</label>
+        <label class="meeting-upload" for="comp-image"><svg class="ic"><use href="#i-article"/></svg><span>اختر صورة الإعلان</span></label>
+        <input id="comp-image" class="meeting-file-input" type="file" accept="image/*">
+        <div id="comp-image-preview" class="meeting-image-preview-wrap" hidden><img alt="معاينة صورة المسابقة"></div>
+      </div>
+      <button class="btn btn-gold btn-block" type="submit">${editing ? 'حفظ التعديل' : 'إضافة المسابقة'}</button>
+    </form>`, (root) => {
+    const imageInput = root.querySelector('#comp-image');
+    const previewWrap = root.querySelector('#comp-image-preview');
+    const previewImg = previewWrap ? previewWrap.querySelector('img') : null;
+    let imageData = editing && comp.image ? comp.image : null;
+    if (imageInput) imageInput.addEventListener('change', async () => {
+      const file = imageInput.files && imageInput.files[0];
+      if (!file) return;
+      try {
+        imageData = await compressMeetingImage(file);
+        if (previewImg) { previewImg.src = imageData; previewWrap.hidden = false; }
+      } catch (error) { toast('تعذر تجهيز الصورة', 'info'); }
+    });
+    root.querySelector('#competition-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const value = root.querySelector('#comp-title').value.trim();
+      if (!value) { toast('اكتب عنوان المسابقة', 'info'); return; }
+      const requesterName = (currentMember && currentMember.name) || '';
+      const result = await cloudRequest('saveCompetition', {
+        id: editing ? comp.id : '',
+        title: value,
+        description: root.querySelector('#comp-desc').value.trim(),
+        details: root.querySelector('#comp-details').value.trim(),
+        prize: root.querySelector('#comp-prize').value.trim(),
+        startDate: root.querySelector('#comp-start').value,
+        endDate: root.querySelector('#comp-end').value,
+        status: root.querySelector('#comp-status').value,
+        image: imageData || '',
+        requesterName: requesterName,
+        createdBy: requesterName,
+        createdAt: editing ? comp.createdAt : Date.now()
+      });
+      if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر حفظ المسابقة'), 'info'); return; }
+      toast(result.message || 'تم حفظ المسابقة', 'check');
+      closeSheet();
+      const activity = CLUB_ACTIVITY_GROUPS.reduce((all, group) => all.concat(group.items), []).find((entry) => entry.id === 'offline-2');
+      if (item) setTimeout(() => openActivityDetails(item, null), 120);
+    });
   });
 }
 
@@ -6642,22 +6896,19 @@ async function loadBookSummaries(container) {
       return;
     }
     container.innerHTML = summaries.map((item) => {
-      const known = MEMBERS.find((mem) => normalizeName(mem.name) === normalizeName(item.memberName));
-      const color = known ? known.color : '#C59B63';
-      const photo = memberPhoto(item.memberName, '');
       return `
-        <article class="book-summary-card">
-          <div class="book-summary-head">
-            ${avatarHTML(item.memberName || 'عضو جليس', color, 'avatar-mini', photo)}
-            <div>
-              <strong>${esc(item.memberName || 'عضو جليس')}</strong>
-              <small>${esc(formatLongDate(item.createdAt) || '')}</small>
-            </div>
-            ${isSupervisor() ? `<button class="book-summary-delete" type="button" data-action="delete-book-summary" data-id="${esc(item.id)}" aria-label="حذف الملخص">حذف</button>` : ''}
+        <article class="article-row book-summary-row">
+          <div class="ar-topline">
+            <span class="chip chip-soft">ملخص كتاب</span>
+            <span class="ar-reading-time"><svg class="ic"><use href="#i-article"/></svg>${esc(formatLongDate(item.createdAt) || '')}</span>
           </div>
-          <h4>${esc(item.bookTitle || 'كتاب')}</h4>
+          <h3 class="ar-title">${esc(item.bookTitle || 'كتاب')}</h3>
           ${item.bookAuthor ? `<p class="book-summary-author">${esc(item.bookAuthor)}</p>` : ''}
-          <div class="book-summary-text">${esc(item.summary)}</div>
+          <div class="book-summary-excerpt">${esc(item.summary)}</div>
+          <div class="ar-bottomline">
+            <div class="ar-meta"><b>${esc(item.memberName || 'عضو جليس')}</b></div>
+            ${isSupervisor() ? `<button class="ar-save book-summary-delete" type="button" data-action="delete-book-summary" data-id="${esc(item.id)}" aria-label="حذف الملخص"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+          </div>
         </article>`;
     }).join('');
     container.querySelectorAll('[data-action="delete-book-summary"]').forEach((button) => {
@@ -6822,7 +7073,6 @@ function renderWeeklyReports() {
         <strong>${toAr(reports.length)} تقرير أسبوعي</strong>
       </div>
       <div class="weekly-report-tools">
-        ${isSupervisor() && reports.length ? `<button class="btn btn-sm btn-ghost danger" type="button" data-action="weekly-clear">حذف الكل</button>` : ''}
         ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-weekly-report"><svg class="ic"><use href="#i-plus"/></svg> إضافة</button>` : ''}
       </div>
     </div>`;
@@ -7578,7 +7828,7 @@ function renderApprovedMembers(root, members) {
       ${isSupervisorMember ? '<span class="member-role">مشرف</span>' : (isConsultant ? '<span class="member-role consultant">مستشار</span>' : (member.memberType === 'friend' ? '<span class="member-role friend">صديق</span>' : ''))}
       ${canManage ? `<div class="member-admin-tools">
         <button class="member-tool-btn" type="button" data-action="toggle-consultant" data-row="${esc(String(member.row))}" data-consultant="${isConsultant ? 'true' : 'false'}" title="${isConsultant ? 'إلغاء ترقية المستشار' : 'ترقية إلى مستشار'}">${isConsultant ? '− مستشار' : '+ مستشار'}</button>
-        <button class="member-tool-btn" type="button" data-action="toggle-supervisor" data-row="${esc(String(member.row))}" data-supervisor="false" title="منح صلاحية إشراف">+ إشراف</button>
+        <button class="member-tool-btn" type="button" data-action="toggle-supervisor" data-row="${esc(String(member.row))}" data-supervisor="false" title="ترقية العضو إلى مشرف — يحق له التعديل الكامل">+ مشرف</button>
         <button class="member-tool-btn danger" type="button" data-action="ban-member" data-row="${esc(String(member.row))}" data-name="${esc(member.name || '')}" title="طرد العضو من النادي">طرد</button>
       </div>` : ''}
     </div>`;
@@ -8378,8 +8628,6 @@ function applyGuestVisibility() {
   if (goalCard) goalCard.style.display = isGuest ? 'none' : '';
   const categoryManager = document.getElementById('manage-library-categories-btn');
   if (categoryManager) categoryManager.hidden = !isSupervisor();
-  const clearArticles = document.getElementById('clear-articles-btn');
-  if (clearArticles) clearArticles.hidden = !isSupervisor();
 }
 
 function showPublicHome() {
@@ -8436,10 +8684,10 @@ async function showBackendVersion() {
   const el = document.getElementById('app-version');
   if (!el) return;
   el.textContent = '· 2024';
-  el.title = 'نادي جليس القرائي — 2024';
+  el.title = 'نادي جليس — 2024';
   try {
     const result = await cloudRequest('getVersion');
-    if (result && result.version) el.title = `نادي جليس القرائي — 2024 (نسخة الخادم: ${result.version})`;
+    if (result && result.version) el.title = `نادي جليس — 2024 (نسخة الخادم: ${result.version})`;
   } catch (error) {
     /* لا نعرض أي خطأ في التذييل */
   }
@@ -8757,20 +9005,6 @@ async function handleGlobalClick(event) {
       openWeeklyReportViewer(id);
       break;
     case 'weekly-clear': {
-      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
-      openConfirm({
-        title: 'حذف كل التقارير',
-        text: 'سيُحذف كل التقارير الأسبوعية نهائيًا. هل أنت متأكد؟',
-        confirmLabel: 'حذف الكل',
-        danger: true,
-        onConfirm: async () => {
-          const result = await cloudRequest('deleteAllWeeklyReports', { by: (currentMember && currentMember.name) || 'مشرف' });
-          if (!result || result.success !== true) { toast('تعذر حذف التقارير', 'info'); return; }
-          weeklyReportsCache = [];
-          toast('تم حذف كل التقارير', 'trash');
-          renderWeeklyReports();
-        }
-      });
       break;
     }
     case 'delete-weekly-report': {
@@ -8962,27 +9196,6 @@ async function handleGlobalClick(event) {
       openArticleComposer();
       break;
     case 'articles-clear': {
-      if (!isSupervisor()) { toast('حذف كل المقالات للمشرفين فقط', 'info'); break; }
-      openConfirm({
-        title: 'حذف كل المقالات',
-        text: 'سيُحذف كل المقالات نهائيًا من مجلة النادي في كل الأجهزة. لا يمكن التراجع. هل أنت متأكد؟',
-        confirmLabel: 'حذف الكل',
-        danger: true,
-        onConfirm: async () => {
-          const result = await cloudRequest('deleteAllArticles', { by: (currentMember && currentMember.name) || 'مشرف' });
-          if (!result || result.success !== true) { toast('تعذر حذف المقالات', 'info'); return; }
-          deletedArticleIds = new Set();
-          state.articles = [];
-          state.savedArticles = [];
-          syncState.articles = new Set();
-          if (currentMember) persistSyncState(currentMember.id);
-          await saveState();
-          renderArticles();
-          renderHome();
-          updateNavBadges();
-          toast('تم حذف كل المقالات', 'trash');
-        }
-      });
       break;
     }
     case 'open-add-book':

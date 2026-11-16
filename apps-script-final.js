@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-15-r59';
+const CODE_VERSION = 'jalees-2026-11-16-r61';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -13,6 +13,7 @@ const ENTRIES_SHEET = 'سجلات القراءة';
 const LIKES_SHEET = 'الإعجابات';
 const PERSONAL_BOOKS_SHEET = 'كتبي الخاصة';
 const READING_LISTS_SHEET = 'القوائم القرائية';
+const COMPETITIONS_SHEET = 'المسابقات';
 const SELECTION_QUOTES_SHEET = 'مختارات الاقتباسات';
 const WEEKLY_REPORTS_SHEET = 'التقارير الأسبوعية';
 const DELETED_LOG_SHEET = 'سجل المحذوفات';
@@ -491,6 +492,37 @@ function getReadingListsSheet(ss) {
   ]);
 }
 
+function getCompetitionsSheet(ss) {
+  return getDataSheet(ss, COMPETITIONS_SHEET, [
+    'id', 'title', 'description', 'details', 'prize', 'startDate', 'endDate', 'status',
+    'image', 'createdBy', 'createdAt', 'participants'
+  ]);
+}
+
+/* تحويل صف المسابقة لكائن صالح للإرسال — مع قائمة المشاركين مفكّكة */
+function competitionToObject(row) {
+  let participants = [];
+  try {
+    const parsed = JSON.parse(String(row[11] || '[]'));
+    if (Array.isArray(parsed)) participants = parsed;
+  } catch (error) { participants = []; }
+  return {
+    id: String(row[0] || ''),
+    title: String(row[1] || ''),
+    description: String(row[2] || ''),
+    details: String(row[3] || ''),
+    prize: String(row[4] || ''),
+    startDate: String(row[5] || ''),
+    endDate: String(row[6] || ''),
+    status: String(row[7] || 'upcoming'),
+    image: String(row[8] || ''),
+    createdBy: String(row[9] || ''),
+    createdAt: Number(row[10]) || 0,
+    participants: participants,
+    participantsCount: participants.length
+  };
+}
+
 /* ---- الأنشطة والبرامج: محتوى يحرّره المشرف (نشاط / مجموعة / برنامج) ---- */
 function getActivitiesSheet(ss) {
   return getDataSheet(ss, ACTIVITIES_SHEET, [
@@ -586,7 +618,7 @@ function getReadingTipsSheet(ss) {
 const MEMBERS_SHEET = 'الأعضاء';
 const CONSULTATIONS_SHEET = 'استشارات الأعضاء';
 const OLD_BOOKS_SHEET_ID = 1035156833;
-const SUPERVISOR_NAMES = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي'];
+const SUPERVISOR_NAMES = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي', 'عبدالله يوسف الحجيلان', 'عبدالله الحجيلان'];
 // تُضاف أسماء المستشارين المعتمدين هنا بعد استلامها؛ لا يُسمح بالإجابة قبل اعتماد الاسم.
 const CONSULTANT_NAMES = [];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -873,7 +905,7 @@ function pushSettings() {
     resendFrom: get('JALEES_RESEND_FROM', ''),
     brevoKey: get('JALEES_BREVO_KEY', ''),
     brevoFrom: get('JALEES_BREVO_FROM', ''),
-    brevoName: get('JALEES_BREVO_NAME', 'نادي جليس القرائي'),
+    brevoName: get('JALEES_BREVO_NAME', 'نادي جليس · منطقة القصيم'),
     mailjetPublic: get('JALEES_MAILJET_PUBLIC', ''),
     mailjetPrivate: get('JALEES_MAILJET_PRIVATE', ''),
     mailjetFrom: get('JALEES_MAILJET_FROM', ''),
@@ -1000,11 +1032,11 @@ function sendPushNotification(ss, type, title, body, link) {
       const logo = getMailLogo();
       const html = '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1E3A2B">'
         + (logo ? mailLogoHtml() : '')
-        + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس القرائي</p>'
+        + '<p style="color:#8C532D;font-size:11px;margin:0 0 6px">نادي جليس</p>'
         + '<h2 style="margin:0 0 10px">' + String(title || 'جليس') + '</h2>'
         + '<p>' + String(body || '') + '</p>'
         + (link ? '<p><a href="' + link + '">افتح الموقع</a></p>' : '') + '</div>';
-      const plain = ['نادي جليس القرائي', title || 'جليس', body || '', link || ''].filter(Boolean).join('\n');
+      const plain = ['نادي جليس · منطقة القصيم', title || 'جليس', body || '', link || ''].filter(Boolean).join('\n');
       if (provider === 'resend' && settings.resendKey && settings.resendFrom) {
         const res = UrlFetchApp.fetch('https://api.resend.com/emails', {
           method: 'post', contentType: 'application/json',
@@ -1021,7 +1053,7 @@ function sendPushNotification(ss, type, title, body, link) {
         const res = UrlFetchApp.fetch('https://api.brevo.com/v3/smtp/email', {
           method: 'post', contentType: 'application/json',
           headers: { 'api-key': settings.brevoKey },
-          payload: JSON.stringify({ sender: { name: settings.brevoName || 'نادي جليس القرائي', email: settings.brevoFrom }, to: [{ email: MAIL_FROM }], subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), htmlContent: html, textContent: plain }),
+          payload: JSON.stringify({ sender: { name: settings.brevoName || 'نادي جليس · منطقة القصيم', email: settings.brevoFrom }, to: [{ email: MAIL_FROM }], subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80), htmlContent: html, textContent: plain }),
           muteHttpExceptions: true
         });
         const status = res.getResponseCode();
@@ -1032,7 +1064,7 @@ function sendPushNotification(ss, type, title, body, link) {
       if (provider === 'mailjet' && settings.mailjetPublic && settings.mailjetPrivate && settings.mailjetFrom) {
         const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
         const message = {
-          From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
+          From: { Email: settings.mailjetFrom, Name: 'نادي جليس · منطقة القصيم' },
           To: [{ Email: MAIL_FROM }],
           Subject: 'جليس | ' + String(title || 'تنبيه جديد').slice(0, 80),
           TextPart: plain,
@@ -1125,7 +1157,21 @@ function normalizePersonName(value) {
 function isSupervisorName(name) {
   const target = normalizePersonName(name);
   if (!target) return false;
-  return SUPERVISOR_NAMES.some(item => normalizePersonName(item) === target);
+  if (SUPERVISOR_NAMES.some(item => normalizePersonName(item) === target)) return true;
+  /* المشرف يرقيه المشرفون من الشيت (role = supervisor) — يحق له كل الصلاحيات نفسها */
+  try {
+    const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
+    const sheet = getMembersSheet(ss);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return false;
+    const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    for (let i = 0; i < rows.length; i++) {
+      if (normalizePersonName(rows[i][1]) === target) {
+        return String(rows[i][5] || '').toLowerCase() === 'supervisor';
+      }
+    }
+  } catch (error) { /* تجاهل */ }
+  return false;
 }
 
 function isConsultantName(name) {
@@ -1449,7 +1495,7 @@ function clearPendingRegistration(email) {
 }
 
 const MAIL_FROM = 'jjalees.com@gmail.com';
-const MAIL_NAME = 'نادي جليس القرائي';
+const MAIL_NAME = 'نادي جليس · منطقة القصيم';
 const MAIL_REPLY = 'jjalees.com@gmail.com';
 
 /* ---- سجل الإرسال: لتعرف الإدارة ما الذي أُرسل ولمن وهل نجح ---- */
@@ -1489,12 +1535,12 @@ function sendViaResend(settings, to, subject, intro, code, name) {
       from: settings.resendFrom,
       to: [to],
       subject: subject,
-      text: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
+      text: 'نادي جليس\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
       html: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
         + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
         + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
         + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
-        + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>'
+        + '<p style="color:#5F6B64">نادي جليس</p></div>'
     }),
     muteHttpExceptions: true
   });
@@ -1512,15 +1558,15 @@ function sendViaBrevo(settings, to, subject, intro, code, name) {
     contentType: 'application/json',
     headers: { 'api-key': settings.brevoKey },
     payload: JSON.stringify({
-      sender: { name: settings.brevoName || 'نادي جليس القرائي', email: settings.brevoFrom },
+      sender: { name: settings.brevoName || 'نادي جليس · منطقة القصيم', email: settings.brevoFrom },
       to: [{ email: to, name: name || 'عضو جليس' }],
       subject: subject,
       htmlContent: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
         + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
         + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
         + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
-        + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>',
-      textContent: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.'
+        + '<p style="color:#5F6B64">نادي جليس</p></div>',
+      textContent: 'نادي جليس\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.'
     }),
     muteHttpExceptions: true
   });
@@ -1647,7 +1693,7 @@ function getMailLogo() {
 }
 
 function mailLogoHtml() {
-  return '<div style="text-align:center;padding:2px 0 12px"><img src="cid:' + MAIL_LOGO_CID + '" width="84" alt="نادي جليس القرائي" style="display:block;margin:0 auto"></div>';
+  return '<div style="text-align:center;padding:2px 0 12px"><img src="cid:' + MAIL_LOGO_CID + '" width="84" alt="نادي جليس" style="display:block;margin:0 auto"></div>';
 }
 
 /* ---- إرسال عبر Mailjet (REST API v3.1) ---- */
@@ -1656,17 +1702,17 @@ function sendViaMailjet(settings, to, subject, intro, code, name) {
   const auth = Utilities.base64Encode(settings.mailjetPublic + ':' + settings.mailjetPrivate);
   const logo = getMailLogo();
   const message = {
-    From: { Email: settings.mailjetFrom, Name: 'نادي جليس القرائي' },
+    From: { Email: settings.mailjetFrom, Name: 'نادي جليس · منطقة القصيم' },
     To: [{ Email: to, Name: name || 'عضو جليس' }],
     Subject: subject,
     Headers: { 'Reply-To': MAIL_REPLY },
-    TextPart: 'نادي جليس القرائي\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
+    TextPart: 'نادي جليس\n\nمرحباً ' + name + '،\n' + intro + '\n\nرمزك: ' + code + '\n\nالرمز صالح لمدة ١٥ دقيقة.',
     HTMLPart: '<div dir="rtl" style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.9;color:#1E3A2B">'
       + (logo ? mailLogoHtml() : '')
       + '<p>مرحباً ' + name + '،</p><p>' + intro + '</p>'
       + '<p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">' + code + '</p>'
       + '<p>الرمز صالح لمدة ١٥ دقيقة.</p>'
-      + '<p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p></div>'
+      + '<p style="color:#5F6B64">نادي جليس</p></div>'
   };
   if (logo) {
     message.InlinedAttachments = [{
@@ -1712,7 +1758,7 @@ function sendCodeEmail(email, name, code, subject, intro) {
   }
 
   const plainBody = [
-    'نادي جليس القرائي',
+    'نادي جليس · منطقة القصيم',
     '',
     'مرحباً ' + name + '،',
     intro,
@@ -1728,7 +1774,7 @@ function sendCodeEmail(email, name, code, subject, intro) {
       <p>${intro}</p>
       <p style="font-size:26px;letter-spacing:8px;font-weight:bold;color:#8C532D">${code}</p>
       <p>الرمز صالح لمدة ١٥ دقيقة. إن لم تطلب هذا الرمز تجاهله.</p>
-      <p style="color:#5F6B64">نادي جليس القرائي · منطقة القصيم</p>
+      <p style="color:#5F6B64">نادي جليس</p>
     </div>`;
   const base = {
     to: email,
@@ -2658,6 +2704,100 @@ function doPost(e) {
       return output({ success: true, selected: true, message: 'أُضيف الاقتباس إلى مختارات النادي' });
     }
 
+    /* ---- المسابقات القرائية: إضافة/تعديل/حذف (للمشرفين) ---- */
+    if (action === 'saveCompetition') {
+      const requester = String(data.requesterName || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('إضافة المسابقات متاح للمشرفين فقط');
+      const sheet = getCompetitionsSheet(ss);
+      const competitionId = String(data.id || `comp-${Date.now()}`);
+      const title = String(data.title || '').trim();
+      if (!title) throw new Error('اكتب عنوان المسابقة');
+      const allowed = ['upcoming', 'started', 'finished'];
+      const status = allowed.indexOf(String(data.status || '').trim()) >= 0 ? String(data.status).trim() : 'upcoming';
+      /* نحافظ على المشاركين الحاليين عند التعديل */
+      let participants = [];
+      const lastRow0 = sheet.getLastRow();
+      if (lastRow0 >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow0 - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === competitionId) {
+            try { participants = JSON.parse(String(sheet.getRange(i + 2, 12).getDisplayValue() || '[]')); } catch (e) { participants = []; }
+            break;
+          }
+        }
+      }
+      if (!Array.isArray(participants)) participants = [];
+      const rowData = [
+        competitionId, title,
+        String(data.description || ''), String(data.details || ''), String(data.prize || ''),
+        String(data.startDate || ''), String(data.endDate || ''), status,
+        storeImage(data.image, 'comp'), String(data.createdBy || requester),
+        Number(data.createdAt) || Date.now(), JSON.stringify(participants)
+      ];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (String(ids[i][0] || '') === competitionId) {
+            sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+            return output({ success: true, id: competitionId, message: 'تم تحديث المسابقة' });
+          }
+        }
+      }
+      sheet.appendRow(rowData);
+      return output({ success: true, id: competitionId, message: 'تمت إضافة المسابقة' });
+    }
+
+    if (action === 'deleteCompetition') {
+      const requester = String(data.requesterName || data.by || '').trim();
+      if (!isSupervisorName(requester)) throw new Error('حذف المسابقات متاح للمشرفين فقط');
+      const sheet = getCompetitionsSheet(ss);
+      const competitionId = String(data.id || '');
+      if (!competitionId) throw new Error('لم أجد المسابقة');
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const ids = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+        for (let i = ids.length - 1; i >= 0; i--) {
+          if (String(ids[i][0] || '') === competitionId) {
+            sheet.deleteRow(i + 2);
+            return output({ success: true, message: 'حُذفت المسابقة' });
+          }
+        }
+      }
+      return output({ success: true, message: 'المسابقة غير موجودة' });
+    }
+
+    if (action === 'joinCompetition' || action === 'leaveCompetition') {
+      const sheet = getCompetitionsSheet(ss);
+      const competitionId = String(data.id || '');
+      const memberId = String(data.memberId || '').trim();
+      const memberName = String(data.memberName || '').trim() || 'عضو جليس';
+      if (!competitionId) throw new Error('لم أجد المسابقة');
+      if (!memberId) throw new Error('حسابك غير جاهز — سجّل دخولك من جديد');
+      const joining = action === 'joinCompetition';
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][0] || '') !== competitionId) continue;
+          const status = String(rows[i][7] || 'upcoming');
+          if (joining && status === 'finished') throw new Error('انتهت هذه المسابقة — لا يمكن الاشتراك فيها');
+          let participants = [];
+          try { participants = JSON.parse(String(rows[i][11] || '[]')); } catch (e) { participants = []; }
+          if (!Array.isArray(participants)) participants = [];
+          const index = participants.findIndex((p) => p && String(p.memberId) === memberId);
+          if (joining) {
+            if (index === -1) participants.push({ memberId: memberId, memberName: memberName, joinedAt: Date.now() });
+          } else if (index !== -1) {
+            participants.splice(index, 1);
+          }
+          sheet.getRange(i + 2, 12).setValue(JSON.stringify(participants));
+          return output({ success: true, joined: joining, participantsCount: participants.length, message: joining ? 'انضممت إلى المسابقة' : 'ألغيت اشتراكك' });
+        }
+      }
+      throw new Error('لم أجد المسابقة');
+    }
+
     if (action === 'saveReadingList') {
       const sheet = getReadingListsSheet(ss);
       const listId = String(data.id || `list-${Date.now()}`);
@@ -2774,7 +2914,7 @@ function doPost(e) {
       const raw = String(data.data || '');
       if (!raw) throw new Error('لم يصل أي ملف');
       const isPdf = /pdf/i.test(String(data.name || '')) || /application\/pdf/i.test(raw.slice(0, 40));
-      if (raw.length > 9000000) throw new Error('الملف كبير جدًا — الحد ٦ ميجابايت');
+      if (raw.length > 30000000) throw new Error('الملف كبير جدًا — الحد ٢٠ ميجابايت');
       const url = isPdf ? storePdf(raw, 'pdf') : storeFile(raw, 'upload', 'image/jpeg', 'jpg');
       if (!url) throw new Error('تعذر رفع الملف');
       return output({ success: true, url: url, isPdf: isPdf });
@@ -3670,7 +3810,7 @@ function doPost(e) {
       setIfPresent('JALEES_RESEND_FROM', data, 'resendFrom');
       setSecret('JALEES_BREVO_KEY', data.brevoKey);
       setIfPresent('JALEES_BREVO_FROM', data, 'brevoFrom');
-      setIfPresent('JALEES_BREVO_NAME', data, 'brevoName', (v) => String(v || 'نادي جليس القرائي').trim());
+      setIfPresent('JALEES_BREVO_NAME', data, 'brevoName', (v) => String(v || 'نادي جليس · منطقة القصيم').trim());
       setSecret('JALEES_MAILJET_PUBLIC', data.mailjetPublic);
       setSecret('JALEES_MAILJET_PRIVATE', data.mailjetPrivate);
       setIfPresent('JALEES_MAILJET_FROM', data, 'mailjetFrom');
@@ -4013,6 +4153,19 @@ function doGet(e) {
         days: days.map((day) => ({ date: day, pages: dayTotals[day] || 0 })),
         members: members
       });
+    }
+
+    if (action === 'getCompetitions') {
+      const sheet = getCompetitionsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return output({ success: true, data: [] });
+      const rows = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      const competitions = rows
+        .filter((row) => row[0] && row[1])
+        .map(competitionToObject);
+      const order = { started: 0, upcoming: 1, finished: 2 };
+      competitions.sort((a, b) => (order[String(a.status)] ?? 3) - (order[String(b.status)] ?? 3) || (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      return output({ success: true, data: competitions });
     }
 
     if (action === 'getWeeklyReports') {
