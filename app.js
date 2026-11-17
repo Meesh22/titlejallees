@@ -3721,11 +3721,6 @@ function openAddMyBook() {
         <label for="my-book-color">لون الغلاف (إذا لم تختر صورة)</label>
         <input class="input" id="my-book-color" type="color" value="#1E3A2B">
       </div>
-      <div class="field">
-        <label for="my-book-pdf">ملف الكتاب PDF (اختياري)</label>
-        <input class="input" id="my-book-pdf" type="file" accept="application/pdf,.pdf">
-        <small id="my-book-pdf-status" class="meeting-image-status">يمكنك فتح الكتاب مباشرة من مكتبتك.</small>
-      </div>
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> أضف إلى مكتبتي
       </button>
@@ -3779,17 +3774,6 @@ function openAddMyBook() {
       }
 
       let pdfUrl = '';
-      const pdfFile = root.querySelector('#my-book-pdf').files && root.querySelector('#my-book-pdf').files[0];
-      if (pdfFile) {
-        const pdfStatus = root.querySelector('#my-book-pdf-status');
-        pdfStatus.textContent = 'جارٍ رفع ملف PDF…';
-        try {
-          pdfUrl = await uploadFileToCloud(pdfFile);
-          pdfStatus.textContent = 'تم رفع الملف بنجاح.';
-        } catch (error) {
-          pdfStatus.textContent = error.message || 'تعذر رفع الملف';
-        }
-      }
 
       const id = `my-${Date.now()}`;
       const personalBook = {
@@ -3889,9 +3873,7 @@ function renderMyBooks() {
     const want = item.status === 'want'
       ? `<button class="btn btn-sm btn-ghost" type="button" data-action="start-book" data-id="${book.id}" style="margin-top:8px">ابدأ القراءة</button>`
       : '';
-    const pdf = book.pdfUrl
-      ? `<a class="btn btn-sm btn-ghost my-book-pdf" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer" style="margin-top:8px"><svg class="ic"><use href="#i-article"/></svg> فتح ملف PDF</a>`
-      : '';
+    const pdf = '';
     const cover = bookCoverColors(book);
     const isPersonal = (state.personalBooks || []).some((entry) => String(entry.id) === String(book.id));
     const coverMarkup = book.coverImage
@@ -3946,8 +3928,17 @@ function renderArticles() {
   const visibleArticles = visibleMemberArticles();
   const counts = (state.likeCounts && state.likeCounts.articles) || {};
   let filtered = visibleArticles.filter((article) => {
+    /* الكل = جميع مقالات الأعضاء — يظهر للجميع */
+    if (state.articleFilter !== 'mine' && state.articleFilter !== 'saved' && state.articleFilter !== 'popular') {
+      const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
+      if (cat !== ARTICLE_CATEGORIES[0] && cat !== 'all' && article.category !== cat) return false;
+      return true;
+    }
+    /* الفلاتر «مقالاتي» و«محفوظاتي» = خاصة بعضوك فقط */
+    const isOwn = isMine(article);
+    const isSaved = state.savedArticles.includes(article.id);
     if (state.articleFilter === 'saved' && !state.savedArticles.includes(article.id)) return false;
-    if (state.articleFilter === 'mine' && !isMine(article)) return false;
+    if (state.articleFilter === 'mine' && !isOwn) return false;
     const cat = state.articleCategory || ARTICLE_CATEGORIES[0];
     if (cat !== ARTICLE_CATEGORIES[0] && cat !== 'all' && article.category !== cat) return false;
     return true;
@@ -3996,7 +3987,7 @@ function renderArticles() {
           </div>
         </div>
       </article>`;
-  }).join('') : emptyHTML('article', 'لا مقالات متاحة', 'ستظهر هنا أحدث مقالات مشعل الحفير.');
+  }).join('') : emptyHTML('article', 'لا مقالات متاحة', 'ستظهر هنا أحدث مقالات أعضاء جليس.');
   renderArticleFilters();
 }
 
@@ -4861,7 +4852,7 @@ function downloadArticleShareCard(blob, article) {
 async function shareArticle(article) {
   const shareUrl = articleShareUrl(article);
   const author = authorNameOf(article);
-  const shareText = `${article.title}\nبقلم ${author}\n#جليس_القرائي`;
+  const shareText = `${article.title}\nبقلم ${author}\n#نادي_جليس`;
   try {
     const blob = await createArticleShareCard(article);
     const file = new File([blob], 'مقال-جليس.png', { type: 'image/png' });
@@ -4948,7 +4939,7 @@ async function createQuoteShareCard(quote) {
   context.textAlign = 'right';
   context.fillStyle = '#F8F5EE';
   context.font = '700 32px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('اقتباس من نادي جليس', 1020, 66);
+  context.fillText('اقتباسات أعضاء نادي جليس', 1020, 66);
   context.fillStyle = '#C59B63';
   context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
   context.fillText('من هامش الكتب', 1020, 112);
@@ -5013,7 +5004,7 @@ async function createQuoteShareCard(quote) {
   context.textAlign = 'right';
   context.fillStyle = '#9A7440';
   context.font = '600 22px "IBM Plex Sans Arabic", sans-serif';
-  context.fillText('بقلم', 840, footY + 84);
+  context.fillText('(اختيار)', 840, footY + 84);
   context.fillStyle = '#1E3A2B';
   context.font = '800 30px "IBM Plex Sans Arabic", sans-serif';
   context.fillText(String(author).slice(0, 40), 840, footY + 122);
@@ -5042,7 +5033,7 @@ function downloadQuoteShareCard(blob, quote) {
 async function shareQuote(quote) {
   const shareUrl = quoteShareUrl(quote);
   const author = authorNameOf(quote);
-  const shareText = `«${quote.text}»\n${quote.book || ''}${quote.page ? ` — ص ${quote.page}` : ''}\n— ${author}\n#جليس_القرائي`;
+  const shareText = `«${quote.text}»\n${quote.book || ''}${quote.page ? ` — ص ${quote.page}` : ''}\n— ${author}\n#نادي_جليس`;
   try {
     const blob = await createQuoteShareCard(quote);
     const file = new File([blob], 'اقتباس-جليس.png', { type: 'image/png' });
@@ -5352,7 +5343,7 @@ const notifyState = { items: [], unread: 0, lastSeenId: '', timer: null, permiss
 const NOTIFY_ICONS = {
   register: 'user', join: 'user', consultation: 'chat', article: 'article',
   book: 'book', weekly: 'calendar', archive: 'library', window: 'quote',
-  selection: 'quote', summary: 'book', member: 'user'
+  selection: 'quote', quote: 'quote', like: 'heart', summary: 'book', member: 'user'
 };
 
 function notifyTimeAgo(ts) {
@@ -5405,8 +5396,18 @@ async function loadNotifications(silent = false) {
   if (!currentMember || currentMember.id === 'guest') return null;
   const result = await cloudRequest('getNotifications');
   if (!result || result.success !== true || !Array.isArray(result.data)) return null;
-  notifyState.items = result.data;
-  notifyState.unread = Number(result.unread) || 0;
+  /* إشعارات الإعجاب تظهر فقط لصاحب المقال/الاقتباس */
+  const myId = String((currentMember && currentMember.id) || '');
+  const visibleItems = (result.data || []).filter((item) => {
+    if (!item) return false;
+    if (String(item.type) === 'like') {
+      const target = String(item.memberId || '');
+      return !target || target === myId;
+    }
+    return true;
+  });
+  notifyState.items = visibleItems;
+  notifyState.unread = visibleItems.filter((item) => item && !item.read).length;
 
   /* إشعار جديد أثناء التصفح */
   const fresh = result.data.filter((item) => item && !item.read && item.id !== notifyState.lastSeenId);

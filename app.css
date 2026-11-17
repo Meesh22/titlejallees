@@ -4529,7 +4529,7 @@ textarea::placeholder { color: #A9B1AC; }
   }
 
   .app-header .brand::after {
-    content: 'مساحة الأعضاء · المجلس القرائي';
+    content: 'نادي جليس · مساحة ثقافية';
     font-size: 13px;
     font-weight: 700;
     color: var(--muted);

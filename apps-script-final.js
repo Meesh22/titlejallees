@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-16-r61';
+const CODE_VERSION = 'jalees-2026-11-17-r62';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -872,6 +872,7 @@ const NOTIFICATION_TYPES = {
   window: { label: 'نافذة قرائية', icon: 'quote' },
   selection: { label: 'اقتباس مختار', icon: 'quote' },
   quote: { label: 'اقتباس', icon: 'quote' },
+  like: { label: 'إعجاب', icon: 'heart' },
   summary: { label: 'ملخص', icon: 'book' },
   member: { label: 'عضو', icon: 'user' }
 };
@@ -1103,6 +1104,90 @@ function sendPushNotification(ss, type, title, body, link) {
 }
 
 /* ---- تسجيل تنبيه وإرساله ---- */
+/* تنبيه إعجاب: صاحب المقال/الاقتباس يمرّر الإشعار إلى معجب معين */
+function notifyLike(ss, targetType, targetId, likerId, likerName) {
+  if (!targetId || !likerId) return;
+  let authorId = '', authorName = '', preview = '';
+  try {
+    if (String(targetType) === 'article') {
+      const sheet = getArticlesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][0] || '') === String(targetId)) {
+            authorId = String(rows[i][1] || '');
+            authorName = String(rows[i][2] || '');
+            preview = String(rows[i][3] || '').slice(0, 80);
+            break;
+          }
+        }
+      }
+    } else {
+      const sheet = getQuotesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+        for (let i = 0; i < rows.length; i++) {
+          if (String(rows[i][5] || '') === String(targetId)) {
+            const quoteAuthor = String(rows[i][1] || '').trim();
+            preview = String(rows[i][4] || '').slice(0, 80);
+            authorName = quoteAuthor;
+            /* ابحث عن صاحب الاقتباس في سجل الأعضاء */
+            try {
+              const membersSheet = getMembersSheet(ss);
+              if (membersSheet.getLastRow() >= 2) {
+                const memberRows = membersSheet.getRange(2, 1, membersSheet.getLastRow() - 1, 2).getValues();
+                const target = normalizePersonName(quoteAuthor);
+                for (let j = 0; j < memberRows.length; j++) {
+                  if (normalizePersonName(String(memberRows[j][1] || '')) === target) {
+                    authorId = String(memberRows[j][0] || '');
+                    authorName = String(memberRows[j][1] || '');
+                    break;
+                  }
+                }
+              }
+            } catch (memberError) { /* تجاهل */ }
+            break;
+          }
+        }
+      }
+    }
+  } catch (error) { /* تجاهل */ }
+  if (!authorName) return;
+  const kind = String(targetType) === 'article' ? 'بمقالتك' : 'باقتباسك';
+  const liker = String(likerName || 'عضو');
+  try {
+    const sheet = getNotificationsSheet(ss);
+    /* مسار: نفس المعجب — نفس الصاحب — نفس العنصر — آخر ١٠ دقائق */
+    const now = Date.now();
+    const tenMinutes = 10 * 60 * 1000;
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const sliceFrom = Math.max(2, lastRow - 39); /* آخر أربعين تنبيه */
+      const recent = sheet.getRange(sliceFrom, 1, lastRow - sliceFrom + 1, 9).getValues();
+      const already = recent.some((row) =>
+        String(row[1] || '') === 'like'
+        && String(row[4] || '') === String(authorId || '')
+        && String(row[3] || '').indexOf(liker) >= 0
+        && String(row[8] || '') === String(targetId)
+        && (now - (Number(row[6]) || 0)) < tenMinutes);
+      if (already) return;
+    }
+    sheet.appendRow([
+      'n-' + now + '-' + Math.floor(Math.random() * 900 + 100),
+      'like',
+      'إعجاب جديد',
+      liker + ' أعجب ' + kind + ': «' + preview + '»',
+      String(authorId || ''),
+      authorName,
+      now,
+      '',
+      String(targetId)
+    ]);
+  } catch (notifyError) { /* التنبيهات لا تمنع الإعجاب */ }
+}
+
 function notifySupervisors(ss, type, title, body, link, memberId, memberName) {
   /* النوع غير المفعّل = لا تسجيل ولا إرسال */
   if (!pushEnabledTypes().has(String(type || 'member'))) {
@@ -2860,6 +2945,10 @@ function doPost(e) {
         liked = false;
       } else {
         sheet.appendRow([type, targetId, memberId, data.memberName || '', Date.now()]);
+        /* إشعار صاحب المقال/الاقتباس بالإعجاب — مع اسم المعجب */
+        try {
+          notifyLike(ss, type, targetId, memberId, String(data.memberName || ''));
+        } catch (notifyError) { /* التنبيه لا يمنع الإعجاب */ }
       }
       let count = 0;
       if (sheet.getLastRow() >= 2) {
