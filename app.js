@@ -5346,6 +5346,36 @@ const NOTIFY_ICONS = {
   selection: 'quote', quote: 'quote', like: 'heart', summary: 'book', member: 'user'
 };
 
+/* Never persist provider credentials in browser storage. Keep only non-secret preferences. */
+const NOTIFY_LOCAL_SAFE_FIELDS = [
+  'channel', 'emailProvider', 'telegramChat', 'resendFrom', 'brevoFrom',
+  'brevoName', 'mailjetFrom', 'pushoverUser', 'siteUrl', 'types'
+];
+function saveSafeNotifySettingsLocal(settings) {
+  try {
+    const safe = {};
+    NOTIFY_LOCAL_SAFE_FIELDS.forEach((key) => {
+      if (settings && Object.prototype.hasOwnProperty.call(settings, key)) safe[key] = settings[key];
+    });
+    localStorage.setItem('jalees-notify-settings', JSON.stringify(safe));
+  } catch (error) { /* storage may be unavailable */ }
+}
+function readSafeNotifySettingsLocal() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('jalees-notify-settings') || '{}');
+    const safe = {};
+    NOTIFY_LOCAL_SAFE_FIELDS.forEach((key) => {
+      if (parsed && Object.prototype.hasOwnProperty.call(parsed, key)) safe[key] = parsed[key];
+    });
+    /* Also overwrites any legacy localStorage entry that contained API credentials. */
+    saveSafeNotifySettingsLocal(safe);
+    return safe;
+  } catch (error) {
+    try { localStorage.removeItem('jalees-notify-settings'); } catch (ignore) {}
+    return {};
+  }
+}
+
 function notifyTimeAgo(ts) {
   const diff = Date.now() - (Number(ts) || 0);
   if (!diff || diff < 0) return 'الآن';
@@ -5410,13 +5440,14 @@ async function loadNotifications(silent = false) {
   notifyState.unread = visibleItems.filter((item) => item && !item.read).length;
 
   /* إشعار جديد أثناء التصفح */
-  const fresh = result.data.filter((item) => item && !item.read && item.id !== notifyState.lastSeenId);
+  /* استخدم القائمة المصرّح بعرضها نفسها؛ لا تعرض Toast لإعجاب يخص عضوًا آخر. */
+  const fresh = visibleItems.filter((item) => item && !item.read && item.id !== notifyState.lastSeenId);
   if (!silent && notifyState.lastSeenId && fresh.length) {
     const newest = fresh[0];
     toast(newest.title + ' — ' + String(newest.body || '').slice(0, 70), 'bell');
     showSystemNotification(newest);
   }
-  if (result.data.length) notifyState.lastSeenId = String(result.data[0].id || '');
+  if (visibleItems.length) notifyState.lastSeenId = String(visibleItems[0].id || '');
   updateNotifyBadge();
   return result;
 }
@@ -5727,7 +5758,7 @@ function openNotifySettingsSheet() {
       const payload = readPayload();
       const result = await cloudRequest('saveNotifySettings', payload);
       if (!result || result.success !== true) { fail('تعذر حفظ الإعدادات'); return; }
-      try { localStorage.setItem('jalees-notify-settings', JSON.stringify(payload)); } catch (e) {}
+      saveSafeNotifySettingsLocal(payload);
       toast('تم حفظ إعدادات التنبيهات', 'check');
       closeSheet();
     });
@@ -5736,7 +5767,7 @@ function openNotifySettingsSheet() {
       error.hidden = true;
       const payload = readPayload();
       await cloudRequest('saveNotifySettings', payload);
-      try { localStorage.setItem('jalees-notify-settings', JSON.stringify(payload)); } catch (e) {}
+      saveSafeNotifySettingsLocal(payload);
       const test = await cloudRequest('testNotification', {});
       if (test && test.pushed) {
         toast('وصل التنبيه التجريبي ✅ (' + test.channel + ')', 'check');
@@ -5754,7 +5785,7 @@ function openNotifySettingsSheet() {
       checkBtn.disabled = true;
       const payload = readPayload();
       await cloudRequest('saveNotifySettings', payload);
-      try { localStorage.setItem('jalees-notify-settings', JSON.stringify(payload)); } catch (e) {}
+      saveSafeNotifySettingsLocal(payload);
       const result = await cloudRequest('mailjetHealth', {});
       checkBtn.disabled = false;
       const health = result && result.success === true ? result.health : null;
@@ -5786,26 +5817,34 @@ function openNotifySettingsSheet() {
       let settings = null;
       try { settings = await cloudRequest('getNotifySettings'); } catch (e) { settings = null; }
       const loaded = settings && settings.success === true ? settings : {};
-      let local = {};
-      try { local = JSON.parse(localStorage.getItem('jalees-notify-settings') || '{}'); } catch (e) { local = {}; }
+      const local = readSafeNotifySettingsLocal();
       const pick = (key, serverValue) => String((local && local[key]) || serverValue || '');
       /* الحقول غير السرية: الخادم هو المرجع — حتى لا تطغى نسخة قديمة في المتصفح على ما حفظه المشرف */
       const pickServer = (key, serverValue) => String(serverValue || (local && local[key]) || '');
       if (loaded.channel) channel.value = loaded.channel;
       if (loaded.emailProvider) root.querySelector('#notify-email-provider').value = loaded.emailProvider;
-      root.querySelector('#notify-tg-token').value = pick('telegramToken', '');
+      root.querySelector('#notify-tg-token').value = '';
+      if (loaded.hasTelegram) root.querySelector('#notify-tg-token').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
       const chatIds = String((loaded.telegramChats || []).join(', ') || loaded.telegramChat || (local && local.telegramChat) || '');
       root.querySelector('#notify-tg-chat').value = chatIds;
-      root.querySelector('#notify-ntfy').value = pickServer('ntfyTopic', loaded.ntfyTopic);
-      root.querySelector('#notify-resend-key').value = pick('resendKey', '');
+      root.querySelector('#notify-ntfy').value = '';
+      if (loaded.hasNtfy) root.querySelector('#notify-ntfy').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
+      root.querySelector('#notify-resend-key').value = '';
+      if (loaded.hasResend) root.querySelector('#notify-resend-key').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
       root.querySelector('#notify-resend-from').value = pickServer('resendFrom', loaded.resendFrom);
-      root.querySelector('#notify-brevo-key').value = pick('brevoKey', '');
+      root.querySelector('#notify-brevo-key').value = '';
+      if (loaded.hasBrevo) root.querySelector('#notify-brevo-key').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
       root.querySelector('#notify-brevo-from').value = pickServer('brevoFrom', loaded.brevoFrom);
       root.querySelector('#notify-brevo-name').value = pickServer('brevoName', loaded.brevoName);
-      root.querySelector('#notify-mailjet-public').value = pick('mailjetPublic', '');
-      root.querySelector('#notify-mailjet-private').value = pick('mailjetPrivate', '');
+      root.querySelector('#notify-mailjet-public').value = '';
+      root.querySelector('#notify-mailjet-private').value = '';
+      if (loaded.hasMailjet) {
+        root.querySelector('#notify-mailjet-public').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
+        root.querySelector('#notify-mailjet-private').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
+      }
       root.querySelector('#notify-mailjet-from').value = pickServer('mailjetFrom', loaded.mailjetFrom);
-      root.querySelector('#notify-po-token').value = pick('pushoverToken', '');
+      root.querySelector('#notify-po-token').value = '';
+      if (loaded.hasPushover) root.querySelector('#notify-po-token').placeholder = 'مخزّن بأمان على الخادم — أدخل قيمة جديدة للاستبدال';
       root.querySelector('#notify-po-user').value = pick('pushoverUser', '');
       root.querySelector('#notify-url').value = pickServer('siteUrl', loaded.siteUrl);
       const allTypes = loaded.allTypes || Object.keys(NOTIFY_ICONS);
@@ -8784,11 +8823,11 @@ function enterApp(welcome = false) {
         renderProfile();
       }
     });
-    /* الإعجابات الحقيقية المحفوظة في الشيت */
-    refreshLikesFromCloud();
-    /* اقتباسات مختارات النادي (للمشرفين) */
-    refreshSelectionQuotes();
   }
+  /* الإعجابات الحقيقية المحفوظة في الشيت — متاحة للجميع حتى الزائر */
+  refreshLikesFromCloud();
+  /* اقتباسات مختارات النادي */
+  refreshSelectionQuotes();
   /* جلب آراء الكتب المشتركة وتحديث متوسطات المكتبة */
   refreshBookRatingsFromCloud().then(() => {
     if (state && currentMember) {
@@ -9721,6 +9760,8 @@ function handleLogSubmit(event) {
 }
 
 async function init() {
+  /* Purge legacy provider keys that older builds may have stored in localStorage. */
+  readSafeNotifySettingsLocal();
   bindPasswordToggles();
 
   /* عامل الخدمة: يتيح تثبيت الموقع على الجوال واستقبال التنبيهات */

@@ -265,10 +265,9 @@
 
     /* ================= سجل الإرسال ================= */
     const mailStatus = await window.cloudRequest('getMailStatus');
-    ok('حالة البريد تعرض السجل', mailStatus && Array.isArray(mailStatus.recent) && mailStatus.recent.length > 0, JSON.stringify((mailStatus.recent || []).slice(0, 2)));
-    ok('السجل يذكر البريد المُرسل', (mailStatus.recent || []).some((r) => String(r.email).toLowerCase() === NEW.email), JSON.stringify((mailStatus.recent || []).map((r) => r.email)));
-    ok('السجل يذكر الرمز (للمراجعة)', (mailStatus.recent || []).some((r) => String(r.code || '').length === 6), JSON.stringify((mailStatus.recent || []).map((r) => r.code)));
-    ok('نسخة النادي مفعّلة', mailStatus && mailStatus.bcc === 'jjalees.com@gmail.com', mailStatus && mailStatus.bcc);
+    ok('حالة البريد لا تكشف رسائل الأعضاء', mailStatus && Array.isArray(mailStatus.recent) && mailStatus.recent.length === 0, JSON.stringify(mailStatus));
+    ok('لا تُعرض عناوين الأعضاء في تشخيص البريد العام', !mailStatus || !mailStatus.owner && !mailStatus.bcc && !(mailStatus.recent || []).some((r) => r.email), JSON.stringify(mailStatus));
+    ok('لا تُعرض رموز التحقق في تشخيص البريد', !mailStatus || !(mailStatus.recent || []).some((r) => r.code), JSON.stringify(mailStatus));
 
     /* ================= فشل الإرسال يُسجَّل ويُعرض ================= */
     failAllSends = true;
@@ -277,7 +276,7 @@
     failAllSends = false;
     ok('فشل الإرسال يعطي رسالة واضحة', failRes && failRes.success === false && /تعذر إرسال البريد/.test(failRes.error || ''), failRes && (failRes.error || JSON.stringify(failRes)));
     const mailStatus2 = await window.cloudRequest('getMailStatus');
-    ok('سُجّل الفشل في سجل الإرسال', (mailStatus2.recent || []).some((r) => String(r.email).toLowerCase() === failEmail && r.status === 'failed'), JSON.stringify((mailStatus2.recent || []).slice(0, 3)));
+    ok('لا يعيد تشخيص البريد بيانات سجل الأعضاء', mailStatus2 && Array.isArray(mailStatus2.recent) && mailStatus2.recent.length === 0, JSON.stringify(mailStatus2));
 
     /* ================= منع تكرار التسجيل ================= */
     showGate('register'); await wait(200);

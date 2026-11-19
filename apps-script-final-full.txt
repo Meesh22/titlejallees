@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-17-r62';
+const CODE_VERSION = 'jalees-2026-11-19-r64';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -1154,7 +1154,8 @@ function notifyLike(ss, targetType, targetId, likerId, likerName) {
       }
     }
   } catch (error) { /* تجاهل */ }
-  if (!authorName) return;
+  /* لا نرسل إشعارًا إذا تعذر تحديد صاحب المحتوى أو أعجب العضو بمنشوره هو. */
+  if (!authorId || !authorName || String(authorId) === String(likerId)) return;
   const kind = String(targetType) === 'article' ? 'بمقالتك' : 'باقتباسك';
   const liker = String(likerName || 'عضو');
   try {
@@ -1593,7 +1594,7 @@ function getMailLogSheet(ss) {
 function logMailAttempt(ss, email, status, detail, code) {
   try {
     getMailLogSheet(ss).appendRow([
-      String(email || ''), Date.now(), String(status || ''), String(detail || ''), String(code || '')
+      String(email || ''), Date.now(), String(status || ''), String(detail || ''), ''
     ]);
   } catch (error) { /* السجل لا يوقف الإرسال */ }
 }
@@ -1901,36 +1902,22 @@ function sendCodeEmail(email, name, code, subject, intro) {
 
 /* تشخيص الإرسال: من الحساب المالك؟ وهل الاسم مطابق؟ وآخر محاولات */
 function getMailStatus() {
-  let owner = '';
-  try { owner = String(Session.getEffectiveUser().getEmail() || ''); } catch (error) { owner = ''; }
   let quota = 0;
   try { quota = MailApp.getRemainingDailyQuota(); } catch (error) { quota = 0; }
-  const recent = [];
+  /* Remove legacy one-time codes that older builds wrote to the mail log. */
   try {
     const ss = resolveSpreadsheet();
     const sheet = getMailLogSheet(ss);
     const lastRow = sheet.getLastRow();
-    if (lastRow >= 2) {
-      const rows = sheet.getRange(Math.max(2, lastRow - 19), 1, Math.min(20, lastRow - 1), 5).getValues();
-      rows.forEach((row) => {
-        recent.push({
-          email: String(row[0] || ''),
-          sentAt: Number(row[1]) || 0,
-          status: String(row[2] || ''),
-          detail: String(row[3] || ''),
-          code: String(row[4] || '')
-        });
-      });
-    }
-  } catch (error) { /* السجل غير متاح */ }
+    if (lastRow >= 2) sheet.getRange(2, 5, lastRow - 1, 1).clearContent();
+  } catch (error) { /* cleanup is best-effort */ }
+  /* Public Apps Script endpoint: do not disclose member emails, verification codes,
+     BCC addresses, or the effective Google account. Detailed logs belong in the
+     owner's private Apps Script execution logs, after proper admin auth exists. */
   return {
     success: true,
-    owner: owner,
-    configuredFrom: MAIL_FROM,
-    canSendAsClub: owner.toLowerCase() === String(MAIL_FROM).toLowerCase(),
-    bcc: mailBccAddress(),
     remainingQuota: quota,
-    recent: recent.reverse()
+    recent: []
   };
 }
 
