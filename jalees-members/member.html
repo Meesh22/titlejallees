@@ -1,0 +1,95 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1E3A2B">
+  <title>عضو | مجلس جليس</title>
+  <meta name="description" content="اقتباسات ومقالات وملخصات العضو في نادي جليس القرائي · منطقة القصيم">
+  <link rel="shortcut icon" href="assets/logo-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/logo-light.png">
+  <link rel="manifest" href="manifest.json?v=14">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="design.css?v=14">
+</head>
+<body>
+  <div class="page-shell">
+
+    <!-- رأس الصفحة مع زر الرجوع -->
+    <header class="member-headbar">
+      <div class="header-wrap">
+        <a class="header-brand" href="index.html" aria-label="مجلس أعضاء جليس">
+          <img class="header-logo" src="assets/logo.png?v=1" alt="جليس — أصدقاء القراءة">
+          <span class="brand-divider" aria-hidden="true"></span>
+          <span class="brand-caption">مجلس<br>الأعضاء</span>
+        </a>
+        <a class="back-link" href="index.html">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M10 6l6 6-6 6"/></svg>
+          العودة إلى مجلس الأعضاء
+        </a>
+      </div>
+    </header>
+
+    <div id="member-root">
+    <!-- بطاقة العضو -->
+    <div class="member-hero">
+      <div class="member-avatar member-avatar-fill">ج</div>
+      <h1 class="member-name member-name-fill">العضو</h1>
+      <div class="member-meta">
+        <span class="member-role-chip member-role-fill">عضو</span>
+        <span>عضو منذ <span class="member-since-fill">٢٠٢٤</span></span>
+      </div>
+    </div>
+
+    <!-- المحتوى -->
+    <div class="content-area">
+
+      <!-- الاقتباسات -->
+      <section class="section" id="sec-quotes">
+        <div class="section-head" id="quotes-head">
+          <svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 7C6.5 8.3 5 10.8 5 14.5V17h5v-5H7.8c0-1.9.7-3.2 2.2-4.1zM19 7c-3 1.3-4.5 3.8-4.5 7.5V17h5v-5h-2.2c0-1.9.7-3.2 2.2-4.1z"/></svg>
+          <h2>اقتباسات</h2>
+          <span class="count">0</span>
+        </div>
+        <div class="quotes-list" id="quotes-list"></div>
+      </section>
+
+      <!-- المقالات -->
+      <section class="section" id="sec-articles">
+        <div class="section-head" id="articles-head">
+          <svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 12h8M8 16h8M8 8h3"/></svg>
+          <h2>مقالات</h2>
+          <span class="count">0</span>
+        </div>
+        <div class="articles-list" id="articles-list"></div>
+      </section>
+
+      <!-- الملخصات -->
+      <section class="section" id="sec-summaries">
+        <div class="section-head" id="summaries-head">
+          <svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10 4.8 7.5 4 4 4v15c3.5 0 6 .8 8 2.5 2-1.7 4.5-2.5 8-2.5V4c-3.5 0-6 .8-8 2.5Z"/><path d="M12 6.5V21"/></svg>
+          <h2>ملخصات</h2>
+          <span class="count">0</span>
+        </div>
+        <div class="summaries-list" id="summaries-list"></div>
+      </section>
+
+    </div>
+    </div>
+
+    <footer class="site-footer">
+      <div class="footer-wrap">
+        <div class="footer-brand">جليس <span>·</span> أصدقاء القراءة</div>
+        <div class="footer-text">
+          نادي جليس · منطقة القصيم &nbsp;|&nbsp; أصدقاء القراءة
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="data/members.js?v=14" defer></script>
+  <script src="script.js?v=14" defer></script>
+</body>
+</html>

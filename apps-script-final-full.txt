@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-20-r65';
+const CODE_VERSION = 'jalees-2026-11-19-r64';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -4046,7 +4046,6 @@ function doGet(e) {
     }
 
     if (action === 'getNotifications') {
-      const requestedMemberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
       const sheet = getNotificationsSheet(ss);
       const lastRow = sheet.getLastRow();
       const data = [];
@@ -4055,11 +4054,6 @@ function doGet(e) {
         const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
         rows.forEach((row) => {
           if (!row[0]) return;
-          /* Like notifications belong only to the owner of the article/quote. */
-          if (String(row[1] || '') === 'like') {
-            const ownerId = String(row[4] || '').trim();
-            if (!ownerId || !requestedMemberId || ownerId !== requestedMemberId) return;
-          }
           if (!row[7]) unread += 1;
           data.push({
             id: String(row[0]),

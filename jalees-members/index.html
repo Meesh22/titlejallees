@@ -1,0 +1,93 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1E3A2B">
+  <title>جليس | مجلس الأعضاء</title>
+  <meta name="description" content="مجلس أعضاء نادي جليس القرائي — اقتباسات، مقالات، وملخصات جميع أعضاء النادي · منطقة القصيم">
+  <link rel="shortcut icon" href="assets/logo-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/logo-light.png">
+  <link rel="manifest" href="manifest.json?v=14">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="design.css?v=14">
+</head>
+<body>
+  <div class="page-shell">
+
+    <!-- رأس الموقع -->
+    <header class="site-header">
+      <div class="header-wrap">
+        <a class="header-brand" href="index.html" aria-label="مجلس أعضاء جليس">
+          <img class="header-logo" src="assets/logo.png?v=1" alt="جليس — أصدقاء القراءة">
+          <span class="brand-divider" aria-hidden="true"></span>
+          <span class="brand-caption">مجلس<br>الأعضاء</span>
+        </a>
+        <span class="header-note"><span class="status-mark"></span> مساحة الأعضاء</span>
+      </div>
+    </header>
+
+    <!-- رأس المحتوى -->
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="hero-eyebrow"><span></span> نادي جليس القرائي · منطقة القصيم</p>
+            <h1 id="page-title">وجوهٌ تقرأ،<br><em>وأفكارٌ تبقى.</em></h1>
+            <p class="hero-description">مساحة تجمع سجلّ أعضاء جليس، وتوثّق اقتباساتهم ومقالاتهم وملخصاتهم؛ لتبقى تجارب القراءة والأفكار الجميلة حاضرة في مجلس واحد.</p>
+
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="book-stack book-stack-back"></div>
+            <div class="book-stack book-stack-front"><span>جليس</span><i></i></div>
+            <span class="hero-quote-mark">”</span>
+          </div>
+          <div class="hero-index" aria-hidden="true">مجلس<br><strong>جليس</strong><span>١٤٤٧ — ٢٠٢٦</span></div>
+        </div>
+      </section>
+
+      <section class="directory-section" id="members" aria-labelledby="members-title">
+        <div class="directory-heading">
+          <div>
+
+            <h2 id="members-title">سجل الأعضاء</h2>
+            <p class="section-description">اختر عضواً لتدخل مكتبته الشخصية: اقتباساته، مقالاته وملخصاته.</p>
+          </div>
+          <div class="member-total"><strong id="member-count">—</strong><span>قارئاً<br>في المجلس</span></div>
+        </div>
+
+        <div class="directory-tools">
+          <label class="search-wrap" for="member-search">
+            <span class="search-label">بحث</span>
+            <input class="search-input" id="member-search" type="search" placeholder="اكتب اسم العضو" autocomplete="off" aria-label="ابحث باسم العضو">
+          </label>
+          <p class="directory-hint">تصفّح الأعضاء، واختر من يرافقك في القراءة.</p>
+        </div>
+
+    <!-- شبكة الأعضاء -->
+        <div class="grid-wrap">
+          <div class="members-grid" id="members-grid"></div>
+          <div class="empty-state" id="empty-state" hidden>
+            <div class="empty-rule"></div>
+            <h3>لم نعثر على هذا الاسم</h3>
+            <p>جرّب البحث باسم آخر.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- تذييل -->
+    <footer class="site-footer">
+      <div class="footer-wrap">
+        <div class="footer-brand">جليس <span>·</span> أصدقاء القراءة</div>
+        <div class="footer-text">نادي جليس القرائي · منطقة القصيم <span>—</span> مساحة للكلمة التي تستحق أن تُحفظ.</div>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="data/members.js?v=14" defer></script>
+  <script src="script.js?v=14" defer></script>
+</body>
+</html>
