@@ -2670,14 +2670,45 @@ function articleDateLabel(article) {
 }
 
 /* وقت الاقتباس: إن كان نصًا تاريخيًا نعرضه بالصيغة الطويلة، وإلا نُبقيه كما هو */
+function parseArabicDateValue(value) {
+  const text = String(value || '')
+    .replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/ص|م/g, (part) => part === 'ص' ? 'AM' : 'PM')
+    .trim();
+  const match = text.match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})[\s،,]*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/);
+  if (!match) return NaN;
+  let hour = Number(match[4]) || 0;
+  const meridiem = match[7];
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), hour, Number(match[5]) || 0, Number(match[6]) || 0).getTime();
+}
+
 function quoteDateLabel(quote) {
-  const value = String((quote && quote.time) || '').trim();
-  if (!value) return '';
-  if (/[\\/]|،|,/.test(value)) {
-    const parsed = Date.parse(value);
-    if (Number.isFinite(parsed)) return formatLongDate(parsed);
+  if (!quote) return '';
+  let parsed = Number(quote.createdAt) || 0;
+  if (!parsed) {
+    const idMatch = String(quote.id || '').match(/^q-(\d{10,13})$/);
+    if (idMatch) parsed = Number(idMatch[1]);
   }
-  return value;
+  if (!parsed) parsed = parseArabicDateValue(quote.time || quote.created_at);
+  if (!Number.isFinite(parsed) || parsed <= 0) return String(quote.time || '');
+  const now = new Date();
+  const date = new Date(parsed);
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(date, now)) {
+    const diffMinutes = Math.max(0, Math.floor((now.getTime() - parsed) / 60000));
+    if (diffMinutes < 1) return 'الآن';
+    if (diffMinutes < 60) return `قبل ${toAr(diffMinutes)} دقيقة`;
+    return `قبل ${toAr(Math.floor(diffMinutes / 60))} ساعة`;
+  }
+  const diffDays = Math.floor((now.getTime() - parsed) / 86400000);
+  if (diffDays >= 0 && diffDays < 7) {
+    return new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', { weekday: 'long' }).format(date);
+  }
+  return toAr(formatLongDate(parsed));
 }
 
 function articleTimestamp(article) {
@@ -2985,7 +3016,7 @@ function quoteCardHTML(quote, options = {}) {
         </div>
         <div class="quote-actions">
           <button type="button" data-action="like-quote" data-id="${quote.id}" class="quote-like${liked ? ' active' : ''}" aria-label="إعجاب بالاقتباس" aria-pressed="${liked ? 'true' : 'false'}">
-            <svg class="ic"><use href="#i-heart"/></svg>${likes ? `<span>${toAr(likes)}</span>` : ''}
+            <svg class="ic"><use href="#i-heart"/></svg><span class="like-count">${toAr(likes)}</span>
           </button>
           <button type="button" data-action="save-quote" data-id="${quote.id}" class="${saved ? 'saved' : ''}" aria-label="حفظ الاقتباس">
             <svg class="ic"><use href="#i-bookmark"/></svg>
@@ -3973,7 +4004,7 @@ function renderArticles() {
           <div class="ar-meta"><button class="ar-author" type="button" data-action="open-member-profile" data-name="${esc(authorNameOf(article))}">${esc(authorNameOf(article))}</button><span>·</span><span>${esc(articleDateLabel(article))}</span></div>
           <div class="ar-actions">
             <button class="ar-save ar-like${liked ? ' liked' : ''}" type="button" data-action="like-article" data-id="${article.id}" aria-label="إعجاب بالمقال" aria-pressed="${liked ? 'true' : 'false'}">
-              <svg class="ic"><use href="#i-heart"/></svg>${likes ? `<span>${toAr(likes)}</span>` : ''}
+              <svg class="ic"><use href="#i-heart"/></svg><span class="like-count">${toAr(likes)}</span>
             </button>
             <button class="ar-save" type="button" data-action="save-article" data-id="${article.id}" aria-label="حفظ المقال">
               <svg class="ic"><use href="#i-bookmark"/></svg>
@@ -5424,7 +5455,7 @@ function showSystemNotification(item) {
 
 async function loadNotifications(silent = false) {
   if (!currentMember || currentMember.id === 'guest') return null;
-  const result = await cloudRequest('getNotifications');
+  const result = await cloudRequest('getNotifications', null, currentMember.id);
   if (!result || result.success !== true || !Array.isArray(result.data)) return null;
   /* إشعارات الإعجاب تظهر فقط لصاحب المقال/الاقتباس */
   const myId = String((currentMember && currentMember.id) || '');
@@ -5432,7 +5463,7 @@ async function loadNotifications(silent = false) {
     if (!item) return false;
     if (String(item.type) === 'like') {
       const target = String(item.memberId || '');
-      return !target || target === myId;
+      return Boolean(target) && target === myId;
     }
     return true;
   });
