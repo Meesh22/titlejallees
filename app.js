@@ -1050,11 +1050,11 @@ async function toggleCloudLike(type, id) {
   const index = bucket.indexOf(String(id));
   if (result.liked) {
     if (index < 0) bucket.push(String(id));
-    counts[String(id)] = Number(result.likes) || 0;
   } else {
     if (index >= 0) bucket.splice(index, 1);
-    delete counts[String(id)];
   }
+  // حفظ العدد (بما في ذلك 0) حتى لا "يختفي" العدّاد محليًا بعد النقر مرّتين.
+  counts[String(id)] = Number(result.likes) || 0;
   saveState();
   renderQuotes();
   renderArticles();
@@ -2663,10 +2663,31 @@ function formatLongDate(value) {
   return `${raw.getDate()} ${AR_MONTHS[raw.getMonth()]} ${raw.getFullYear()}`;
 }
 
-function articleDateLabel(article) {
+function articleDateLabel(article, options = {}) {
   const stamp = articleTimestamp(article);
-  if (stamp) return formatLongDate(stamp);
-  return article && article.time ? String(article.time) : '';
+  if (!stamp) return article && article.time ? String(article.time) : '';
+  const now = new Date();
+  const date = new Date(stamp);
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  let base = '';
+  if (sameDay(date, now)) {
+    const diffMinutes = Math.max(0, Math.floor((now.getTime() - stamp) / 60000));
+    if (diffMinutes < 1) base = 'الآن';
+    else if (diffMinutes < 60) base = `قبل ${toAr(diffMinutes)} دقيقة`;
+    else base = `قبل ${toAr(Math.floor(diffMinutes / 60))} ساعة`;
+  } else {
+    const diffDays = Math.floor((now.getTime() - stamp) / 86400000);
+    if (diffDays >= 0 && diffDays < 7) {
+      base = new Intl.DateTimeFormat('ar-u-ca-gregory-nu-arab', { weekday: 'long' }).format(date);
+    } else {
+      base = toAr(formatLongDate(stamp));
+    }
+  }
+  if (options.withTime) {
+    const t = timeLabel(stamp);
+    if (t) base = `${base} · ${t}`;
+  }
+  return base;
 }
 
 /* وقت الاقتباس: إن كان نصًا تاريخيًا نعرضه بالصيغة الطويلة، وإلا نُبقيه كما هو */
@@ -2723,7 +2744,7 @@ function articleTimestamp(article) {
   return idTimestamp ? Number(idTimestamp[1]) : 0;
 }
 
-function renderHome() {
+function renderHome() { if (!state) return;
   const firstName = state.profile.name.trim().split(/\s+/)[0] || 'عضو جليس';
 
   const latestQuotes = $('#home-latest-quotes');
@@ -2813,6 +2834,9 @@ async function loadHomeConsultations(force = false) {
    6. القراءات — السجل ولوحة الأعضاء
    -------------------------------------------------------------------------- */
 function renderReadings() {
+  if (!state) return;
+  // index.html (النسخة المنشورة) لا يحتوي شاشة "القراءات" — تجنب التعطل.
+  if (!$('#readings-week-badge')) return;
   const stats = weekStats();
   const goal = Number(state.profile.goal) || 200;
   const remaining = Math.max(0, goal - stats.pages);
@@ -2946,6 +2970,8 @@ function podiumHTML(members) {
 }
 
 function renderBoard() {
+  if (!state) return;
+  if (!$('#board-podium')) return;
   const period = state.boardPeriod;
   const members = allMembers(period);
   const total = members.reduce((sum, member) => sum + Number(member.pages || 0), 0);
@@ -3033,6 +3059,7 @@ function quoteCardHTML(quote, options = {}) {
 }
 
 function renderQuotes() {
+  if (!state) return;
   const allowedFilters = ['all', 'mine', 'saved', 'popular'];
   const filter = allowedFilters.includes(state.quoteFilter) ? state.quoteFilter : 'all';
   $$('#quote-filters button').forEach((button) => {
@@ -3069,6 +3096,7 @@ function renderQuotes() {
    8. المكتبة ومكتبتي
    -------------------------------------------------------------------------- */
 function renderLibrary() {
+  if (!state) return;
   renderCategoryChips();
   renderClubBooks();
   renderMyBooks();
@@ -3105,6 +3133,7 @@ function getLibraryCategoryOptions() {
 }
 
 function renderCategoryChips() {
+  if (!state) return;
   const container = $('#category-chips');
   if (!container) return;
   const usedCategories = [...new Set([...BOOKS, ...(state.clubBooks || [])].map((book) => book.category).filter(Boolean))];
@@ -3956,6 +3985,7 @@ function renderMyBooks() {
    9. مقالات الأعضاء
    -------------------------------------------------------------------------- */
 function renderArticles() {
+  if (!state) return;
   const visibleArticles = visibleMemberArticles();
   const counts = (state.likeCounts && state.likeCounts.articles) || {};
   let filtered = visibleArticles.filter((article) => {
@@ -4071,6 +4101,7 @@ function renderArticleFilters() {
    10. الملف الشخصي
    -------------------------------------------------------------------------- */
 function renderProfile() {
+  if (!state) return;
   const finished = state.myBooks.filter((item) => item.status === 'finished').length;
   const stats = weekStats();
   const myQuotes = state.quotes.filter((quote) => isMine(quote)).length;
@@ -5188,7 +5219,7 @@ function openArticleSheet(id) {
       <div class="reader-meta">
         <span><svg class="ic"><use href="#i-clock"/></svg> ${toAr(article.read || 3)} دقائق قراءة</span>
         <span><svg class="ic"><use href="#i-article"/></svg> ${esc(article.category)}</span>
-        <span><svg class="ic"><use href="#i-calendar"/></svg> ${esc(articleDateLabel(article))}</span>
+        <span><svg class="ic"><use href="#i-calendar"/></svg> ${esc(articleDateLabel(article, { withTime: true }))}</span>
         <span class="font-size-controls reader-font-controls" role="group" aria-label="حجم خط المقال">
           <button type="button" class="font-size-btn" data-font-article="${esc(article.id)}" data-font-step="-1" aria-label="تصغير خط المقال">أ−</button>
           <button type="button" class="font-size-btn" data-font-article="${esc(article.id)}" data-font-step="1" aria-label="تكبير خط المقال">أ+</button>
@@ -5221,7 +5252,7 @@ function openArticleComposer() {
     <form id="article-form" novalidate>
       <div class="field">
         <label for="article-title">عنوان المقال</label>
-        <input class="input" id="article-title" maxlength="300" placeholder="عنوان يفتح الشهية للقراءة…" required>
+        <input class="input" id="article-title" maxlength="300" placeholder="عنوان يفتح الشهية للمقال…" required>
       </div>
       <div class="field">
         <label for="article-category">التصنيف</label>
@@ -5237,11 +5268,6 @@ function openArticleComposer() {
       <div class="field">
         <div class="article-font-row">
           <label for="article-body">نص المقال</label>
-          <div class="article-font-controls" role="group" aria-label="حجم خط الكتابة">
-            <button type="button" class="font-size-btn" data-font-step="-1" aria-label="تصغير الخط">أ−</button>
-            <span class="font-size-value" id="article-font-value">16</span>
-            <button type="button" class="font-size-btn" data-font-step="1" aria-label="تكبير الخط">أ+</button>
-          </div>
         </div>
         <textarea class="input" id="article-body" rows="14" maxlength="30000" placeholder="اكتب هنا… اترك سطراً فارغاً بين الفقرات." required></textarea>
         <small class="field-hint" id="article-counter" dir="ltr"></small>
@@ -8605,9 +8631,11 @@ function go(name) {
   if (name === 'articles') renderArticles();
   if (name === 'profile') renderProfile();
 
-  if (name === 'quotes') state.seenQuotes = (state.quotes || []).length;
-  if (name === 'library') state.seenClubBooks = (state.clubBooks || []).length;
-  if (name === 'articles') state.seenArticles = visibleMemberArticles().length;
+  if (state) {
+    if (name === 'quotes') state.seenQuotes = (state.quotes || []).length;
+    if (name === 'library') state.seenClubBooks = (state.clubBooks || []).length;
+    if (name === 'articles') state.seenArticles = visibleMemberArticles().length;
+  }
   updateNavBadges();
 }
 
