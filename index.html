@@ -42,7 +42,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=r104-20261120">
+  <link rel="preload" as="image" href="logo-light.png?v=1">
+<link rel="stylesheet" href="app.css?v=r104-20261120">
 </head>
 <body>
 
@@ -89,13 +90,13 @@
   </svg>
 
   <div class="splash" id="splash" aria-hidden="true">
-    <img class="splash-logo" src="logo-light.png?v=1" alt="جليس">
+    <img class="splash-logo" src="logo-light.png?v=1" alt="جليس" width="320" height="174" decoding="async" fetchpriority="high">
   </div>
 
   <div class="stage">
     <aside class="stage-brand" aria-hidden="true">
       <div class="brand-lockup brand-lockup-lg">
-        <img class="brand-logo brand-logo-lg" src="logo-light.png?v=1" alt="جليس · نادي قرائي ثقافي">
+        <img class="brand-logo brand-logo-lg" src="logo-light.png?v=1" alt="جليس · نادي قرائي ثقافي" width="320" height="174" decoding="async">
       </div>
       <p class="stage-kicker">مساحة الأعضاء · نسخة التجارب</p>
       <h2>حيث تصير<br><span>القراءة مجلساً.</span></h2>
@@ -123,7 +124,7 @@
           </button>
           <header class="gate-head">
             <div class="brand-lockup brand-lockup-gate">
-              <img class="brand-logo brand-logo-md" src="logo-dark.png?v=1" alt="جليس · نادي قرائي ثقافي">
+              <img class="brand-logo brand-logo-md" src="logo-dark.png?v=1" alt="جليس · نادي قرائي ثقافي" width="320" height="174" decoding="async">
             </div>
             <span class="gate-badge"><i></i> مساحة خاصة بالأعضاء</span>
           </header>
@@ -351,7 +352,7 @@
 
           <header class="app-header">
             <button class="brand" type="button" data-action="go-home" aria-label="الرئيسية">
-              <img class="brand-logo brand-logo-sm" src="logo-dark.png?v=1" alt="جليس">
+              <img class="brand-logo brand-logo-sm" src="logo-dark.png?v=1" alt="جليس" width="320" height="174" decoding="async">
             </button>
             <div class="header-actions">
               <button class="btn btn-ghost btn-guest-action" type="button" id="guest-register-btn" data-action="open-gate-register" hidden>التسجيل</button>

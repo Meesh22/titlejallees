@@ -1034,27 +1034,57 @@ async function toggleCloudLike(type, id) {
     toast('سجّل دخولك بالبريد والرمز للإعجاب', 'user');
     return;
   }
+  const isArticle = type === 'article';
+  const bucket = isArticle ? state.likedArticles : state.likedQuotes;
+  const counts = isArticle ? state.likeCounts.articles : state.likeCounts.quotes;
+  const sid = String(id);
+  const wasLiked = bucket.indexOf(sid) >= 0;
+  const prevCount = Number(counts[sid] || 0);
+
+  /* تحديث فوري (optimistic) لتجنب البطء */
+  if (wasLiked) {
+    const idx = bucket.indexOf(sid);
+    if (idx >= 0) bucket.splice(idx, 1);
+    counts[sid] = Math.max(0, prevCount - 1);
+  } else {
+    bucket.push(sid);
+    counts[sid] = prevCount + 1;
+  }
+  saveState();
+  renderQuotes();
+  renderArticles();
+  renderHome();
+
   const result = await cloudRequest('toggleLike', {
     type: type === 'article' ? 'article' : 'quote',
-    id: String(id || ''),
+    id: sid,
     memberId: currentMember.id,
     memberName: currentMember.name
   });
   if (!result || result.success !== true) {
+    /* فشل: استعادة */
+    if (wasLiked) {
+      if (bucket.indexOf(sid) < 0) bucket.push(sid);
+    } else {
+      const idx = bucket.indexOf(sid);
+      if (idx >= 0) bucket.splice(idx, 1);
+    }
+    counts[sid] = prevCount;
+    saveState();
+    renderQuotes();
+    renderArticles();
+    renderHome();
     toast(cleanServerError(result, 'تعذر حفظ الإعجاب'), 'info');
     return;
   }
-  const isArticle = type === 'article';
-  const bucket = isArticle ? state.likedArticles : state.likedQuotes;
-  const counts = isArticle ? state.likeCounts.articles : state.likeCounts.quotes;
-  const index = bucket.indexOf(String(id));
+  /* مزامنة العدد (بما في ذلك 0) من الخادم */
+  counts[sid] = Number(result.likes) || 0;
+  const idx = bucket.indexOf(sid);
   if (result.liked) {
-    if (index < 0) bucket.push(String(id));
+    if (idx < 0) bucket.push(sid);
   } else {
-    if (index >= 0) bucket.splice(index, 1);
+    if (idx >= 0) bucket.splice(idx, 1);
   }
-  // حفظ العدد (بما في ذلك 0) حتى لا "يختفي" العدّاد محليًا بعد النقر مرّتين.
-  counts[String(id)] = Number(result.likes) || 0;
   saveState();
   renderQuotes();
   renderArticles();
@@ -5252,7 +5282,7 @@ function openArticleComposer() {
     <form id="article-form" novalidate>
       <div class="field">
         <label for="article-title">عنوان المقال</label>
-        <input class="input" id="article-title" maxlength="300" placeholder="عنوان يفتح الشهية للمقال…" required>
+        <input class="input" id="article-title" maxlength="300" placeholder="" required>
       </div>
       <div class="field">
         <label for="article-category">التصنيف</label>
@@ -5371,13 +5401,13 @@ function openArticleComposer() {
       if (shouldSaveArticleToCloud) {
         saveArticleToCloud(articleMember, newArticle).then((result) => {
           if (result && result.success !== false) {
-            toast('تم حفظ المقال في الشيت', 'article');
+            toast('تم حفظ المقال', 'article');
             return;
           }
           syncState.articles.delete(newArticle.id);
           persistSyncState(articleMember.id);
           scheduleCloudSync(1000);
-          toast('حُفظ المقال على الجهاز، تعذرت مزامنته مع الشيت وستتم إعادة المحاولة', 'info');
+          toast('حُفظ المقال على الجهاز، تعذرت المزامنة وستتم إعادة المحاولة', 'info');
         });
       }
       closeSheet();
@@ -8805,14 +8835,14 @@ async function enterApp(welcome = false) {
   }
   $('#gate').hidden = true;
   $('#shell').hidden = false;
-  /* جلب المقالات والكتب من الشيت قبل العرض حتى تظهر فورًا (لا "فارغة" مؤقتًا) */
-  try { await refreshArticlesFromCloud(); } catch (e) { /* تجاهل */ }
-  try { await refreshClubBooksFromCloud(); } catch (e) { /* تجاهل */ }
-  try { refreshLibraryCategoriesFromCloud(); } catch (e) { /* تجاهل */ }
   renderAll();
   applyGuestVisibility();
   setTimeout(hideSplash, 2500);
   go('home');
+  /* جلب المقالات والكتب من الشيت في الخلفية (لا تُبطئ الدخول) */
+  try { refreshArticlesFromCloud(); } catch (e) { /* تجاهل */ }
+  try { refreshClubBooksFromCloud(); } catch (e) { /* تجاهل */ }
+  try { refreshLibraryCategoriesFromCloud(); } catch (e) { /* تجاهل */ }
   /* إظهار زر «التسجيل في النادي/دخول» فقط في وضع الزائر */
   const guestRegisterBtn = $('#guest-register-btn');
   const guestLoginBtn = $('#guest-login-btn');
@@ -9524,36 +9554,42 @@ async function handleGlobalClick(event) {
       if (!q) break;
       if (!isSupervisor() && !isMine(q)) { toast('غير مصرح', 'info'); break; }
       const isMemberDelete = !isSupervisor() && isMine(q);
-      openConfirm({
-        title: 'حذف الاقتباس',
-        text: isMemberDelete
-          ? `سيُحذف الاقتباس «${q.text.slice(0, 60)}…» نهائياً (لا يمكن استعادته).`
-          : `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
-        confirmLabel: isMemberDelete ? 'حذف نهائي' : 'نقل للسلة',
-        onConfirm: async () => {
-          const result = await cloudRequest('deleteQuote', {
-            id: q.id,
-            text: q.text,
-            book_title: q.book || '',
-            page_number: q.page || '',
-            author_name: q.authorName || state.profile.name,
-            deletedBy: currentMember ? currentMember.name : 'مشرف'
-          });
-          if (!result || result.success === false) {
-            toast('تعذر نقل الاقتباس إلى سلة المحذوفات؛ لم نحذفه من الموقع.', 'info');
-            return;
-          }
-          deletedQuoteIds.add(String(q.id));
-          deletedQuoteTexts.add(normalizeName(q.text));
-          state.quotes = state.quotes.filter((item) => item.id !== id);
-          saveLocalSharedQuotes(state.quotes);
-          saveState();
-          renderQuotes();
-          renderHome();
-          updateNavBadges();
-          toast(isMemberDelete ? 'حُذف الاقتباس نهائياً' : 'نُقل الاقتباس إلى سلة المحذوفات', 'trash');
+      const runDeleteQuote = async () => {
+        const result = await cloudRequest('deleteQuote', {
+          id: q.id,
+          text: q.text,
+          book_title: q.book || '',
+          page_number: q.page || '',
+          author_name: q.authorName || state.profile.name,
+          deletedBy: currentMember ? currentMember.name : 'مشرف'
+        });
+        if (!result || result.success === false) {
+          toast('تعذر حذف الاقتباس؛ لم نحذفه من الموقع.', 'info');
+          return;
         }
-      });
+        deletedQuoteIds.add(String(q.id));
+        deletedQuoteTexts.add(normalizeName(q.text));
+        state.quotes = state.quotes.filter((item) => item.id !== id);
+        saveLocalSharedQuotes(state.quotes);
+        saveState();
+        renderQuotes();
+        renderHome();
+        updateNavBadges();
+        toast(isMemberDelete ? 'حُذف الاقتباس نهائياً' : 'نُقل الاقتباس إلى سلة المحذوفات', 'trash');
+      };
+      if (isMemberDelete) {
+        /* حذف مباشر (بدون تأكيد) — لا تكرار الإجراء */
+        if (q._deleting) return;
+        q._deleting = true;
+        runDeleteQuote().finally(() => { q._deleting = false; });
+      } else {
+        openConfirm({
+          title: 'حذف الاقتباس',
+          text: `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
+          confirmLabel: 'نقل للسلة',
+          onConfirm: runDeleteQuote
+        });
+      }
       break;
     }
     case 'del-entry': {
@@ -9685,42 +9721,47 @@ async function handleGlobalClick(event) {
       if (!isSupervisor() && !isMine(a)) { toast('غير مصرح', 'info'); break; }
       if (!a) break;
       const isMemberDelete = !isSupervisor() && isMine(a);
-      openConfirm({
-        title: 'حذف المقال',
-        text: isMemberDelete
-          ? `سيُحذف المقال «${a.title}» نهائياً (لا يمكن استعادته).`
-          : `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
-        confirmLabel: isMemberDelete ? 'حذف نهائي' : 'نقل للسلة',
-        onConfirm: async () => {
-          const result = await cloudRequest('deleteArticle', {
-            id,
-            title: a.title || '',
-            category: a.category || '',
-            body: a.body || '',
-            excerpt: a.excerpt || '',
-            read: a.read || 3,
-            createdAt: a.createdAt || Date.now(),
-            memberId: a.authorId || (currentMember ? currentMember.id : ''),
-            memberName: a.authorName || (currentMember ? currentMember.name : ''),
-            deletedBy: currentMember ? currentMember.name : 'مشرف'
-          });
-          if (!result || result.success === false) {
-            toast('تعذر نقل المقال إلى سلة المحذوفات؛ لم نحذفه.', 'info');
-            return;
-          }
-          deletedArticleIds.add(String(id));
-          state.articles = state.articles.filter((item) => item.id !== id);
-          if (currentMember && currentMember.id !== 'guest') {
-            syncState.articles.add(id);
-            persistSyncState(currentMember.id);
-          }
-          saveState();
-          renderArticles();
-          renderHome();
-          updateNavBadges();
-          toast(isMemberDelete ? 'حُذف المقال نهائياً' : 'نُقل المقال إلى سلة المحذوفات', 'trash');
+      const runDeleteArticle = async () => {
+        const result = await cloudRequest('deleteArticle', {
+          id,
+          title: a.title || '',
+          category: a.category || '',
+          body: a.body || '',
+          excerpt: a.excerpt || '',
+          read: a.read || 3,
+          createdAt: a.createdAt || Date.now(),
+          memberId: a.authorId || (currentMember ? currentMember.id : ''),
+          memberName: a.authorName || (currentMember ? currentMember.name : ''),
+          deletedBy: currentMember ? currentMember.name : 'مشرف'
+        });
+        if (!result || result.success === false) {
+          toast('تعذر حذف المقال؛ لم نحذفه.', 'info');
+          return;
         }
-      });
+        deletedArticleIds.add(String(id));
+        state.articles = state.articles.filter((item) => item.id !== id);
+        if (currentMember && currentMember.id !== 'guest') {
+          syncState.articles.add(id);
+          persistSyncState(currentMember.id);
+        }
+        saveState();
+        renderArticles();
+        renderHome();
+        updateNavBadges();
+        toast(isMemberDelete ? 'حُذف المقال نهائياً' : 'نُقل المقال إلى سلة المحذوفات', 'trash');
+      };
+      if (isMemberDelete) {
+        if (a._deleting) return;
+        a._deleting = true;
+        runDeleteArticle().finally(() => { a._deleting = false; });
+      } else {
+        openConfirm({
+          title: 'حذف المقال',
+          text: `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
+          confirmLabel: 'نقل للسلة',
+          onConfirm: runDeleteArticle
+        });
+      }
       break;
     }
     case 'delete-club-book': {
