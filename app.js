@@ -398,7 +398,7 @@ async function completeLogin(account) {
   persistAccount(account);
   const member = accountToMember(account);
   await setSessionMember(member);
-  enterApp(true);
+  await enterApp(true);
 }
 
 function resetPasswordToggles() {
@@ -8796,7 +8796,7 @@ async function showBackendVersion() {
   }
 }
 
-function enterApp(welcome = false) {
+async function enterApp(welcome = false) {
   if (!currentMember || !state) return;
   try {
     localStorage.setItem(SESSION_KEY, currentMember.id);
@@ -8805,6 +8805,10 @@ function enterApp(welcome = false) {
   }
   $('#gate').hidden = true;
   $('#shell').hidden = false;
+  /* جلب المقالات والكتب من الشيت قبل العرض حتى تظهر فورًا (لا "فارغة" مؤقتًا) */
+  try { await refreshArticlesFromCloud(); } catch (e) { /* تجاهل */ }
+  try { await refreshClubBooksFromCloud(); } catch (e) { /* تجاهل */ }
+  try { refreshLibraryCategoriesFromCloud(); } catch (e) { /* تجاهل */ }
   renderAll();
   applyGuestVisibility();
   setTimeout(hideSplash, 2500);
@@ -8821,12 +8825,6 @@ function enterApp(welcome = false) {
   });
   /* سحب اقتباسات الأعضاء من الشيت المشترك في الخلفية */
   if (typeof syncQuotesFromSheet === 'function') syncQuotesFromSheet();
-  /* جلب كتب النادي المشتركة حتى مع وجود حالة محلية قديمة للعضو */
-  refreshClubBooksFromCloud();
-  /* جلب أسماء تصنيفات المكتبة المشتركة */
-  refreshLibraryCategoriesFromCloud();
-  /* جلب المقالات المشتركة من الشيت */
-  refreshArticlesFromCloud();
   /* تحديث الصورة الشخصية من الحساب المشترك على أي جهاز */
   refreshMemberProfileFromCloud();
   /* جلب اللقاءات المشتركة من الشيت */
@@ -9525,11 +9523,13 @@ async function handleGlobalClick(event) {
       const q = state.quotes.find((item) => item.id === id);
       if (!q) break;
       if (!isSupervisor() && !isMine(q)) { toast('غير مصرح', 'info'); break; }
-      if (!q) break;
+      const isMemberDelete = !isSupervisor() && isMine(q);
       openConfirm({
         title: 'حذف الاقتباس',
-        text: `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
-        confirmLabel: 'نقل للسلة',
+        text: isMemberDelete
+          ? `سيُحذف الاقتباس «${q.text.slice(0, 60)}…» نهائياً (لا يمكن استعادته).`
+          : `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
+        confirmLabel: isMemberDelete ? 'حذف نهائي' : 'نقل للسلة',
         onConfirm: async () => {
           const result = await cloudRequest('deleteQuote', {
             id: q.id,
@@ -9551,7 +9551,7 @@ async function handleGlobalClick(event) {
           renderQuotes();
           renderHome();
           updateNavBadges();
-          toast('نُقل الاقتباس إلى سلة المحذوفات', 'trash');
+          toast(isMemberDelete ? 'حُذف الاقتباس نهائياً' : 'نُقل الاقتباس إلى سلة المحذوفات', 'trash');
         }
       });
       break;
@@ -9684,10 +9684,13 @@ async function handleGlobalClick(event) {
       if (!a) break;
       if (!isSupervisor() && !isMine(a)) { toast('غير مصرح', 'info'); break; }
       if (!a) break;
+      const isMemberDelete = !isSupervisor() && isMine(a);
       openConfirm({
-        title: 'نقل المقال إلى سلة المحذوفات',
-        text: `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
-        confirmLabel: 'نقل للسلة',
+        title: 'حذف المقال',
+        text: isMemberDelete
+          ? `سيُحذف المقال «${a.title}» نهائياً (لا يمكن استعادته).`
+          : `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
+        confirmLabel: isMemberDelete ? 'حذف نهائي' : 'نقل للسلة',
         onConfirm: async () => {
           const result = await cloudRequest('deleteArticle', {
             id,
@@ -9715,7 +9718,7 @@ async function handleGlobalClick(event) {
           renderArticles();
           renderHome();
           updateNavBadges();
-          toast('نُقل المقال إلى سلة المحذوفات', 'trash');
+          toast(isMemberDelete ? 'حُذف المقال نهائياً' : 'نُقل المقال إلى سلة المحذوفات', 'trash');
         }
       });
       break;
@@ -9866,11 +9869,14 @@ async function init() {
         return;
       }
       if (String(result.member.status || '').toLowerCase() !== 'active') {
-        const statusMessage = result.member.status === 'pending'
-          ? 'حسابك بانتظار موافقة المشرف'
-          : result.member.status === 'rejected'
-            ? 'تم رفض طلب حسابك، تواصل مع إدارة النادي'
-            : 'تعذر التحقق من حالة الحساب. حدّث الصفحة وحاول مرة أخرى.';
+        if (result.member.status === 'pending') {
+          error.hidden = true;
+          showGateView('pending');
+          return;
+        }
+        const statusMessage = result.member.status === 'rejected'
+          ? 'تم رفض طلب حسابك، تواصل مع إدارة النادي'
+          : 'تعذر التحقق من حالة الحساب. حدّث الصفحة وحاول مرة أخرى.';
         error.textContent = statusMessage;
         error.hidden = false;
         return;
@@ -10241,7 +10247,7 @@ async function init() {
 
   if (member) {
     await setSessionMember(member);
-    enterApp(false);
+    await enterApp(false);
     const requested = params.get('screen');
     if (params.get('article')) await openSharedArticlePage(params.get('article'));
     else if (params.get('quote')) await openSharedQuotePage(params.get('quote'));
@@ -10260,7 +10266,7 @@ async function init() {
       seenArticles: 0,
       seenClubBooks: 0
     };
-    enterApp(false);
+    await enterApp(false);
     const requested = params.get('screen');
     if (params.get('article')) await openSharedArticlePage(params.get('article'));
     else if (params.get('quote')) await openSharedQuotePage(params.get('quote'));

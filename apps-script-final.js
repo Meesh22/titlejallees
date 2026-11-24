@@ -849,6 +849,15 @@ function memberStatusCode(value) {
 }
 
 /* هل العضو (بمعرّفه) مشرف/مسؤول؟ (دور supervisor/admin) */
+/* هل عنصر محذوف (deletedBy) يظهر في سلة محذوفات المشرفين؟
+   - حذف by عضو عادي → "حذف نهائي" (لا يظهر في السلة، لا استعادة)
+   - حذف by مشرف أو legacy (deletedBy فارغ/'مشرف') → يظهر في السلة (قابل للاستعادة) */
+function isTrashVisible(deletedBy) {
+  const name = String(deletedBy || '').trim();
+  if (!name || name === 'مشرف') return true;
+  return isSupervisorName(name);
+}
+
 function isSupervisorMemberId(ss, memberId) {
   const id = String(memberId || '').trim();
   if (!id) return false;
@@ -4670,6 +4679,7 @@ function doGet(e) {
         const rows = quoteSheet.getRange(2, 1, quoteSheet.getLastRow() - 1, 8).getValues();
         rows.forEach((row, index) => {
           if (!row[6] || !row[4]) return;
+          if (!isTrashVisible(row[7])) return;
           deleted.push({
             type: 'quote', id: String(row[5] || `sheet-${index + 1}`),
             title: String(row[4]).slice(0, 120), text: row[4], book: row[3],
@@ -4687,6 +4697,7 @@ function doGet(e) {
           const rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
           rows.forEach((row, index) => {
             if (!row[11] || !String(row[3] || '').trim()) return;
+            if (!isTrashVisible(row[12])) return;
             const key = bookKey(row[3], row[4]);
             const hasKey = Boolean(key && key !== '|');
             /* نفس الكتاب محذوف في نسختين: يظهر مرة واحدة في السلة */
@@ -4707,6 +4718,7 @@ function doGet(e) {
         const rows = categorySheet.getRange(2, 1, categorySheet.getLastRow() - 1, 4).getValues();
         rows.forEach(row => {
           if (!row[1] || !row[0]) return;
+          if (!isTrashVisible(row[2])) return;
           let bookIds = [];
           try { bookIds = JSON.parse(row[3] || '[]'); } catch (error) { bookIds = []; }
           deleted.push({
@@ -4721,6 +4733,7 @@ function doGet(e) {
         const rows = articleSheet.getRange(2, 1, articleSheet.getLastRow() - 1, 11).getValues();
         rows.forEach(row => {
           if (!row[9] || !row[0]) return;
+          if (!isTrashVisible(row[10])) return;
           deleted.push({
             type: 'article', id: String(row[0]), title: row[3] || 'مقال',
             category: row[4] || '', deletedAt: row[9], deletedBy: row[10] || ''
@@ -4733,6 +4746,7 @@ function doGet(e) {
         const rows = recordedSheet.getRange(2, 1, recordedSheet.getLastRow() - 1, 13).getValues();
         rows.forEach(row => {
           if (!row[11] || !row[0]) return;
+          if (!isTrashVisible(row[12])) return;
           deleted.push({
             type: 'recording', id: String(row[0]), title: row[1] || 'لقاء مسجل',
             category: row[4] || '', deletedAt: row[11], deletedBy: row[12] || ''
