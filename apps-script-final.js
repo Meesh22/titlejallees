@@ -3815,7 +3815,7 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === articleId) {
             const row = i + 2;
-            if (deleting) { const requester = String(data.deletedBy || data.memberName || '').trim(); const authorId = String(sheet.getRange(row, 2).getValue() || '').trim(); const isOwner = authorId && String(data.memberId || '').trim() === authorId; if (!isSupervisorName(requester) && !isOwner) throw new Error('غير مصرح بحذف هذا المقال'); }
+            if (deleting) { const requester = String(data.deletedBy || data.memberName || '').trim(); const authorId = String(sheet.getRange(row, 2).getValue() || '').trim(); const authorName = String(sheet.getRange(row, 3).getValue() || '').trim(); const reqMemberId = String(data.memberId || '').trim(); const reqMemberName = String(data.memberName || data.deletedBy || '').trim(); const isOwner = (authorId && reqMemberId && authorId === reqMemberId) || (!authorId || authorId === 'cloud' || authorId === 'me') && normalizePersonName(authorName || reqMemberName) === normalizePersonName(reqMemberName) || (authorName && normalizePersonName(authorName) === normalizePersonName(reqMemberName)); if (!isSupervisorName(requester) && !isOwner) throw new Error('غير مصرح بحذف هذا المقال'); }
              sheet.getRange(row, 10, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
             paintDeletedRow(sheet, row, deleting, 11);
             return output({ success: true, message: deleting ? 'نُقل المقال إلى سلة المحذوفات' : 'تمت استعادة المقال' });

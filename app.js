@@ -9564,7 +9564,7 @@ async function handleGlobalClick(event) {
           deletedBy: currentMember ? currentMember.name : 'مشرف'
         });
         if (!result || result.success === false) {
-          toast('تعذر حذف الاقتباس؛ لم نحذفه من الموقع.', 'info');
+          toast(cleanServerError(result, 'تعذر حذف الاقتباس؛ لم نحذفه.'), 'info');
           return;
         }
         deletedQuoteIds.add(String(q.id));
@@ -9577,19 +9577,18 @@ async function handleGlobalClick(event) {
         updateNavBadges();
         toast(isMemberDelete ? 'حُذف الاقتباس نهائياً' : 'نُقل الاقتباس إلى سلة المحذوفات', 'trash');
       };
-      if (isMemberDelete) {
-        /* حذف مباشر (بدون تأكيد) — لا تكرار الإجراء */
-        if (q._deleting) return;
-        q._deleting = true;
-        runDeleteQuote().finally(() => { q._deleting = false; });
-      } else {
-        openConfirm({
-          title: 'حذف الاقتباس',
-          text: `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
-          confirmLabel: 'نقل للسلة',
-          onConfirm: runDeleteQuote
-        });
-      }
+      openConfirm({
+        title: 'حذف الاقتباس',
+        text: isMemberDelete
+          ? `سيُحذف الاقتباس «${q.text.slice(0, 60)}…» نهائياً (لا يمكن استعادته).`
+          : `سينتقل الاقتباس «${q.text.slice(0, 60)}…» إلى سلة المحذوفات ويمكن استعادته لاحقًا.`,
+        confirmLabel: isMemberDelete ? 'حذف نهائي' : 'نقل للسلة',
+        onConfirm: async () => {
+          if (isMemberDelete && q._deleting) return;
+          if (isMemberDelete) q._deleting = true;
+          try { await runDeleteQuote(); } finally { if (isMemberDelete) q._deleting = false; }
+        }
+      });
       break;
     }
     case 'del-entry': {
@@ -9735,7 +9734,7 @@ async function handleGlobalClick(event) {
           deletedBy: currentMember ? currentMember.name : 'مشرف'
         });
         if (!result || result.success === false) {
-          toast('تعذر حذف المقال؛ لم نحذفه.', 'info');
+          toast(cleanServerError(result, 'تعذر حذف المقال؛ لم نحذفه.'), 'info');
           return;
         }
         deletedArticleIds.add(String(id));
@@ -9750,18 +9749,18 @@ async function handleGlobalClick(event) {
         updateNavBadges();
         toast(isMemberDelete ? 'حُذف المقال نهائياً' : 'نُقل المقال إلى سلة المحذوفات', 'trash');
       };
-      if (isMemberDelete) {
-        if (a._deleting) return;
-        a._deleting = true;
-        runDeleteArticle().finally(() => { a._deleting = false; });
-      } else {
-        openConfirm({
-          title: 'حذف المقال',
-          text: `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
-          confirmLabel: 'نقل للسلة',
-          onConfirm: runDeleteArticle
-        });
-      }
+      openConfirm({
+        title: 'حذف المقال',
+        text: isMemberDelete
+          ? `سيُحذف المقال «${a.title}» نهائياً (لا يمكن استعادته).`
+          : `سيختفي المقال «${a.title}» من الموقع ويمكن استعادته لاحقًا.`,
+        confirmLabel: isMemberDelete ? 'حذف نهائي' : 'نقل للسلة',
+        onConfirm: async () => {
+          if (isMemberDelete && a._deleting) return;
+          if (isMemberDelete) a._deleting = true;
+          try { await runDeleteArticle(); } finally { if (isMemberDelete) a._deleting = false; }
+        }
+      });
       break;
     }
     case 'delete-club-book': {
