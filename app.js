@@ -3013,7 +3013,7 @@ function quoteCardHTML(quote, options = {}) {
   const likes = Number((state.likeCounts && state.likeCounts.quotes && state.likeCounts.quotes[quote.id]) || 0);
   const name = authorNameOf(quote);
   const color = authorColorOf(quote);
-  const canDelete = isSupervisor();
+  const canDelete = isSupervisor() || isMine(quote);
   const ownSize = Number((state.quoteFontSizes || {})[quote.id] || 0);
   const textSize = ownSize || clamp(Number(state.quoteFontSize) || 19, 14, 28);
   const textStyle = ownSize ? ` style="font-size:${textSize}px"` : '';
@@ -4042,7 +4042,7 @@ function renderArticles() {
             <button class="ar-save" type="button" data-action="share-article" data-id="${article.id}" aria-label="مشاركة المقال">
               <svg class="ic"><use href="#i-share"/></svg>
             </button>
-            ${isSupervisor() ? `<button class="ar-save" type="button" data-action="delete-article" data-id="${article.id}" aria-label="حذف المقال">
+            ${(isSupervisor() || isMine(article)) ? `<button class="ar-save" type="button" data-action="delete-article" data-id="${article.id}" aria-label="حذف المقال">
               <svg class="ic"><use href="#i-trash"/></svg>
             </button>` : ''}
           </div>
@@ -5490,6 +5490,10 @@ async function loadNotifications(silent = false) {
     if (String(item.type) === 'like') {
       const target = String(item.memberId || '');
       return Boolean(target) && target === myId;
+    }
+    /* طلبات التسجيل/الانضمام: للمشرفين فقط */
+    if (String(item.type) === 'register' || String(item.type) === 'join') {
+      return isSupervisor();
     }
     return true;
   });
@@ -9518,8 +9522,9 @@ async function handleGlobalClick(event) {
       break;
     }
     case 'delete-quote': {
-      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
       const q = state.quotes.find((item) => item.id === id);
+      if (!q) break;
+      if (!isSupervisor() && !isMine(q)) { toast('غير مصرح', 'info'); break; }
       if (!q) break;
       openConfirm({
         title: 'حذف الاقتباس',
@@ -9675,8 +9680,9 @@ async function handleGlobalClick(event) {
       break;
     }
     case 'delete-article': {
-      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
       const a = state.articles.find((item) => item.id === id);
+      if (!a) break;
+      if (!isSupervisor() && !isMine(a)) { toast('غير مصرح', 'info'); break; }
       if (!a) break;
       openConfirm({
         title: 'نقل المقال إلى سلة المحذوفات',

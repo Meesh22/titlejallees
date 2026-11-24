@@ -32,19 +32,41 @@ function resolveSpreadsheet(ss) {
 /* ---- الصور: تُرفع إلى Drive ويُخزَّن رابط قصير في الشيت بدل النص الطويل ---- */
 const IMAGE_FOLDER_NAME = 'جليس - صور الموقع';
 
-function imageFolderId() {
-  const props = PropertiesService.getScriptProperties();
-  const saved = String(props.getProperty('JALEES_IMAGE_FOLDER_ID') || '');
-  if (saved) {
-    try { DriveApp.getFolderById(saved); return saved; } catch (error) { /* أُنشئ مجلدًا جديدًا */ }
-  }
-  const existing = DriveApp.getFoldersByName(IMAGE_FOLDER_NAME);
-  const folder = existing.hasNext() ? existing.next() : DriveApp.createFolder(IMAGE_FOLDER_NAME);
-  props.setProperty('JALEES_IMAGE_FOLDER_ID', folder.getId());
-  return folder.getId();
+/* خريطة: prefix → اسم المجلد الفرعي في Drive */
+function imageSubfolderName(prefix) {
+  const p = String(prefix || '').toLowerCase();
+  if (p.startsWith('member')) return 'صور الأعضاء';
+  if (p === 'book' || p === 'mybook') return 'أغلفة الكتب';
+  if (p === 'article') return 'صور المقالات';
+  if (p === 'meeting' || p === 'recording') return 'لقاءات وتسجيلات';
+  if (p === 'quote' || p === 'selquote' || p === 'weekly') return 'اقتباسات';
+  if (p === 'comp' || p === 'tip' || p === 'list') return 'منافسات ونصائح';
+  if (p === 'pdf' || p === 'upload') return 'ملفات';
+  return 'عام';
 }
 
-function storeImage(value, prefix) {
+/* imageFolderId(subfolder): يُرجع معرّف مجلد فرعي (أو الرئيسي إن لم يُحدد) */
+function imageFolderId(subfolder) {
+  const props = PropertiesService.getScriptProperties();
+  const saved = String(props.getProperty('JALEES_IMAGE_FOLDER_ID') || '');
+  let main;
+  if (saved) {
+    try { main = DriveApp.getFolderById(saved); }
+    catch (error) { main = null; }
+  }
+  if (!main) {
+    const existing = DriveApp.getFoldersByName(IMAGE_FOLDER_NAME);
+    main = existing.hasNext() ? existing.next() : DriveApp.createFolder(IMAGE_FOLDER_NAME);
+    props.setProperty('JALEES_IMAGE_FOLDER_ID', main.getId());
+  }
+  const name = String(subfolder || '').trim();
+  if (!name) return main.getId();
+  const subs = main.getFoldersByName(name);
+  const sub = subs.hasNext() ? subs.next() : main.createFolder(name);
+  return sub.getId();
+}
+
+function storeImage(value, prefix, folder) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
@@ -56,7 +78,8 @@ function storeImage(value, prefix) {
     `image/${type}`,
     `${prefix || 'image'}-${Date.now()}.${type === 'jpeg' ? 'jpg' : type}`
   );
-  const file = DriveApp.getFolderById(imageFolderId()).createFile(blob);
+  const folderName = folder || imageSubfolderName(prefix);
+  const file = DriveApp.getFolderById(imageFolderId(folderName)).createFile(blob);
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
@@ -64,7 +87,7 @@ function storeImage(value, prefix) {
 }
 
 /* ---- ملفات عامة (صور وملفات PDF): تُرفع إلى Drive ويُخزَّن رابط ---- */
-function storeFile(value, prefix, mimeType, extension) {
+function storeFile(value, prefix, mimeType, extension, folder) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
@@ -77,7 +100,8 @@ function storeFile(value, prefix, mimeType, extension) {
     type,
     `${prefix || 'file'}-${Date.now()}.${ext}`
   );
-  const file = DriveApp.getFolderById(imageFolderId()).createFile(blob);
+  const folderName = folder || imageSubfolderName(prefix);
+  const file = DriveApp.getFolderById(imageFolderId(folderName)).createFile(blob);
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
@@ -85,7 +109,7 @@ function storeFile(value, prefix, mimeType, extension) {
 }
 
 /* رفع ملف PDF إلى Drive وإرجاع رابط العرض */
-function storePdf(value, prefix) {
+function storePdf(value, prefix, folder) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
@@ -96,7 +120,8 @@ function storePdf(value, prefix) {
     'application/pdf',
     `${prefix || 'pdf'}-${Date.now()}.pdf`
   );
-  const file = DriveApp.getFolderById(imageFolderId()).createFile(blob);
+  const folderName = folder || imageSubfolderName(prefix);
+  const file = DriveApp.getFolderById(imageFolderId(folderName)).createFile(blob);
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* تجاهل */ }
@@ -104,12 +129,12 @@ function storePdf(value, prefix) {
 }
 
 /* رفع قائمة صور (معرض صور اللقاء) إلى Drive وإرجاع روابطها كـ JSON */
-function storeImageList(list, prefix) {
+function storeImageList(list, prefix, folder) {
   if (!Array.isArray(list) || !list.length) return '';
   const urls = [];
   list.slice(0, 12).forEach((value) => {
     try {
-      const url = storeImage(value, prefix);
+      const url = storeImage(value, prefix, folder);
       if (url) urls.push(url);
     } catch (error) { /* تجاهل الصورة الفاشلة */ }
   });
@@ -821,6 +846,19 @@ function memberStatusCode(value) {
   if (status === 'rejected') return 'rejected';
   if (status === 'banned' || status === 'طرد' || status === 'blocked') return 'banned';
   return 'pending';
+}
+
+/* هل العضو (بمعرّفه) مشرف/مسؤول؟ (دور supervisor/admin) */
+function isSupervisorMemberId(ss, memberId) {
+  const id = String(memberId || '').trim();
+  if (!id) return false;
+  try {
+    const sheet = getMembersSheet(ss);
+    const row = findMemberRowById(sheet, id);
+    if (row < 2) return false;
+    const role = String(sheet.getRange(row, 6).getValue() || '').trim().toLowerCase();
+    return role === 'supervisor' || role === 'admin' || role === 'مشرف' || role === 'مسؤول';
+  } catch (error) { return false; }
 }
 
 function paintMemberRow(sheet, row, status) {
@@ -3315,7 +3353,7 @@ function doPost(e) {
       notifySupervisors(
         ss, 'register',
         'طلب تسجيل جديد',
-        record.name + ' (' + email + ') — الرمز: ' + code + ' — بانتظار موافقتك.',
+        record.name + ' (' + email + ') — بانتظار موافقتك.',
         '', id, record.name
       );
       return output({
@@ -3768,7 +3806,8 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === articleId) {
             const row = i + 2;
-            sheet.getRange(row, 10, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
+            if (deleting) { const requester = String(data.deletedBy || data.memberName || '').trim(); const authorId = String(sheet.getRange(row, 2).getValue() || '').trim(); const isOwner = authorId && String(data.memberId || '').trim() === authorId; if (!isSupervisorName(requester) && !isOwner) throw new Error('غير مصرح بحذف هذا المقال'); }
+             sheet.getRange(row, 10, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
             paintDeletedRow(sheet, row, deleting, 11);
             return output({ success: true, message: deleting ? 'نُقل المقال إلى سلة المحذوفات' : 'تمت استعادة المقال' });
           }
@@ -3960,7 +3999,8 @@ function doPost(e) {
       if (!rowNumber) throw new Error('لم أجد الاقتباس المطلوب');
 
       if (deleting) {
-        sheet.getRange(rowNumber, 6).setValue(quoteId);
+        if (true) { const requester = String(data.deletedBy || '').trim(); const authorName = String(sheet.getRange(rowNumber, 2).getValue() || '').trim(); const isOwner = authorName && normalizePersonName(authorName) === normalizePersonName(String(data.author_name || data.deletedBy || '')); if (!isSupervisorName(requester) && !isOwner) throw new Error('غير مصرح بحذف هذا الاقتباس'); }
+         sheet.getRange(rowNumber, 6).setValue(quoteId);
         sheet.getRange(rowNumber, 7, 1, 2).setValues([[Date.now(), data.deletedBy || 'مشرف']]);
         paintDeletedRow(sheet, rowNumber, true, 8);
         return output({ success: true, message: 'نُقل الاقتباس إلى سلة المحذوفات' });
@@ -4053,12 +4093,18 @@ function doGet(e) {
       let unread = 0;
       if (lastRow >= 2) {
         const rows = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
-        rows.forEach((row) => {
+        const requesterIsSupervisor = isSupervisorMemberId(ss, requestedMemberId);
+       rows.forEach((row) => {
           if (!row[0]) return;
+          const rowType = String(row[1] || '').trim();
           /* Like notifications belong only to the owner of the article/quote. */
-          if (String(row[1] || '') === 'like') {
+          if (rowType === 'like') {
             const ownerId = String(row[4] || '').trim();
             if (!ownerId || !requestedMemberId || ownerId !== requestedMemberId) return;
+          }
+          /* طلبات التسجيل/الانضمام: للمشرفين فقط (الأعضاء لا علاقة لهم بها) */
+          if (rowType === 'register' || rowType === 'join') {
+            if (!requesterIsSupervisor) return;
           }
           if (!row[7]) unread += 1;
           data.push({
