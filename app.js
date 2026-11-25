@@ -769,7 +769,8 @@ async function saveClubBookToCloud(member, book) {
     report: book.report || '',
     pages: book.pages || 0,
     year: book.year || '',
-    createdAt: book.createdAt || Date.now()
+    createdAt: book.createdAt || Date.now(),
+    borrowable: bookBorrowable(book) ? 1 : 0
   });
 }
 
@@ -801,6 +802,7 @@ async function updateClubBookToCloud(book) {
     year: book.year || '',
     coverImage: book.coverImage || '',
     pdfUrl: book.pdfUrl || '',
+    borrowable: bookBorrowable(book) ? 1 : 0,
     updatedAt: Date.now()
   });
 }
@@ -2611,6 +2613,12 @@ function bookKey(title, author) {
   return `${clean(title)}|${clean(author)}`;
 }
 
+function bookBorrowable(book) {
+  if (!book) return false;
+  const value = book.borrowable;
+  if (value === undefined || value === null || value === '') return true;
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
 function coverHTML(book, thumbWidth = 480) {
   if (book.coverImage) {
     return `
@@ -3301,11 +3309,11 @@ function libraryBookCardHTML(book) {
         </button>
         ${inLibrary ? '<span class="book-in-my-library">في مكتبتي</span>' : ''}
         ${book.pdfUrl ? '<span class="book-pdf-badge">PDF</span>' : ''}
-        ${isClubBook ? '<span class="book-borrow-badge book-borrow-badge-sm">متاح للاستعارة</span>' : ''}
+        ${isClubBook && bookBorrowable(book) ? '<span class="book-borrow-badge book-borrow-badge-sm">متاح للاستعارة</span>' : ''}
       </div>
       ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
         ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
-        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button><a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}
+        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>${bookBorrowable(book) ? `<a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}` : ''}
       </div>` : ''}
     </article>`;
 }
@@ -3450,6 +3458,9 @@ function openAddBook() {
         <label for="add-book-pdf">ملف الكتاب PDF (للمشرفين فقط · اختياري)</label>
         <input class="input" id="add-book-pdf" type="file" accept="application/pdf,.pdf">
         <small id="add-book-pdf-status" class="meeting-image-status">يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.</small>
+      </div>` : ''}
+${isSupervisor() ? `<div class="field">
+        <label class="switch-row"><span class="switch-label"><svg class="ic"><use href="#i-book"/></svg> متاح للاستعارة</span><input type="checkbox" id="add-book-borrowable"><span class="switch" aria-hidden="true"></span></label>
       </div>` : ''}
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> إضافة الكتاب
@@ -3604,6 +3615,7 @@ function openAddBook() {
         coverImage: finalCover,
         coverColor2: shadeHex(color, 0.3) || '#14291D',
         pdfUrl,
+        borrowable: isSupervisor() ? (root.querySelector('#add-book-borrowable')?.checked ? 1 : 0) : 0,
         createdAt: Date.now(),
         memberId: currentMember.id,
         memberName: state.profile.name,
@@ -3672,6 +3684,9 @@ function openEditClubBook(bookId) {
           <button type="button" class="btn btn-sm btn-ghost danger" id="edit-club-book-pdf-remove">إزالة الملف</button>
         </div>` : ''}
         <small id="edit-club-book-pdf-status" class="meeting-image-status">${book.pdfUrl ? 'ارفع ملفًا جديدًا لاستبدال الحالي.' : 'يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.'}</small>
+      </div>
+      <div class="field">
+        <label class="switch-row"><span class="switch-label"><svg class="ic"><use href="#i-book"/></svg> متاح للاستعارة</span><input type="checkbox" id="edit-club-book-borrowable" ${bookBorrowable(book) ? 'checked' : ''}><span class="switch" aria-hidden="true"></span></label>
       </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> حفظ التعديلات</button>
     </form>`, (root) => {
@@ -3752,6 +3767,7 @@ function openEditClubBook(bookId) {
         coverColor2: shadeHex(root.querySelector('#edit-club-book-color').value, 0.3) || '#14291D',
         coverImage: imageData,
         pdfUrl,
+        borrowable: root.querySelector('#edit-club-book-borrowable')?.checked ? 1 : 0,
         updatedAt: Date.now()
       };
 
@@ -4513,7 +4529,7 @@ function openBookSheet(id) {
       </div>
     </section>
     ${progress}
-    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook ? `<span class="book-borrow-badge">متاح للاستعارة</span>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isSupervisor() && isClubBook ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
+    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook && bookBorrowable(book) ? `<span class="book-borrow-badge">متاح للاستعارة</span>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isSupervisor() && isClubBook && bookBorrowable(book) ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
     <div class="book-detail-tabs" role="tablist" aria-label="تفاصيل الكتاب">
       <button class="active" type="button" data-book-panel="details" role="tab" aria-selected="true">تفاصيل الكتاب</button>
       <button type="button" data-book-panel="reviews" role="tab" aria-selected="false">تقييمات ومراجعات <span>${toAr(ratings.length)}</span></button>
@@ -7575,7 +7591,7 @@ function renderSelectionsQuotes(panel) {
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">اقتباسات مختارة</span><p>صور الاقتباسات التي يختارها المشرفون</p></div>
-      ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button>` : ''}
+      ${isSupervisor() ? `<div class="selections-head-actions"><button class="btn btn-sm btn-ghost" type="button" data-action="link-selection-folder" data-key="quotes">ربط مجلد Drive</button><button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button></div>` : ''}
     </div>
     <div class="selections-quotes" id="selections-quotes-list"></div>
     <div class="selections-more" id="selections-quotes-more"></div>`;
@@ -7708,7 +7724,7 @@ async function renderSelectionsWindows(panel) {
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">نوافذ قرائية</span><p>صور ونصائح يضيفها المشرف</p></div>
-      ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button>` : ''}
+      ${isSupervisor() ? `<div class="selections-head-actions"><button class="btn btn-sm btn-ghost" type="button" data-action="link-selection-folder" data-key="windows">ربط مجلد Drive</button><button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button></div>` : ''}
     </div>
     <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>
     <div class="selections-more" id="selections-windows-more"></div>`;
@@ -9384,6 +9400,25 @@ async function handleGlobalClick(event) {
     case 'open-reading-window':
       openReadingWindowViewer(id);
       break;
+    case 'link-selection-folder': {
+      const key = actionEl.dataset.key === 'windows' ? 'windows' : 'quotes';
+      const value = window.prompt('ألصق رابط مجلد Google Drive أو معرّفه:');
+      if (!value) break;
+      cloudRequest('setSelectionFolder', { key, url: value }).then((result) => {
+        if (result && result.success === true) {
+          toast('تم ربط المجلد: ' + (result.name || ''), 'check');
+          invalidateSelectionImages(key);
+          const panel = document.querySelector('#selections-panel');
+          if (panel) {
+            if (key === 'windows') renderSelectionsWindows(panel);
+            else renderSelectionsQuotes(panel);
+          }
+        } else {
+          toast((result && result.message) || 'تعذر ربط المجلد', 'info');
+        }
+      });
+      break;
+    }
     case 'open-selection-image': {
       openSelectionImageViewer(actionEl.dataset.src);
       break;

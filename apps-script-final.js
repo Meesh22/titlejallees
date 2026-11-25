@@ -117,6 +117,14 @@ function findFolderByNameGlobal(name) {
 
 function getSelectionFolder(key) {
   const wanted = key === 'windows' ? 'windows' : 'quotes';
+  // إعداد يدوي: если المشرف ربط مجلدًا محددًا، استخدمه
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const saved = String(props.getProperty('JALEES_SEL_FOLDER_' + wanted.toUpperCase()) || '');
+    if (saved) {
+      try { return DriveApp.getFolderById(saved); } catch (error) { /* تجاهل */ }
+    }
+  } catch (error) { /* تجاهل */ }
   const aliases = (SELECTION_FOLDER_ALIASES[wanted] || []).map(normalizeDriveFolderName);
 
   // 1) بحث عام بالاسم (أو نسخة مطبّعة) — الأقوى
@@ -903,13 +911,14 @@ function getQuotesSheet(ss) {
 }
 
 function ensureBookDeleteColumns(sheet) {
-  if (sheet.getMaxColumns() < 16) sheet.insertColumnsAfter(sheet.getMaxColumns(), 16 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 17) sheet.insertColumnsAfter(sheet.getMaxColumns(), 17 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 11).getValue()) sheet.getRange(1, 11).setValue('coverImage');
   if (!sheet.getRange(1, 12).getValue()) sheet.getRange(1, 12).setValue('deletedAt');
   if (!sheet.getRange(1, 13).getValue()) sheet.getRange(1, 13).setValue('deletedBy');
   if (!sheet.getRange(1, 14).getValue()) sheet.getRange(1, 14).setValue('year');
   if (!sheet.getRange(1, 15).getValue()) sheet.getRange(1, 15).setValue('pdfUrl');
   if (!sheet.getRange(1, 16).getValue()) sheet.getRange(1, 16).setValue('coverColor2');
+  if (!sheet.getRange(1, 17).getValue()) sheet.getRange(1, 17).setValue('borrowable');
 }
 
 function ensureArticleDeleteColumns(sheet) {
@@ -1058,7 +1067,7 @@ const ADMIN_API_ACTIONS = new Set([
   'deleteLibraryCategory', 'restoreLibraryCategory', 'saveReadingList',
   'deleteReadingList', 'saveMeeting', 'deleteMeeting', 'saveRecordedMeeting',
   'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests',
-  'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders'
+  'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders', 'setSelectionFolder'
 ]);
 const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
 const MEMBER_BOUND_ACTIONS = new Set([
@@ -2654,7 +2663,8 @@ function doPost(e) {
         safeSheetValue(data.title || ''), safeSheetValue(data.author || ''), safeSheetValue(data.category || ''),
         data.coverColor || '', safeSheetValue(data.report || ''), data.pages || 0,
         data.createdAt || Date.now(), storeImage(data.coverImage, 'book'),
-        '', '', safeSheetValue(data.year || ''), data.pdfUrl || '', data.coverColor2 || ''
+        '', '', safeSheetValue(data.year || ''), data.pdfUrl || '', data.coverColor2 || '',
+         (data.borrowable === true || data.borrowable === 1 || data.borrowable === '1' || data.borrowable === 'true') ? 1 : 0
       ];
 
       for (const source of sources) {
@@ -2673,7 +2683,8 @@ function doPost(e) {
         source.getRange(row, 1, 1, rowData.length).setValues([[
           keepId, rowData[1], rowData[2], rowData[3], rowData[4], rowData[5],
           rowData[6], rowData[7], rowData[8], rowData[9], rowData[10],
-          rowData[11], rowData[12], rowData[13], rowData[14], rowData[15]
+          rowData[11], rowData[12], rowData[13], rowData[14], rowData[15],
+           rowData[16]
         ]]);
         /* إعادة إضافة كتاب كان محذوفًا تُلغي شاهد الحذف حتى يظهر في كل الأجهزة */
         clearDeletedLog(ss, keepId, 'book');
@@ -2728,6 +2739,7 @@ function doPost(e) {
           source.getRange(row, 14).setValue(data.year || '');
           source.getRange(row, 15).setValue(data.pdfUrl || '');
           source.getRange(row, 16).setValue(data.coverColor2 || '');
+          source.getRange(row, 17).setValue((data.borrowable === true || data.borrowable === 1 || data.borrowable === '1' || data.borrowable === 'true') ? 1 : 0);
           touched += 1;
         }
       }
@@ -3072,7 +3084,7 @@ function doPost(e) {
     if (action === 'getSelectionImages') {
       const key = data.key === 'windows' ? 'windows' : 'quotes';
       const page = Math.max(1, Math.min(100, Number(data.page) || 1));
-      const size = 48;
+      const size = 1000;
       const all = selectionFolderFiles(key);
       const start = (page - 1) * size;
       const slice = all.slice(start, start + size);
@@ -3143,6 +3155,21 @@ function doPost(e) {
         quotes: { id: quotesFolder.getId(), name: quotesFolder.getName(), count: selectionFolderFiles('quotes').length },
         windows: { id: windowsFolder.getId(), name: windowsFolder.getName(), count: selectionFolderFiles('windows').length }
       });
+    }
+
+    if (action === 'setSelectionFolder') {
+      const key = data.key === 'windows' ? 'windows' : 'quotes';
+      let folderId = String(data.folderId || data.id || '').trim();
+      const url = String(data.url || '').trim();
+      if (!folderId && url) {
+        const m = url.match(/[-\w]{25,}/);
+        if (m) folderId = m[0];
+      }
+      if (!folderId) throw new Error('معرّف المجلد مطلوب');
+      const folder = DriveApp.getFolderById(folderId);
+      PropertiesService.getScriptProperties().setProperty('JALEES_SEL_FOLDER_' + key.toUpperCase(), folder.getId());
+      CacheService.getScriptCache().remove('sel-folder-' + key);
+      return output({ success: true, id: folder.getId(), name: folder.getName(), message: 'تم ربط المجلد' });
     }
 
     if (action === 'saveWeeklyReport') {
@@ -5035,7 +5062,7 @@ function doGet(e) {
       sources.forEach(sheet => {
         const lastRow = sheet.getLastRow();
         if (lastRow < 2) return;
-        const rows = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
+        const rows = sheet.getRange(2, 1, lastRow - 1, 17).getValues();
         rows.forEach((row, index) => {
           if (!row[3]) return;
           const id = String(row[0] || `legacy-${sheet.getSheetId()}-${index + 2}`);
@@ -5052,7 +5079,7 @@ function doGet(e) {
             author: row[4], category: row[5], coverColor: row[6],
             report: row[7], pages: row[8], createdAt: row[9],
             coverImage: row[10] || '', year: row[13] || '', pdfUrl: row[14] || '',
-            coverColor2: row[15] || ''
+            coverColor2: row[15] || '', borrowable: row[16]
           };
         });
       });
