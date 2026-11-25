@@ -4327,12 +4327,12 @@ function applyReadingFontSizes() {
   root.style.setProperty('--reader-font', `${articleSize}px`);
 }
 
-function toast(message, icon = 'sparkles') {
+function toast(message, icon = 'sparkles', duration = 2800) {
   const el = $('#toast');
   el.innerHTML = `<svg class="ic"><use href="#i-${icon}"/></svg><span>${esc(message)}</span>`;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
 function celebrate() {
@@ -5534,9 +5534,26 @@ async function loadNotifications(silent = false) {
   /* استخدم القائمة المصرّح بعرضها نفسها؛ لا تعرض Toast لإعجاب يخص عضوًا آخر. */
   const fresh = visibleItems.filter((item) => item && !item.read && item.id !== notifyState.lastSeenId);
   if (!silent && notifyState.lastSeenId && fresh.length) {
-    const newest = fresh[0];
-    toast(newest.title + ' — ' + String(newest.body || '').slice(0, 70), 'bell');
-    showSystemNotification(newest);
+    const freshLikes = fresh.filter((it) => String(it.type) === 'like');
+    const otherFresh = fresh.filter((it) => String(it.type) !== 'like');
+    if (freshLikes.length === 1) {
+      const liker = String(freshLikes[0].body || '').split(' أعجب ')[0].trim() || 'عضو';
+      const isArticle = String(freshLikes[0].body || '').includes('بمقالتك') || String(freshLikes[0].body || '').includes('بمقالك');
+      toast(`${liker} أعجب ${isArticle ? 'بمقالك' : 'باقتباسك'}`, 'heart', 10000);
+    } else if (freshLikes.length > 1) {
+      const hasArticle = freshLikes.some((it) => String(it.body || '').includes('بمقال'));
+      const hasQuote = freshLikes.some((it) => String(it.body || '').includes('باقتباس'));
+      let msg = 'أعجب الأعضاء ';
+      if (hasArticle && hasQuote) msg += 'بمقالاتك واقتباساتك';
+      else if (hasArticle) msg += 'بمقالاتك';
+      else msg += 'باقتباساتك';
+      toast(msg, 'heart', 10000);
+    }
+    if (otherFresh.length) {
+      const newest = otherFresh[0];
+      toast(newest.title + ' — ' + String(newest.body || '').slice(0, 70), 'bell');
+    }
+    showSystemNotification(fresh[0]);
   }
   if (visibleItems.length) notifyState.lastSeenId = String(visibleItems[0].id || '');
   updateNotifyBadge();
@@ -5629,7 +5646,7 @@ function openNotificationsSheet() {
     const readAll = root.querySelector('#notify-read-all');
     if (readAll) {
       readAll.addEventListener('click', async () => {
-        await cloudRequest('markNotificationsRead', {});
+        await cloudRequest('markNotificationsRead', {}, currentMember ? currentMember.id : '');
         notifyState.unread = 0;
         updateNotifyBadge();
         const fresh = await loadNotifications();
@@ -6431,7 +6448,7 @@ const CLUB_ACTIVITY_GROUPS = [
     items: [
       { id: 'offline-1', number: 'غير حضوري ١', title: 'مجموعة النادي على الواتساب', details: 'بيئة محفزة على القراءة: تقارير كتب، اقتباسات، مشاركات واستشارات، وإعلانات أنشطة النادي.', items: [] },
       { id: 'offline-2', number: 'غير حضوري ٢', title: 'المسابقات القرائية', details: 'مسابقات خاصة أو عامة، منها مسابقة ٥ كتب في ١٠ أيام (٦٦ متسابقًا، أكثر من ٣٠٠ كتاب).', items: [] },
-      { id: 'offline-3', number: 'غير حضوري ٣', title: 'برامج مجموعات مخصصة لقراءة كتاب', details: 'جامع السنة في ١٤ شهرًا (٥ صفحات يوميًا)، والملكة اللغوية عبر البخلاء والبيان والتبيين.', items: [] }
+      { id: 'offline-3', number: 'غير حضوري ٣', title: 'برامج مجموعات مخصصة لقراءة كتاب', details: '', items: [] }
     ]
   },
   {
@@ -6616,11 +6633,12 @@ function openActivityDetails(item, row) {
   openSheet(`
     ${sheetHead(title, item.number)}
     <div class="activity-detail">
-      <p class="activity-detail-text">${esc(details || 'لم يُضف تعريف لهذا النشاط بعد.')}</p>
+      ${details ? `<p class="activity-detail-text">${esc(details)}</p>` : ''}
       ${list.length ? `
         <h4 class="activity-detail-title">يضم هذا النشاط</h4>
         <ul class="activity-detail-list">${list.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
       ${isSupervisor() ? `<button class="btn btn-gold btn-block" type="button" id="activity-edit"><svg class="ic"><use href="#i-edit"/></svg> تعديل التعريف والأنشطة</button>` : ''}
+      ${isSupervisor() ? `<button class="btn btn-sm btn-ghost btn-block" type="button" id="activity-add-program"><svg class="ic"><use href="#i-plus"/></svg> إضافة برنامج/كتاب للقراءة</button>` : ''}
       ${isCompetitions ? `
         <div id="competitions-section" class="competitions">
           <div class="competitions-head">
@@ -6632,6 +6650,8 @@ function openActivityDetails(item, row) {
     </div>`, (root) => {
     const edit = root.querySelector('#activity-edit');
     if (edit) edit.addEventListener('click', () => openActivityEditor(item, row));
+    const addProg = root.querySelector('#activity-add-program');
+    if (addProg) addProg.addEventListener('click', () => openActivityProgramComposer(item, row));
     if (isCompetitions) {
       renderCompetitions(root, item);
       const add = root.querySelector('#comp-add');
@@ -6665,13 +6685,28 @@ function competitionRangeLabel(comp) {
   return '';
 }
 
+function guestCompetitorId() {
+  let id = '';
+  try { id = localStorage.getItem('jalees-guest-comp-id') || ''; } catch (e) { id = ''; }
+  if (!id) { id = 'guest-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); try { localStorage.setItem('jalees-guest-comp-id', id); } catch (e) {} }
+  return id;
+}
+function guestCompetitorName() {
+  try { return localStorage.getItem('jalees-guest-comp-name') || ''; } catch (e) { return ''; }
+}
+function setGuestCompetitorName(name) {
+  try { localStorage.setItem('jalees-guest-comp-name', String(name || '').trim()); } catch (e) {}
+}
+
 function competitionCardHTML(comp) {
   const status = String(comp.status || 'upcoming');
   const label = competitionStatusLabel(status);
   const range = competitionRangeLabel(comp);
-  const isMember = currentMember && currentMember.id !== 'guest';
-  const joined = isMember && (comp.participants || []).some((p) => p && String(p.memberId) === currentMember.id);
+  const isGuest = !currentMember || currentMember.id === 'guest';
+  const participantId = isGuest ? guestCompetitorId() : (currentMember ? currentMember.id : '');
+  const joined = participantId && (comp.participants || []).some((p) => p && String(p.memberId) === participantId);
   const count = Number(comp.participantsCount || (comp.participants ? comp.participants.length : 0)) || 0;
+  const canJoin = true; // members + guests can subscribe
   return `
     <article class="competition-card" data-comp-id="${esc(comp.id)}">
       ${comp.image ? `<img class="competition-image" src="${esc(comp.image)}" alt="${esc(comp.title)}" loading="lazy" decoding="async">` : ''}
@@ -6693,9 +6728,10 @@ function competitionCardHTML(comp) {
         </div>
         ${status === 'finished'
           ? '<div class="competition-ended">انتهت هذه المسابقة — شاركتم في فرحة ختامها</div>'
-          : isMember
+          : canJoin
             ? `<button type="button" class="btn btn-block competition-join${joined ? ' is-joined' : ' btn-gold'}" data-comp-toggle="${esc(comp.id)}" data-joined="${joined ? '1' : '0'}">${joined ? 'أنت مشارك — إلغاء الاشتراك' : 'اشترك في المسابقة'}</button>`
             : '<div class="competition-ended">سجل دخولك لتشارك</div>'}
+        <button type="button" class="btn btn-sm btn-ghost competition-share" data-comp-share="${esc(comp.id)}" aria-label="مشاركة المسابقة"><svg class="ic"><use href="#i-share"/></svg> مشاركة</button>'}
       </div>
     </article>`;
 }
@@ -6714,11 +6750,29 @@ async function renderCompetitions(root, item) {
   host.querySelectorAll('[data-comp-toggle]').forEach((button) => {
     button.addEventListener('click', async () => {
       const joining = button.dataset.joined !== '1';
+      const isGuest = !currentMember || currentMember.id === 'guest';
+      let memberId = currentMember ? currentMember.id : '';
+      let memberName = currentMember && currentMember.name ? currentMember.name : '';
+      if (isGuest) {
+        memberId = guestCompetitorId();
+        if (joining) {
+          let name = guestCompetitorName();
+          if (!name) {
+            name = window.prompt('أدخل اسمك للاشتراك في المسابقة:') || '';
+            name = name.trim();
+            if (!name) { button.disabled = false; return; }
+            setGuestCompetitorName(name);
+          }
+          memberName = name;
+        } else {
+          memberName = guestCompetitorName() || 'ضيف';
+        }
+      }
       button.disabled = true;
       const result = await cloudRequest(joining ? 'joinCompetition' : 'leaveCompetition', {
         id: button.dataset.compToggle,
-        memberId: currentMember ? currentMember.id : '',
-        memberName: currentMember && currentMember.name ? currentMember.name : ''
+        memberId: memberId,
+        memberName: memberName
       });
       if (!result || result.success !== true) {
         button.disabled = false;
@@ -6729,6 +6783,27 @@ async function renderCompetitions(root, item) {
       renderCompetitions(root, item);
     });
   });
+  host.querySelectorAll('[data-comp-share]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const compId = button.dataset.compShare;
+      const comps = await loadCompetitions();
+      const comp = comps.find((c) => String(c.id) === String(compId));
+      const title = comp ? comp.title : 'مسابقة قرائية';
+      const text = `${title} — مسابقة قرائية في نادي جليس\nhttps://jjalees.com/`;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: title, text: text, url: 'https://jjalees.com/' });
+        } else {
+          await navigator.clipboard.writeText(text);
+          toast('نُسخ رابط/نص المسابقة للمشاركة', 'share');
+        }
+      } catch (e) {
+        try { await navigator.clipboard.writeText(text); toast('نُسخ رابط/نص المسابقة للمشاركة', 'share'); }
+        catch (e2) { toast('تعذر المشاركة', 'info'); }
+      }
+    });
+  });
+
   host.querySelectorAll('[data-comp-edit]').forEach((button) => {
     button.addEventListener('click', async () => {
       const comps = await loadCompetitions();
@@ -6851,6 +6926,39 @@ function openActivityEditor(item, row) {
       });
       if (!saved) return;
       toast('تم حفظ النشاط', 'check');
+      openClubProgramsSheet();
+    });
+  });
+}
+
+function openActivityProgramComposer(item, row) {
+  if (!isSupervisor()) { toast('إضافة البرامج متاحة للمشرفين فقط', 'info'); return; }
+  const currentItems = (row && Array.isArray(row.items)) ? row.items.slice() : [];
+  openSheet(`
+    ${sheetHead('إضافة برنامج/كتاب للقراءة', item.number || '')}
+    <form id="activity-program-form" novalidate>
+      <div class="field"><label for="ap-title">عنوان البرنامج/الكتاب</label><input class="input" id="ap-title" maxlength="200" required placeholder="مثال: جامع السنة في ١٤ شهرًا"></div>
+      <div class="field"><label for="ap-details">التفاصيل</label><textarea class="input" id="ap-details" rows="5" maxlength="2000" placeholder="خطة القراءة، المدة، الصفحات يوميًا…"></textarea></div>
+      <button class="btn btn-gold btn-block" type="submit">إضافة</button>
+    </form>`, (root) => {
+    root.querySelector('#activity-program-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = root.querySelector('#ap-title').value.trim();
+      if (!title) { toast('اكتب عنوان البرنامج', 'info'); return; }
+      const details = root.querySelector('#ap-details').value.trim();
+      const line = details ? `${title} — ${details}` : title;
+      const newItems = currentItems.concat([line]);
+      const saved = await saveClubActivity({
+        id: item.id,
+        type: 'activity',
+        parentId: '',
+        title: (row && row.title) || item.title,
+        details: (row && row.details) || item.details || '',
+        items: newItems,
+        sortOrder: (row && row.sortOrder) || Date.now()
+      });
+      if (!saved) return;
+      toast('أُضيف البرنامج', 'check');
       openClubProgramsSheet();
     });
   });

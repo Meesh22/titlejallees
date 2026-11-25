@@ -930,6 +930,11 @@ function getNotificationsSheet(ss) {
   ]);
 }
 
+/* قراءات التنبيهات per-member: notificationId | memberId | readAt */
+function getNotificationReadsSheet(ss) {
+  return getDataSheet(ss, 'NotificationReads', ['notificationId', 'memberId', 'readAt']);
+}
+
 /* ---- إعدادات قناة الإرسال (تُحفظ في خصائص السكربت) ---- */
 function pushSettings() {
   let props = {};
@@ -3865,19 +3870,36 @@ function doPost(e) {
 
     /* ===== التنبيهات ===== */
     if (action === 'markNotificationsRead') {
-      const sheet = getNotificationsSheet(ss);
-      const lastRow = sheet.getLastRow();
+      const requesterId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim() || String(data.memberId || '').trim();
+      const targetId = String(data.id || '').trim();
+      const readsSheet = getNotificationReadsSheet(ss);
+      const mainSheet = getNotificationsSheet(ss);
+      const lastRow = mainSheet.getLastRow();
       let marked = 0;
+      const toMark = [];
       if (lastRow >= 2) {
-        const rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
-        const targetId = String(data.id || '').trim();
-        for (let i = 0; i < rows.length; i++) {
-          if (rows[i][7]) continue;
-          if (targetId && String(rows[i][0]) !== targetId) continue;
-          sheet.getRange(i + 2, 8).setValue(Date.now());
-          marked += 1;
-        }
+        const rows = mainSheet.getRange(2, 1, lastRow - 1, 9).getValues();
+        rows.forEach((row) => {
+          if (!row[0]) return;
+          const nid = String(row[0]).trim();
+          if (targetId && nid !== targetId) return;
+          toMark.push(nid);
+        });
       }
+      /* إدراج per-member reads (تجنب التكرار) */
+      const existing = new Set();
+      const rLast = readsSheet.getLastRow();
+      if (rLast >= 2) {
+        const rRows = readsSheet.getRange(2, 1, rLast - 1, 2).getValues();
+        rRows.forEach((r) => {
+          if (String(r[1] || '').trim() === requesterId) existing.add(String(r[0] || '').trim());
+        });
+      }
+      toMark.forEach((nid) => {
+        if (existing.has(nid)) return;
+        readsSheet.appendRow([nid, requesterId, Date.now()]);
+        marked += 1;
+      });
       return output({ success: true, marked: marked });
     }
 
@@ -4098,6 +4120,18 @@ function doGet(e) {
       const requestedMemberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
       const sheet = getNotificationsSheet(ss);
       const lastRow = sheet.getLastRow();
+      /* قراءات per-member */
+      const readSet = new Set();
+      try {
+        const readsSheet = getNotificationReadsSheet(ss);
+        const rLast = readsSheet.getLastRow();
+        if (rLast >= 2 && requestedMemberId) {
+          const rRows = readsSheet.getRange(2, 1, rLast - 1, 3).getValues();
+          rRows.forEach((r) => {
+            if (String(r[1] || '').trim() === requestedMemberId) readSet.add(String(r[0] || '').trim());
+          });
+        }
+      } catch (readErr) { /* تجاهل */ }
       const data = [];
       let unread = 0;
       if (lastRow >= 2) {
@@ -4115,16 +4149,18 @@ function doGet(e) {
           if (rowType === 'register' || rowType === 'join') {
             if (!requesterIsSupervisor) return;
           }
-          if (!row[7]) unread += 1;
+          const nid = String(row[0]).trim();
+          const isRead = readSet.has(nid) || Boolean(row[7]);
+          if (!isRead) unread += 1;
           data.push({
-            id: String(row[0]),
+            id: nid,
             type: String(row[1] || 'member'),
             title: String(row[2] || ''),
             body: String(row[3] || ''),
             memberId: String(row[4] || ''),
             memberName: String(row[5] || ''),
             createdAt: Number(row[6]) || 0,
-            read: Boolean(row[7]),
+            read: isRead,
             link: String(row[8] || '')
           });
         });
