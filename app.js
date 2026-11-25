@@ -314,15 +314,12 @@ function findMemberByName(value) {
   return null;
 }
 
-const SUPERVISORS = ['مشعل عبدالرحمن الحفير', 'مشعل الحفير', 'محمد صالح الدبيخي', 'محمد الدبيخي', 'عبدالله يوسف الحجيلان', 'عبدالله الحجيلان'];
 function isGuest() { return !currentMember || currentMember.id === 'guest'; }
 
 function isSupervisor() {
   if (!currentMember) return false;
   const role = String(currentMember.role || '').toLowerCase();
-  /* أي عضو دوره مشرف (من الشيت أو من المشرفين المعيّنين) له كامل صلاحيات المشرف */
-  if (role === 'supervisor' || role === 'مشرف') return true;
-  return SUPERVISORS.some((name) => normalizeName(name) === normalizeName(currentMember.name));
+  return role === 'supervisor' || role === 'admin' || role === 'مشرف';
 }
 
 /* المستشار: مشرف أو عضو تمت ترقيته من الشيت (role = consultant) */
@@ -360,13 +357,14 @@ function persistAccount(account) {
 function accountToMember(account) {
   const name = String((account && account.name) || 'عضو جليس');
   const rawRole = String((account && account.role) || '').toLowerCase();
-  const role = rawRole === 'supervisor' ? 'مشرف' : (rawRole === 'consultant' ? 'مستشار' : 'عضو');
+  const role = (rawRole === 'supervisor' || rawRole === 'admin') ? 'مشرف' : (rawRole === 'consultant' ? 'مستشار' : 'عضو');
   return {
     id: String(account.id),
     name,
     role,
     email: String(account.email || ''),
     photo: String(account.photo || ''),
+    sessionToken: String(account.authToken || ''),
     pages: 0,
     lastWeek: 0,
     color: MEMBER_COLORS[Math.abs(name.length) % MEMBER_COLORS.length]
@@ -614,6 +612,8 @@ async function cloudRequest(action, data = null, memberId = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
+    const savedAccount = readAccount();
+    const authToken = String((currentMember && currentMember.sessionToken) || (savedAccount && savedAccount.authToken) || '');
     const endpoint = MAIN_API_ACTIONS.has(action)
       ? APPS_SCRIPT_URL
       : action === 'getQuotes' || action === 'getArticles' || action === 'saveArticle' || action === 'deleteArticle' || action === 'restoreArticle'
@@ -628,15 +628,19 @@ async function cloudRequest(action, data = null, memberId = null) {
     const query = new URLSearchParams();
     query.set('action', action);
     if (memberId) query.set('memberId', memberId);
+    if (authToken) query.set('authToken', authToken);
     // Apps Script may be served through redirects; bust intermediary caches so new rows appear.
     if (!data) query.set('_', String(Date.now()));
     const url = `${endpoint}?${query.toString()}`;
 
-    const options = data
+    const requestData = data && typeof data === 'object'
+      ? { ...data, ...(authToken ? { authToken } : {}) }
+      : data;
+    const options = requestData
       ? {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `action=${action}&data=${encodeURIComponent(JSON.stringify(data))}`,
+          body: `action=${action}&data=${encodeURIComponent(JSON.stringify(requestData))}`,
           signal: controller.signal,
           cache: 'no-store'
         }
@@ -1128,6 +1132,7 @@ async function saveJoinRequestToSheet(data) {
 async function saveQuoteToSheet(quoteData) {
   if (!QUOTES_SHEET_URL) return;
   try {
+    const savedAccount = readAccount();
     const payload = {
       id: quoteData.id || `q-${Date.now()}`,
       created_at: new Date().toLocaleString('ar-SA'),
@@ -1135,7 +1140,8 @@ async function saveQuoteToSheet(quoteData) {
       page_number: quoteData.page || '',
       book_title: quoteData.book || '',
       quote_text: quoteData.text || '',
-      book_author: quoteData.bookAuthor || ''
+      book_author: quoteData.bookAuthor || '',
+      authToken: (currentMember && currentMember.sessionToken) || (savedAccount && savedAccount.authToken) || ''
     };
 
     await fetch(QUOTES_SHEET_URL, {
@@ -1168,7 +1174,7 @@ async function loadQuotesFromSheet() {
           bookAuthor: q.book_author || '',
           bookId: q.book_id || (matchingBook && matchingBook.id) || '',
           page: q.page_number ? String(q.page_number) : '',
-          authorId: mem ? mem.id : 'cloud',
+          authorId: q.author_id || (mem ? mem.id : 'cloud'),
           authorName: q.author_name || 'عضو جليس',
           color: mem ? mem.color : '#C59B63',
           time: q.created_at || 'مؤخراً',
@@ -5676,15 +5682,7 @@ function openNotificationsSheet() {
             <strong>${esc(item.name || 'عضو جديد')}</strong>
             <small dir="ltr">${esc(item.email || '')}${item.phone ? ' · ' + esc(item.phone) : ''}</small>
           </div>
-          <span class="pending-code" dir="ltr">${esc(item.code || '—')}</span>
-          <button class="btn btn-xs btn-ghost" type="button" data-action="copy-pending-code" data-code="${esc(item.code || '')}">نسخ</button>
         </div>`).join('');
-      pendingList.querySelectorAll('[data-action="copy-pending-code"]').forEach((button) => {
-        button.addEventListener('click', async () => {
-          const ok = await copyText(button.dataset.code || '');
-          toast(ok ? 'نُسخ الرمز — أرسله للعضو' : 'تعذر النسخ', ok ? 'check' : 'info');
-        });
-      });
     };
     const pendingRefresh = root.querySelector('#pending-refresh');
     if (pendingRefresh) pendingRefresh.addEventListener('click', () => loadPending());
@@ -6105,8 +6103,14 @@ async function refreshJoinRequests() {
   const membersList = document.getElementById('pending-members-list');
   if (!list && !membersList) return;
   try {
+    const session = readAccount();
+    const authToken = String((currentMember && currentMember.sessionToken) || (session && session.authToken) || '');
+    const joinRequestUrl = new URL(CLUB_BOOKS_URL);
+    joinRequestUrl.searchParams.set('action', 'getJoinRequests');
+    joinRequestUrl.searchParams.set('_', String(Date.now()));
+    if (authToken) joinRequestUrl.searchParams.set('authToken', authToken);
     const results = await Promise.all([
-      fetch(`${CLUB_BOOKS_URL}?action=getJoinRequests&_=${Date.now()}`),
+      fetch(joinRequestUrl.toString()),
       cloudRequest('getPendingMembers')
     ]);
     const data = await results[0].json();
@@ -9581,8 +9585,10 @@ async function handleGlobalClick(event) {
         title: 'تسجيل الخروج',
         text: 'ستعود إلى بوابة الأعضاء. تقدمك محفوظ باسمك في هذا الجهاز.',
         confirmLabel: 'خروج',
-        onConfirm: () => {
+        onConfirm: async () => {
+          try { await cloudRequest('logoutMember', { memberId: currentMember ? currentMember.id : '' }); } catch (error) {}
           try { localStorage.removeItem(SESSION_KEY); } catch (error) { /* تجاهل */ }
+          persistAccount(null);
           showGate('login');
         }
       });
@@ -9982,7 +9988,7 @@ async function init() {
 
   /* عامل الخدمة: يتيح تثبيت الموقع على الجوال واستقبال التنبيهات */
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    try { navigator.serviceWorker.register('sw.js?v=r43').catch(() => {}); } catch (error) { /* تجاهل */ }
+    try { navigator.serviceWorker.register('sw.js?v=r44').catch(() => {}); } catch (error) { /* تجاهل */ }
   }
 
   $('#login-form').addEventListener('submit', async (event) => {
@@ -10009,9 +10015,9 @@ async function init() {
     setBtnBusy(submitBtn, true, 'جارٍ الدخول…');
     try {
       const result = await cloudRequest('loginMember', { identifier, password });
-      if (!result || result.success !== true || !result.member) {
+      if (!result || result.success !== true || !result.member || !result.member.authToken) {
         error.textContent = result && result.success === true && !result.member
-          ? 'خدمة الدخول لم تُرجع بيانات الحساب. يجب تحديث Apps Script ونشر إصدار جديد.'
+          ? 'خدمة الدخول لم تُرجع جلسة موثوقة. يجب نشر إصدار Apps Script المحدّث.'
           : cleanServerError(result, 'تعذر الدخول، تحقق من الاسم أو البريد والرمز.');
         error.hidden = false;
         return;
@@ -10381,13 +10387,21 @@ async function init() {
 
   const params = new URLSearchParams(location.search);
   let member = null;
-  if (params.get('demo') === '1') {
-    member = findMemberByName(params.get('member') || '')
-      || findMemberByName('مشعل الحفير')
-      || MEMBERS[0];
-  } else {
-    const account = readAccount();
-    if (account) member = accountToMember(account);
+  const account = readAccount();
+  if (account && account.authToken) {
+    const validation = await cloudRequest('validateSession');
+    if (validation && validation.success === true && validation.member
+      && String(validation.member.id) === String(account.id)) {
+      member = accountToMember({ ...account, ...validation.member, authToken: account.authToken });
+      persistAccount({ ...account, ...validation.member, authToken: account.authToken });
+    } else {
+      persistAccount(null);
+      try { localStorage.removeItem(SESSION_KEY); } catch (error) {}
+    }
+  } else if (account) {
+    /* إزالة جلسات الإصدارات السابقة غير الموثقة؛ تسجيل دخول واحد مطلوب للترقية. */
+    persistAccount(null);
+    try { localStorage.removeItem(SESSION_KEY); } catch (error) {}
   }
 
   renderLogStamp();

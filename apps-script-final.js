@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-20-r65';
+const CODE_VERSION = 'jalees-2026-11-25-r67';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -31,6 +31,7 @@ function resolveSpreadsheet(ss) {
 
 /* ---- الصور: تُرفع إلى Drive ويُخزَّن رابط قصير في الشيت بدل النص الطويل ---- */
 const IMAGE_FOLDER_NAME = 'جليس - صور الموقع';
+let ACTIVE_REQUEST_MEMBER_ID = '';
 
 /* خريطة: prefix → اسم المجلد الفرعي في Drive */
 function imageSubfolderName(prefix) {
@@ -72,6 +73,11 @@ function storeImage(value, prefix, folder) {
   if (/^https?:\/\//i.test(raw)) return raw;
   const match = raw.match(/^data:image\/(jpeg|jpg|png|webp);base64,([\s\S]+)$/i);
   if (!match) return '';
+  if (match[2].length > 28000000) throw new Error('حجم الصورة يتجاوز الحد المسموح');
+  if (ACTIVE_REQUEST_MEMBER_ID) {
+    enforceRateLimit('drive-image-member', ACTIVE_REQUEST_MEMBER_ID, 30, 60 * 60 * 1000, 'وصلت إلى حد رفع الصور لهذا الوقت');
+    enforceRateLimit('drive-image-global', 'all', 120, 60 * 60 * 1000, 'رفع الصور متوقف مؤقتًا لكثرة الطلبات');
+  }
   const type = match[1].toLowerCase() === 'jpg' ? 'jpeg' : match[1].toLowerCase();
   const blob = Utilities.newBlob(
     Utilities.base64Decode(match[2]),
@@ -93,6 +99,11 @@ function storeFile(value, prefix, mimeType, extension, folder) {
   if (/^https?:\/\//i.test(raw)) return raw;
   const match = raw.match(/^data:([\w.+-]+)\/([\w.+-]+);base64,([\s\S]+)$/i);
   if (!match) return '';
+  if (match[3].length > 28000000) throw new Error('حجم الملف يتجاوز الحد المسموح');
+  if (ACTIVE_REQUEST_MEMBER_ID) {
+    enforceRateLimit('drive-file-member', ACTIVE_REQUEST_MEMBER_ID, 10, 60 * 60 * 1000, 'وصلت إلى حد رفع الملفات لهذا الوقت');
+    enforceRateLimit('drive-file-global', 'all', 80, 60 * 60 * 1000, 'رفع الملفات متوقف مؤقتًا لكثرة الطلبات');
+  }
   const type = String(mimeType || match[1] || 'application/octet-stream').toLowerCase();
   const ext = String(extension || match[2] || 'bin').toLowerCase() === 'jpeg' ? 'jpg' : String(extension || match[2] || 'bin').toLowerCase();
   const blob = Utilities.newBlob(
@@ -115,6 +126,11 @@ function storePdf(value, prefix, folder) {
   if (/^https?:\/\//i.test(raw)) return raw;
   const match = raw.match(/^data:application\/pdf;base64,([\s\S]+)$/i);
   if (!match) return '';
+  if (match[1].length > 28000000) throw new Error('حجم ملف PDF يتجاوز الحد المسموح');
+  if (ACTIVE_REQUEST_MEMBER_ID) {
+    enforceRateLimit('drive-file-member', ACTIVE_REQUEST_MEMBER_ID, 10, 60 * 60 * 1000, 'وصلت إلى حد رفع الملفات لهذا الوقت');
+    enforceRateLimit('drive-file-global', 'all', 80, 60 * 60 * 1000, 'رفع الملفات متوقف مؤقتًا لكثرة الطلبات');
+  }
   const blob = Utilities.newBlob(
     Utilities.base64Decode(match[1]),
     'application/pdf',
@@ -667,17 +683,37 @@ function output(data) {
 }
 
 function readData(e) {
+  let value;
   if (e && e.parameter && e.parameter.data) {
-    return JSON.parse(e.parameter.data);
-  }
-  if (e && e.postData && e.postData.contents) {
+    value = JSON.parse(e.parameter.data);
+  } else if (e && e.postData && e.postData.contents) {
     try {
-      return JSON.parse(e.postData.contents);
+      value = JSON.parse(e.postData.contents);
     } catch (error) {
-      return (e && e.parameter) || {};
+      value = (e && e.parameter) || {};
     }
+  } else {
+    value = (e && e.parameter) || {};
   }
-  return (e && e.parameter) || {};
+  return sanitizeIncomingText(value);
+}
+
+/* Escape formula-like text at the request boundary, before any sheet write.
+   Passwords, OTPs and bearer tokens must remain byte-for-byte unchanged. */
+function sanitizeIncomingText(value, key) {
+  const protectedKeys = new Set(['password', 'code', 'authtoken', 'identifier', 'phone']);
+  if (typeof value === 'string') {
+    return protectedKeys.has(String(key || '').toLowerCase()) ? value : safeSheetValue(value);
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeIncomingText(item, key));
+  if (value && typeof value === 'object') {
+    const clean = {};
+    Object.keys(value).forEach((childKey) => {
+      clean[childKey] = sanitizeIncomingText(value[childKey], childKey);
+    });
+    return clean;
+  }
+  return value;
 }
 
 function getMeetingsSheet(ss) {
@@ -733,11 +769,12 @@ function getRecordedMeetingsSheet(ss) {
 }
 
 function ensureQuoteDeleteColumns(sheet) {
-  if (sheet.getMaxColumns() < 9) sheet.insertColumnsAfter(sheet.getMaxColumns(), 9 - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < 10) sheet.insertColumnsAfter(sheet.getMaxColumns(), 10 - sheet.getMaxColumns());
   if (!sheet.getRange(1, 6).getValue()) sheet.getRange(1, 6).setValue('id');
   if (!sheet.getRange(1, 7).getValue()) sheet.getRange(1, 7).setValue('deletedAt');
   if (!sheet.getRange(1, 8).getValue()) sheet.getRange(1, 8).setValue('deletedBy');
   if (!sheet.getRange(1, 9).getValue()) sheet.getRange(1, 9).setValue('bookAuthor');
+  if (!sheet.getRange(1, 10).getValue()) sheet.getRange(1, 10).setValue('authorId');
 }
 
 /* ---- الاقتباسات: تُنشأ تلقائيًا إن ضاع التبويب ---- */
@@ -745,7 +782,7 @@ function getQuotesSheet(ss) {
   let sheet = ss.getSheetByName(QUOTES_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(QUOTES_SHEET);
-    sheet.appendRow(['created_at', 'author_name', 'page_number', 'book_title', 'quote_text', 'id', 'deletedAt', 'deletedBy', 'bookAuthor']);
+     sheet.appendRow(['created_at', 'author_name', 'page_number', 'book_title', 'quote_text', 'id', 'deletedAt', 'deletedBy', 'bookAuthor', 'authorId']);
   }
   ensureQuoteDeleteColumns(sheet);
   return sheet;
@@ -858,6 +895,14 @@ function isTrashVisible(deletedBy) {
   return isSupervisorName(name);
 }
 
+/* ---- حماية من Formula Injection: منع تفسير إدخال المستخدم كصيغة في Google Sheets ---- */
+function safeSheetValue(value) {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trimStart();
+  if (trimmed.length && '=+-@'.indexOf(trimmed.charAt(0)) >= 0) return "'" + value;
+  return value;
+}
+
 function isSupervisorMemberId(ss, memberId) {
   const id = String(memberId || '').trim();
   if (!id) return false;
@@ -868,6 +913,160 @@ function isSupervisorMemberId(ss, memberId) {
     const role = String(sheet.getRange(row, 6).getValue() || '').trim().toLowerCase();
     return role === 'supervisor' || role === 'admin' || role === 'مشرف' || role === 'مسؤول';
   } catch (error) { return false; }
+}
+
+/* Sessions live in Script Properties, so deploying a new script version
+   does not sign members out. A session is revoked on logout or account reset. */
+const AUTH_SESSION_PREFIX = 'jalees-auth-session:';
+const MAX_SESSIONS_PER_MEMBER = 8;
+const PUBLIC_API_ACTIONS = new Set([
+  'getVersion', 'getQuotes', 'getArticles', 'getClubBooks', 'getLibraryCategories',
+  'getMeetings', 'getRecordedMeetings', 'getBookRatings', 'getActivities',
+  'getCompetitions', 'getSelectionQuotes', 'getReadingTips', 'getReadingLists',
+  'getBookSummaries', 'getWeeklyReport', 'getWeeklyReports', 'getApprovedMembers',
+  'getMemberProfile', 'saveJoinRequest', 'requestRegistrationCode',
+  'verifyRegistrationCode', 'loginMember', 'requestPasswordReset', 'resetPassword',
+  'joinCompetition', 'leaveCompetition'
+]);
+const ADMIN_API_ACTIONS = new Set([
+  'organizeSheets', 'dedupeClubBooks', 'setJoinRequestStatus', 'getPendingMembers',
+  'setMemberStatus', 'setConsultantStatus', 'setSupervisorStatus', 'banMember',
+  'setMemberType', 'purgeDeletedItem', 'repairTrash', 'saveSelectionQuote',
+  'deleteSelectionQuote', 'saveWeeklyReport', 'deleteWeeklyReport',
+  'deleteAllWeeklyReports', 'toggleSelectionQuote', 'saveCompetition',
+  'deleteCompetition', 'saveReadingTip', 'deleteReadingTip', 'deleteConsultation',
+  'getPendingRegistrations',
+  'getNotifySettings', 'saveNotifySettings', 'mailjetHealth', 'testNotification',
+  'deleteAllArticles', 'restoreArticle', 'restoreQuote', 'restoreClubBook',
+  'restoreLibraryCategory', 'restoreRecordedMeeting', 'describeSpreadsheet',
+  'getMailStatus', 'getDeletedItems', 'trashAudit', 'deleteActivity', 'updateClubBook',
+  'deleteClubBook', 'addLibraryCategory', 'renameLibraryCategory',
+  'deleteLibraryCategory', 'restoreLibraryCategory', 'saveReadingList',
+  'deleteReadingList', 'saveMeeting', 'deleteMeeting', 'saveRecordedMeeting',
+  'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests'
+]);
+const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
+const MEMBER_BOUND_ACTIONS = new Set([
+  'getProfile', 'saveProfile', 'getEntries', 'saveEntry', 'getMyBooks', 'saveMyBook',
+  'deleteMyBook', 'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook',
+  'getLikes', 'toggleLike', 'saveArticle', 'saveBookRating', 'submitConsultation',
+  'setMemberPhoto', 'getNotifications', 'markNotificationsRead', 'uploadFile',
+  'saveBookSummary', 'deleteBookSummary', 'deleteConsultationAnswer', 'deleteArticle', 'deleteQuote',
+  'saveClubBook', 'saveQuote', 'addQuote', 'saveSharedQuote', 'logoutMember'
+]);
+
+function createAuthSession(memberId) {
+  const id = String(memberId || '').trim();
+  if (!id) throw new Error('تعذر إنشاء جلسة الدخول');
+  const token = Utilities.getUuid() + Utilities.getUuid();
+  const key = AUTH_SESSION_PREFIX + sha256Hex(token);
+  const props = PropertiesService.getScriptProperties();
+  const sessions = props.getProperties();
+  const mine = [];
+  Object.keys(sessions).forEach((sessionKey) => {
+    if (sessionKey.indexOf(AUTH_SESSION_PREFIX) !== 0) return;
+    try {
+      const row = JSON.parse(sessions[sessionKey]);
+      if (String(row.memberId || '') === id) mine.push({ key: sessionKey, createdAt: Number(row.createdAt) || 0 });
+    } catch (error) { props.deleteProperty(sessionKey); }
+  });
+  mine.sort((a, b) => a.createdAt - b.createdAt);
+  while (mine.length >= MAX_SESSIONS_PER_MEMBER) props.deleteProperty(mine.shift().key);
+  props.setProperty(key, JSON.stringify({ memberId: id, createdAt: Date.now() }));
+  return token;
+}
+
+function authenticateSession(ss, token) {
+  const value = String(token || '').trim();
+  if (!/^[0-9a-f-]{72}$/i.test(value)) throw new Error('انتهت جلسة الدخول، سجّل الدخول من جديد');
+  const key = AUTH_SESSION_PREFIX + sha256Hex(value);
+  let session = null;
+  try { session = JSON.parse(PropertiesService.getScriptProperties().getProperty(key) || 'null'); } catch (error) {}
+  if (!session || !session.memberId) throw new Error('انتهت جلسة الدخول، سجّل الدخول من جديد');
+  const sheet = getMembersSheet(ss);
+  const row = findMemberRowById(sheet, session.memberId);
+  if (row < 2) {
+    PropertiesService.getScriptProperties().deleteProperty(key);
+    throw new Error('الحساب غير متاح، سجّل الدخول مجددًا');
+  }
+  const values = sheet.getRange(row, 1, 1, 13).getValues()[0];
+  if (memberStatusCode(values[6]) !== 'active') {
+    PropertiesService.getScriptProperties().deleteProperty(key);
+    throw new Error('الحساب غير معتمد أو لم يعد نشطًا');
+  }
+  return { key, member: memberRecord(values) };
+}
+
+function revokeMemberSessions(memberId) {
+  const id = String(memberId || '').trim();
+  if (!id) return;
+  const props = PropertiesService.getScriptProperties();
+  const sessions = props.getProperties();
+  Object.keys(sessions).forEach((key) => {
+    if (key.indexOf(AUTH_SESSION_PREFIX) !== 0) return;
+    try {
+      const row = JSON.parse(sessions[key]);
+      if (String(row.memberId || '') === id) props.deleteProperty(key);
+    } catch (error) { props.deleteProperty(key); }
+  });
+}
+
+function enforceRateLimit(scope, identifier, limit, windowMs, message) {
+  const cache = CacheService.getScriptCache();
+  const now = Date.now();
+  const key = `jalees-rl:${scope}:${sha256Hex(String(identifier || '').trim().toLowerCase()).slice(0, 32)}`;
+  let record = null;
+  try { record = JSON.parse(cache.get(key) || 'null'); } catch (error) {}
+  if (!record || now - Number(record.startedAt || 0) >= windowMs) record = { startedAt: now, count: 0 };
+  record.count = Number(record.count || 0) + 1;
+  const ttl = Math.max(60, Math.ceil((windowMs - (now - record.startedAt)) / 1000));
+  cache.put(key, JSON.stringify(record), Math.min(ttl, 21600));
+  if (record.count > limit) throw new Error(message || 'محاولات كثيرة، انتظر قليلًا ثم حاول مجددًا');
+}
+
+function authorizeApiRequest(ss, action, data, e) {
+  if (PUBLIC_API_ACTIONS.has(action)) return null;
+  const params = e && e.parameter ? e.parameter : {};
+  const token = data.authToken || params.authToken || '';
+  const session = authenticateSession(ss, token);
+  const member = session.member;
+  const role = String(member.role || '').toLowerCase();
+  const isSupervisor = role === 'supervisor' || role === 'admin';
+  if (ADMIN_API_ACTIONS.has(action) && !isSupervisor) {
+    throw new Error('هذا الإجراء متاح للمشرفين فقط');
+  }
+  if (CONSULTANT_API_ACTIONS.has(action) && !isSupervisor && role !== 'consultant') {
+    throw new Error('الإجابة متاحة للمستشارين المعتمدين فقط');
+  }
+  if (MEMBER_BOUND_ACTIONS.has(action)) {
+    const requestedId = String(data.memberId || params.memberId || '').trim();
+    if (requestedId && requestedId !== member.id) throw new Error('غير مصرح بالوصول إلى حساب عضو آخر');
+    data.memberId = member.id;
+    params.memberId = member.id;
+    data.memberName = member.name;
+  }
+  if (!action && data.quote_text) {
+    data.memberId = member.id;
+    data.memberName = member.name;
+    data.author_name = member.name;
+  }
+  if (action === 'saveQuote' || action === 'addQuote' || action === 'saveSharedQuote') {
+    data.memberId = member.id;
+    data.memberName = member.name;
+    data.author_name = member.name;
+  }
+  if (action === 'saveArticle' || action === 'saveClubBook') data.memberName = member.name;
+  data.authenticatedMemberId = member.id;
+  data.authenticatedMemberName = member.name;
+  data.authenticatedRole = member.role;
+  data.createdBy = member.name;
+  data.deletedBy = member.name;
+  data.requesterName = member.name;
+  data.by = member.name;
+  if (isSupervisor) {
+    data.requesterId = member.id;
+  }
+  return { key: session.key, member };
 }
 
 function paintMemberRow(sheet, row, status) {
@@ -1315,21 +1514,12 @@ function isSupervisorName(name) {
 function isConsultantName(name) {
   const target = normalizePersonName(name);
   if (!target) return false;
-  // Hardcoded consultants (legacy)
-  if (CONSULTANT_NAMES.some(item => normalizePersonName(item) === target)) return true;
-  // Dynamic: check members sheet role
   try {
-    const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
-    const sheet = getMembersSheet(ss);
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return false;
-    const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
-    for (let i = 0; i < rows.length; i++) {
-      if (normalizePersonName(rows[i][1]) === target) {
-        const role = String(rows[i][5] || '').toLowerCase();
-        return role === 'consultant' || role === 'supervisor';
-      }
-    }
+    const sheet = getMembersSheet(resolveSpreadsheet());
+    const rows = findMemberRowsByName(sheet, name);
+    if (rows.length !== 1) return false;
+    const role = String(sheet.getRange(rows[0], 6).getValue() || '').toLowerCase();
+    return role === 'consultant' || role === 'supervisor' || role === 'admin';
   } catch (error) { /* تجاهل */ }
   return false;
 }
@@ -1646,7 +1836,7 @@ function getMailLogSheet(ss) {
 function logMailAttempt(ss, email, status, detail, code) {
   try {
     getMailLogSheet(ss).appendRow([
-      String(email || ''), Date.now(), String(status || ''), String(detail || ''), ''
+      '', Date.now(), String(status || ''), safeSheetValue(String(detail || '').slice(0, 500)), ''
     ]);
   } catch (error) { /* السجل لا يوقف الإرسال */ }
 }
@@ -1961,7 +2151,10 @@ function getMailStatus() {
     const ss = resolveSpreadsheet();
     const sheet = getMailLogSheet(ss);
     const lastRow = sheet.getLastRow();
-    if (lastRow >= 2) sheet.getRange(2, 5, lastRow - 1, 1).clearContent();
+    if (lastRow >= 2) {
+      sheet.getRange(2, 1, lastRow - 1, 1).clearContent();
+      sheet.getRange(2, 5, lastRow - 1, 1).clearContent();
+    }
   } catch (error) { /* cleanup is best-effort */ }
   /* Public Apps Script endpoint: do not disclose member emails, verification codes,
      BCC addresses, or the effective Google account. Detailed logs belong in the
@@ -2315,10 +2508,17 @@ function doPost(e) {
     const data = readData(e);
     const action = (e && e.parameter && e.parameter.action) || data.action || '';
     const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
+    const auth = authorizeApiRequest(ss, action, data, e);
+    ACTIVE_REQUEST_MEMBER_ID = auth && auth.member ? auth.member.id : '';
+    if (action === 'validateSession') return output({ success: true, member: auth.member });
+    if (action === 'logoutMember') {
+      PropertiesService.getScriptProperties().deleteProperty(auth.key);
+      return output({ success: true });
+    }
 
     if (action === 'organizeSheets') {
       const requester = String(data.requesterName || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('التنظيم متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('التنظيم متاح للمشرفين فقط');
       const result = organizeSheets(ss);
       return output(Object.assign({ success: true }, result));
     }
@@ -2335,11 +2535,11 @@ function doPost(e) {
       /* منع التكرار: نبحث بالمعرّف أولًا، ثم بالعنوان+المؤلف */
       const wantedKey = bookKey(data.title, data.author);
       const rowData = [
-        data.id || '', data.memberId || '', data.memberName || '',
-        data.title || '', data.author || '', data.category || '',
-        data.coverColor || '', data.report || '', data.pages || 0,
+        data.id || '', data.memberId || '', safeSheetValue(data.memberName || ''),
+        safeSheetValue(data.title || ''), safeSheetValue(data.author || ''), safeSheetValue(data.category || ''),
+        data.coverColor || '', safeSheetValue(data.report || ''), data.pages || 0,
         data.createdAt || Date.now(), storeImage(data.coverImage, 'book'),
-        '', '', data.year || '', data.pdfUrl || '', data.coverColor2 || ''
+        '', '', safeSheetValue(data.year || ''), data.pdfUrl || '', data.coverColor2 || ''
       ];
 
       for (const source of sources) {
@@ -2427,11 +2627,14 @@ function doPost(e) {
 
     if (action === 'saveJoinRequest') {
       const sheet = getJoinRequestsSheet(ss);
+      const phone = normalizePhone(data.phone);
+      enforceRateLimit('join-phone', phone || String(data.name || ''), 3, 60 * 60 * 1000, 'أرسلت طلبات كثيرة؛ حاول لاحقًا');
+      enforceRateLimit('join-global', 'all', 100, 60 * 60 * 1000, 'طلبات الانضمام كثيرة مؤقتًا؛ حاول لاحقًا');
       const row = sheet.getLastRow() + 1;
       sheet.appendRow([
-        data.name || '',
-        data.phone || '',
-        data.note || '',
+        safeSheetValue(data.name || ''),
+        safeSheetValue(phone || data.phone || ''),
+        safeSheetValue(data.note || ''),
         data.ts || Date.now(),
         'pending',
         '',
@@ -2493,7 +2696,9 @@ function doPost(e) {
       const row = Number(data.row);
       if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
       const status = memberStatusCode(data.status);
+      const affectedMemberId = String(sheet.getRange(row, 1).getValue() || '');
       sheet.getRange(row, 7).setValue(status);
+      if (status !== 'active') revokeMemberSessions(affectedMemberId);
       paintMemberRow(sheet, row, status);
       if (data.memberType) {
         sheet.getRange(row, 14).setValue(String(data.memberType).trim());
@@ -2516,7 +2721,9 @@ function doPost(e) {
       const row = Number(data.row);
       if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
       const isConsultant = (String(data.isConsultant) === 'true' || data.isConsultant === true);
+      const affectedMemberId = String(sheet.getRange(row, 1).getValue() || '');
       sheet.getRange(row, 6).setValue(isConsultant ? 'consultant' : 'member');
+      revokeMemberSessions(affectedMemberId);
       return output({ success: true, role: isConsultant ? 'consultant' : 'member', message: isConsultant ? 'تم ترقية العضو إلى مستشار' : 'تم إلغاء ترقية المستشار' });
     }
 
@@ -2526,9 +2733,11 @@ function doPost(e) {
       const row = Number(data.row);
       if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
       const isSupervisor = (String(data.isSupervisor) === 'true' || data.isSupervisor === true);
+      const affectedMemberId = String(sheet.getRange(row, 1).getValue() || '');
       const current = String(sheet.getRange(row, 6).getValue() || '');
       const next = isSupervisor ? 'supervisor' : (current === 'consultant' ? 'consultant' : 'member');
       sheet.getRange(row, 6).setValue(next);
+      revokeMemberSessions(affectedMemberId);
       return output({ success: true, role: next, message: isSupervisor ? 'أصبح العضو مشرفًا للنادي' : 'أُلغي إشراف العضو' });
     }
 
@@ -2538,7 +2747,9 @@ function doPost(e) {
       const row = Number(data.row);
       if (!row || row < 2 || row > sheet.getLastRow()) throw new Error('لم أجد الحساب');
       const banning = !(String(data.banned) === 'false' || data.banned === false);
+      const affectedMemberId = String(sheet.getRange(row, 1).getValue() || '');
       sheet.getRange(row, 7).setValue(banning ? 'banned' : 'active');
+      if (banning) revokeMemberSessions(affectedMemberId);
       paintMemberRow(sheet, row, banning ? 'banned' : 'active');
       return output({ success: true, banned: banning, message: banning ? 'تم طرد العضو — لن يستطيع الدخول بنفس الإيميل أو الرقم' : 'أُعيد تفعيل الحساب' });
     }
@@ -2655,8 +2866,8 @@ function doPost(e) {
       if (!memberId) throw new Error('سجّل الدخول لنشر الملخص');
       const summaryId = String(data.id || `sum-${Date.now()}`);
       sheet.appendRow([
-        summaryId, memberId, data.memberName || '', data.bookTitle || '',
-        data.bookAuthor || '', data.summary || '', data.createdAt || Date.now(), '', ''
+        summaryId, memberId, safeSheetValue(data.memberName || ''), safeSheetValue(data.bookTitle || ''),
+        safeSheetValue(data.bookAuthor || ''), safeSheetValue(data.summary || ''), data.createdAt || Date.now(), '', ''
       ]);
       notifySupervisors(
         ss, 'summary',
@@ -2691,7 +2902,7 @@ function doPost(e) {
     /* فحص وإصلاح سلة المحذوفات ومطابقتها مع الشيت */
     if (action === 'repairTrash') {
       const requester = String(data.requesterName || data.by || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('إصلاح سلة المحذوفات متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('إصلاح سلة المحذوفات متاح للمشرفين فقط');
       return repairTrash(ss);
     }
 
@@ -2701,8 +2912,8 @@ function doPost(e) {
       const image = storeImage(data.image, 'selquote');
       if (!image) throw new Error('أضف صورة الاقتباس');
       const rowData = [
-        selectionId, data.text || '', data.book || '', data.bookAuthor || '',
-        data.authorName || '', data.createdAt || Date.now(), data.by || 'مشرف', '', '',
+        selectionId, safeSheetValue(data.text || ''), safeSheetValue(data.book || ''), safeSheetValue(data.bookAuthor || ''),
+        safeSheetValue(data.authorName || ''), data.createdAt || Date.now(), safeSheetValue(data.by || 'مشرف'), '', '',
         image, String(data.quoteId || '')
       ];
       const lastRow = sheet.getLastRow();
@@ -2758,9 +2969,9 @@ function doPost(e) {
         }
       }
       const rowData = [
-        reportId, weekNo, String(data.weekStart || ''), String(data.weekEnd || ''),
-        image, Date.now(), data.by || 'مشرف', '', '',
-        data.title || '', Number(data.pages) || 0, Number(data.participants) || 0, data.notes || '',
+        reportId, weekNo, safeSheetValue(String(data.weekStart || '')), safeSheetValue(String(data.weekEnd || '')),
+        image, Date.now(), safeSheetValue(data.by || 'مشرف'), '', '',
+        safeSheetValue(data.title || ''), Number(data.pages) || 0, Number(data.participants) || 0, safeSheetValue(data.notes || ''),
         storeImageList(data.images, 'weekly')
       ];
       if (target) {
@@ -2831,7 +3042,7 @@ function doPost(e) {
     /* ---- المسابقات القرائية: إضافة/تعديل/حذف (للمشرفين) ---- */
     if (action === 'saveCompetition') {
       const requester = String(data.requesterName || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('إضافة المسابقات متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('إضافة المسابقات متاح للمشرفين فقط');
       const sheet = getCompetitionsSheet(ss);
       const competitionId = String(data.id || `comp-${Date.now()}`);
       const title = String(data.title || '').trim();
@@ -2853,9 +3064,9 @@ function doPost(e) {
       if (!Array.isArray(participants)) participants = [];
       const rowData = [
         competitionId, title,
-        String(data.description || ''), String(data.details || ''), String(data.prize || ''),
-        String(data.startDate || ''), String(data.endDate || ''), status,
-        storeImage(data.image, 'comp'), String(data.createdBy || requester),
+        safeSheetValue(String(data.description || '')), safeSheetValue(String(data.details || '')), safeSheetValue(String(data.prize || '')),
+        safeSheetValue(String(data.startDate || '')), safeSheetValue(String(data.endDate || '')), status,
+        storeImage(data.image, 'comp'), safeSheetValue(String(data.createdBy || requester)),
         Number(data.createdAt) || Date.now(), JSON.stringify(participants)
       ];
       const lastRow = sheet.getLastRow();
@@ -2874,7 +3085,7 @@ function doPost(e) {
 
     if (action === 'deleteCompetition') {
       const requester = String(data.requesterName || data.by || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('حذف المسابقات متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('حذف المسابقات متاح للمشرفين فقط');
       const sheet = getCompetitionsSheet(ss);
       const competitionId = String(data.id || '');
       if (!competitionId) throw new Error('لم أجد المسابقة');
@@ -2927,8 +3138,8 @@ function doPost(e) {
       const listId = String(data.id || `list-${Date.now()}`);
       const books = Array.isArray(data.books) ? data.books : [];
       const rowData = [
-        listId, data.title || '', data.description || '', JSON.stringify(books),
-        storeImage(data.cover, 'list'), data.createdAt || Date.now(), data.createdBy || '', '', ''
+        listId, safeSheetValue(data.title || ''), safeSheetValue(data.description || ''), safeSheetValue(JSON.stringify(books)),
+        storeImage(data.cover, 'list'), data.createdAt || Date.now(), safeSheetValue(data.createdBy || ''), '', ''
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -3043,6 +3254,8 @@ function doPost(e) {
       if (!raw) throw new Error('لم يصل أي ملف');
       const isPdf = /pdf/i.test(String(data.name || '')) || /application\/pdf/i.test(raw.slice(0, 40));
       if (raw.length > 30000000) throw new Error('الملف كبير جدًا — الحد ٢٠ ميجابايت');
+      enforceRateLimit('upload-member', data.authenticatedMemberId, 5, 60 * 60 * 1000, 'وصلت إلى حد رفع الملفات لهذا الوقت');
+      enforceRateLimit('upload-global', 'all', 60, 60 * 60 * 1000, 'الرفع متوقف مؤقتًا لكثرة الطلبات');
       const url = isPdf ? storePdf(raw, 'pdf') : storeFile(raw, 'upload', 'image/jpeg', 'jpg');
       if (!url) throw new Error('تعذر رفع الملف');
       return output({ success: true, url: url, isPdf: isPdf });
@@ -3156,7 +3369,7 @@ function doPost(e) {
       if (memberStatusCode(member[6]) !== 'active') throw new Error('الحساب غير معتمد');
       const id = `consult-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
       const sheet = getConsultationsSheet(ss);
-      sheet.appendRow([id, memberId, String(member[1] || ''), question, Date.now(), '', '', '', '']);
+      sheet.appendRow([id, memberId, safeSheetValue(String(member[1] || '')), safeSheetValue(question), Date.now(), '', '', '', '']);
       notifySupervisors(
         ss, 'consultation',
         'استشارة جديدة',
@@ -3169,7 +3382,7 @@ function doPost(e) {
     /* حذف استشارة (للمشرف) */
     if (action === 'deleteConsultation') {
       const requester = String(data.requesterName || data.by || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('حذف الاستشارة متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('حذف الاستشارة متاح للمشرفين فقط');
       const sheet = getConsultationsSheet(ss);
       const consultationId = String(data.id || '');
       const lastRow = sheet.getLastRow();
@@ -3250,6 +3463,8 @@ function doPost(e) {
       const phone = normalizePhone(data.phone);
       const email = normalizeEmail(data.email);
       const password = String(data.password || '');
+      enforceRateLimit('register-email', email, 4, 60 * 60 * 1000, 'طلبات كثيرة لهذا البريد؛ حاول بعد ساعة');
+      enforceRateLimit('register-global', 'all', 30, 60 * 60 * 1000, 'طلبات تسجيل كثيرة مؤقتًا؛ حاول لاحقًا');
 
       if (name.split(' ').filter(Boolean).length < 3) {
         throw new Error('اكتب الاسم الثلاثي كما هو في الهوية');
@@ -3288,7 +3503,7 @@ function doPost(e) {
         }
       }
 
-      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const code = String((parseInt(sha256Hex(Utilities.getUuid()).slice(0, 8), 16) % 900000) + 100000);
       const codeSalt = Utilities.getUuid();
       const passwordSalt = Utilities.getUuid();
       savePendingRegistration({
@@ -3354,9 +3569,9 @@ function doPost(e) {
       }
 
       const id = `u-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
-      const role = SUPERVISOR_NAMES.some((item) => normalizePersonName(item) === normalizePersonName(record.name))
-        ? 'supervisor'
-        : 'member';
+      /* الحسابات الجديدة لا تحصل على الإشراف اعتمادًا على الاسم؛
+         ترقية المشرف تتم حصريًا من جلسة مشرف موثقة. */
+      const role = 'member';
       sheet.appendRow([
         id, record.name, email, record.passwordHash, record.passwordSalt, role,
         'pending', Date.now(), Date.now(), '', '', normalizePhone(record.phone), ''
@@ -3385,6 +3600,8 @@ function doPost(e) {
       const sheet = getMembersSheet(ss);
       const identifier = String(data.identifier || data.email || '').trim();
       const password = String(data.password || '');
+      enforceRateLimit('login-identifier', identifier, 12, 15 * 60 * 1000, 'محاولات دخول كثيرة؛ انتظر ١٥ دقيقة');
+      enforceRateLimit('login-global', 'all', 500, 15 * 60 * 1000, 'محاولات الدخول كثيرة مؤقتًا؛ حاول لاحقًا');
       let row = -1;
       if (identifier.indexOf('@') >= 0) {
         row = findMemberRow(sheet, identifier);
@@ -3417,16 +3634,20 @@ function doPost(e) {
       }
 
       sheet.getRange(row, 9).setValue(Date.now());
-      return output({ success: true, member: memberRecord(values) });
+      const member = memberRecord(values);
+      member.authToken = createAuthSession(member.id);
+      return output({ success: true, member: member });
     }
 
     if (action === 'requestPasswordReset') {
       const sheet = getMembersSheet(ss);
       const email = normalizeEmail(data.email);
+      enforceRateLimit('reset-email', email, 4, 60 * 60 * 1000, 'طلبات استعادة كثيرة لهذا البريد؛ حاول لاحقًا');
+      enforceRateLimit('reset-global', 'all', 30, 60 * 60 * 1000, 'طلبات الاستعادة كثيرة مؤقتًا؛ حاول لاحقًا');
       const row = findMemberRow(sheet, email);
 
       if (row > 0) {
-        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const code = String((parseInt(sha256Hex(Utilities.getUuid()).slice(0, 8), 16) % 900000) + 100000);
         const codeSalt = Utilities.getUuid();
         const expiry = Date.now() + 15 * 60 * 1000;
         const name = String(sheet.getRange(row, 2).getValue() || 'عضو جليس');
@@ -3450,6 +3671,8 @@ function doPost(e) {
     if (action === 'resetPassword') {
       const sheet = getMembersSheet(ss);
       const email = normalizeEmail(data.email);
+      enforceRateLimit('reset-verify-email', email, 6, 15 * 60 * 1000, 'محاولات كثيرة؛ اطلب رمزًا جديدًا لاحقًا');
+      enforceRateLimit('reset-verify-global', 'all', 500, 15 * 60 * 1000, 'محاولات كثيرة مؤقتًا؛ حاول لاحقًا');
       const code = String(data.code || '').trim();
       const password = String(data.password || '');
       if (password.length < PASSWORD_MIN_LENGTH) {
@@ -3478,6 +3701,7 @@ function doPost(e) {
       const salt = Utilities.getUuid();
       sheet.getRange(row, 4, 1, 2).setValues([[hashPassword(password, salt), salt]]);
       sheet.getRange(row, 10, 1, 2).setValues([['', '']]);
+      revokeMemberSessions(String(sheet.getRange(row, 1).getValue() || ''));
       return output({ success: true, message: 'تم تعيين الرمز الجديد، يمكنك الدخول الآن' });
     }
 
@@ -3595,11 +3819,11 @@ function doPost(e) {
             if (String(ids[i][0]) === articleId) {
               // تحديث صف موجود
               sheet.getRange(i + 2, 2).setValue(data.memberId || '');
-              sheet.getRange(i + 2, 3).setValue(data.memberName || '');
-              sheet.getRange(i + 2, 4).setValue(data.title || '');
-              sheet.getRange(i + 2, 5).setValue(data.category || '');
-              sheet.getRange(i + 2, 6).setValue(data.body || '');
-              sheet.getRange(i + 2, 7).setValue(data.excerpt || '');
+              sheet.getRange(i + 2, 3).setValue(safeSheetValue(data.memberName || ''));
+              sheet.getRange(i + 2, 4).setValue(safeSheetValue(data.title || ''));
+              sheet.getRange(i + 2, 5).setValue(safeSheetValue(data.category || ''));
+              sheet.getRange(i + 2, 6).setValue(safeSheetValue(data.body || ''));
+              sheet.getRange(i + 2, 7).setValue(safeSheetValue(data.excerpt || ''));
               sheet.getRange(i + 2, 8).setValue(data.read || 0);
               sheet.getRange(i + 2, 9).setValue(data.createdAt || Date.now());
               return output({ success: true, message: 'تم تحديث المقال' });
@@ -3609,9 +3833,9 @@ function doPost(e) {
       }
 
       sheet.appendRow([
-        data.id || '', data.memberId || '', data.memberName || '',
-        data.title || '', data.category || '', data.body || '',
-        data.excerpt || '', data.read || 0, data.createdAt || Date.now()
+        data.id || '', data.memberId || '', safeSheetValue(data.memberName || ''),
+        safeSheetValue(data.title || ''), safeSheetValue(data.category || ''), safeSheetValue(data.body || ''),
+        safeSheetValue(data.excerpt || ''), data.read || 0, data.createdAt || Date.now()
       ]);
       notifySupervisors(
         ss, 'article',
@@ -3634,7 +3858,7 @@ function doPost(e) {
 
       const rowData = [
         data.id || `${bookId}:${memberId}`, bookId, memberId,
-        data.memberName || '', ratingValue, data.review || '', data.createdAt || Date.now()
+        safeSheetValue(data.memberName || ''), ratingValue, safeSheetValue(data.review || ''), data.createdAt || Date.now()
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -3657,9 +3881,9 @@ function doPost(e) {
       const meetingImage = storeImage(data.image, 'meeting');
 
       const rowData = [
-        meetingId, data.title || '', data.description || '', String(data.date || ''),
-        String(data.time || ''), data.location || '', meetingImage,
-        data.createdAt || Date.now(), data.createdBy || '',
+        meetingId, safeSheetValue(data.title || ''), safeSheetValue(data.description || ''), safeSheetValue(String(data.date || '')),
+        safeSheetValue(String(data.time || '')), safeSheetValue(data.location || ''), meetingImage,
+        data.createdAt || Date.now(), safeSheetValue(data.createdBy || ''),
         (data.imagePosX === '' || data.imagePosX === undefined || data.imagePosX === null ? 50 : Number(data.imagePosX) || 50),
         (data.imagePosY === '' || data.imagePosY === undefined || data.imagePosY === null ? 50 : Number(data.imagePosY) || 50),
         (data.imageScale === '' || data.imageScale === undefined || data.imageScale === null ? 100 : Number(data.imageScale) || 100)
@@ -3684,10 +3908,10 @@ function doPost(e) {
       if (!recordId) throw new Error('معرّف التسجيل مطلوب');
 
       const rowData = [
-        recordId, data.title || '', data.description || '', dateOnlyText(data.recordedAt),
-        data.speaker || '', Number(data.views) || 0, data.duration || '',
-        data.videoUrl || '', storeImage(data.image, 'recording'), data.createdAt || Date.now(), data.createdBy || '',
-        '', '', data.type || '', data.location || '', storeImageList(data.images, 'recording')
+        recordId, safeSheetValue(data.title || ''), safeSheetValue(data.description || ''), safeSheetValue(dateOnlyText(data.recordedAt)),
+        safeSheetValue(data.speaker || ''), Number(data.views) || 0, safeSheetValue(data.duration || ''),
+        safeSheetValue(data.videoUrl || ''), storeImage(data.image, 'recording'), data.createdAt || Date.now(), safeSheetValue(data.createdBy || ''),
+        '', '', safeSheetValue(data.type || ''), safeSheetValue(data.location || ''), storeImageList(data.images, 'recording')
       ];
       const lastRow = sheet.getLastRow();
       if (lastRow >= 2) {
@@ -3752,7 +3976,7 @@ function doPost(e) {
     /* ===== الأنشطة والبرامج: يحرّرها المشرف ===== */
     if (action === 'saveActivity') {
       const requester = String(data.requesterName || data.by || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('تعديل الأنشطة متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('تعديل الأنشطة متاح للمشرفين فقط');
       const sheet = getActivitiesSheet(ss);
       const type = ['activity', 'group', 'program'].indexOf(String(data.type || '')) >= 0 ? String(data.type) : 'activity';
       const activityId = String(data.id || `${type}-${Date.now()}`).trim().slice(0, 80);
@@ -3773,13 +3997,13 @@ function doPost(e) {
       const rowData = [
         activityId,
         type,
-        String(data.parentId !== undefined ? data.parentId : (existing ? existing[2] : '')).trim().slice(0, 80),
-        String(data.title !== undefined ? data.title : (existing ? existing[3] : '')).trim().slice(0, 200),
-        String(data.details !== undefined ? data.details : (existing ? existing[4] : '')).trim().slice(0, 5000),
-        JSON.stringify(items.slice(0, 40)),
+        safeSheetValue(String(data.parentId !== undefined ? data.parentId : (existing ? existing[2] : '')).trim().slice(0, 80)),
+        safeSheetValue(String(data.title !== undefined ? data.title : (existing ? existing[3] : '')).trim().slice(0, 200)),
+        safeSheetValue(String(data.details !== undefined ? data.details : (existing ? existing[4] : '')).trim().slice(0, 5000)),
+        safeSheetValue(JSON.stringify(items.slice(0, 40))),
         data.percent === undefined && existing ? activityPercent(existing[6]) : activityPercent(data.percent),
         Number(data.sortOrder) || (existing ? Number(existing[7]) || 0 : Date.now()),
-        String(data.by || requester || (existing ? existing[8] : '')).slice(0, 120),
+        safeSheetValue(String(data.by || requester || (existing ? existing[8] : '')).slice(0, 120)),
         existing ? existing[9] : (data.createdAt || Date.now()),
         Date.now(),
         ''
@@ -3791,7 +4015,7 @@ function doPost(e) {
 
     if (action === 'deleteActivity') {
       const requester = String(data.requesterName || data.by || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('حذف الأنشطة متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('حذف الأنشطة متاح للمشرفين فقط');
       const activityId = String(data.id || '').trim();
       const sheet = getActivitiesSheet(ss);
       const lastRow = sheet.getLastRow();
@@ -3820,7 +4044,12 @@ function doPost(e) {
         for (let i = 0; i < ids.length; i++) {
           if (String(ids[i][0]) === articleId) {
             const row = i + 2;
-            if (deleting) { const requester = String(data.deletedBy || data.memberName || '').trim(); const authorId = String(sheet.getRange(row, 2).getValue() || '').trim(); const authorName = String(sheet.getRange(row, 3).getValue() || '').trim(); const reqMemberId = String(data.memberId || '').trim(); const reqMemberName = String(data.memberName || data.deletedBy || '').trim(); const isOwner = (authorId && reqMemberId && authorId === reqMemberId) || (!authorId || authorId === 'cloud' || authorId === 'me') && normalizePersonName(authorName || reqMemberName) === normalizePersonName(reqMemberName) || (authorName && normalizePersonName(authorName) === normalizePersonName(reqMemberName)); if (!isSupervisorName(requester) && !isOwner) throw new Error('غير مصرح بحذف هذا المقال'); }
+            if (deleting) {
+              const authorId = String(sheet.getRange(row, 2).getValue() || '').trim();
+              const isOwner = Boolean(authorId && authorId === String(data.authenticatedMemberId || ''));
+              const isAdmin = isSupervisorMemberId(ss, data.authenticatedMemberId);
+              if (!isAdmin && !isOwner) throw new Error('غير مصرح بحذف هذا المقال');
+            }
              sheet.getRange(row, 10, 1, 2).setValues([deleting ? [Date.now(), data.deletedBy || 'مشرف'] : ['', '']]);
             paintDeletedRow(sheet, row, deleting, 11);
             return output({ success: true, message: deleting ? 'نُقل المقال إلى سلة المحذوفات' : 'تمت استعادة المقال' });
@@ -3844,7 +4073,7 @@ function doPost(e) {
     /* طلبات التسجيل المعلّقة مع رموزها (للمشرف) */
     if (action === 'getPendingRegistrations') {
       const requester = String(data.requesterName || data.by || '').trim();
-      if (!isSupervisorName(requester)) throw new Error('عرض الطلبات متاح للمشرفين فقط');
+      if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('عرض الطلبات متاح للمشرفين فقط');
       const pending = [];
       try {
         const all = PropertiesService.getScriptProperties().getProperties();
@@ -3853,11 +4082,14 @@ function doPost(e) {
           let record = null;
           try { record = JSON.parse(all[key]); } catch (error) { record = null; }
           if (!record || !record.email) return;
+          if (!record.expiry || Date.now() > Number(record.expiry)) {
+            PropertiesService.getScriptProperties().deleteProperty(key);
+            return;
+          }
           pending.push({
             email: String(record.email || ''),
             name: String(record.name || ''),
             phone: String(record.phone || ''),
-            code: String(record.code || ''),
             sentAt: Number(record.sentAt) || 0,
             expiresAt: Number(record.expiry) || 0,
             attempts: Number(record.attempts) || 0
@@ -4009,7 +4241,7 @@ function doPost(e) {
       const lastRow = sheet.getLastRow();
       let rowNumber = 0;
       if (lastRow >= 2) {
-        const rows = sheet.getRange(2, 1, lastRow - 1, 8).getDisplayValues();
+        const rows = sheet.getRange(2, 1, lastRow - 1, 10).getDisplayValues();
         for (let i = 0; i < rows.length; i++) {
           const spreadsheetRow = i + 2;
           const rowId = rows[i][5] || `sheet-${spreadsheetRow - 1}`;
@@ -4017,12 +4249,15 @@ function doPost(e) {
         }
       }
 
-      // Demo/seed quote not yet in the sheet: preserve it as a recoverable tombstone.
+      // A quote missing from the sheet can only be tombstoned by an authenticated supervisor.
       if (!rowNumber && deleting && data.text) {
+        if (!isSupervisorMemberId(ss, data.authenticatedMemberId)) throw new Error('غير مصرح بحذف هذا الاقتباس');
         sheet.appendRow([
           data.created_at || new Date().toLocaleString('ar-SA'),
-          data.author_name || '', data.page_number || '', data.book_title || '',
-          data.text, quoteId, Date.now(), data.deletedBy || 'مشرف'
+          safeSheetValue(data.author_name || ''), safeSheetValue(data.page_number || ''),
+          safeSheetValue(data.book_title || ''), safeSheetValue(data.text), quoteId,
+          Date.now(), data.deletedBy || 'مشرف', safeSheetValue(data.book_author || ''),
+          String(data.author_id || '')
         ]);
         paintDeletedRow(sheet, sheet.getLastRow(), true, 8);
         return output({ success: true, message: 'نُقل الاقتباس إلى سلة المحذوفات' });
@@ -4030,7 +4265,16 @@ function doPost(e) {
       if (!rowNumber) throw new Error('لم أجد الاقتباس المطلوب');
 
       if (deleting) {
-        if (true) { const requester = String(data.deletedBy || '').trim(); const authorName = String(sheet.getRange(rowNumber, 2).getValue() || '').trim(); const isOwner = authorName && normalizePersonName(authorName) === normalizePersonName(String(data.author_name || data.deletedBy || '')); if (!isSupervisorName(requester) && !isOwner) throw new Error('غير مصرح بحذف هذا الاقتباس'); }
+        const actorId = String(data.authenticatedMemberId || '');
+        const isAdmin = isSupervisorMemberId(ss, actorId);
+        let authorId = String(sheet.getRange(rowNumber, 10).getValue() || '').trim();
+        if (!authorId) {
+          const authorName = String(sheet.getRange(rowNumber, 2).getValue() || '').trim();
+          const matches = findMemberRowsByName(getMembersSheet(ss), authorName);
+          if (matches.length === 1) authorId = String(getMembersSheet(ss).getRange(matches[0], 1).getValue() || '');
+        }
+        const isOwner = Boolean(authorId && actorId && authorId === actorId);
+        if (!isAdmin && !isOwner) throw new Error('غير مصرح بحذف هذا الاقتباس');
          sheet.getRange(rowNumber, 6).setValue(quoteId);
         sheet.getRange(rowNumber, 7, 1, 2).setValues([[Date.now(), data.deletedBy || 'مشرف']]);
         paintDeletedRow(sheet, rowNumber, true, 8);
@@ -4049,15 +4293,15 @@ function doPost(e) {
 
     ensureQuoteDeleteColumns(sheet);
     const quoteId = String(data.id || `q-${Date.now()}`);
-    sheet.appendRow([
-      data.created_at || new Date().toLocaleString('ar-SA'),
-      data.author_name || '',
-      data.page_number || data.page_numbe || '',
-      data.book_title || '',
-      data.quote_text || '',
-      quoteId,
-      '', '', data.book_author || ''
-    ]);
+      sheet.appendRow([
+        data.created_at || new Date().toLocaleString('ar-SA'),
+        safeSheetValue(data.author_name || ''),
+        safeSheetValue(data.page_number || data.page_numbe || ''),
+        safeSheetValue(data.book_title || ''),
+        safeSheetValue(data.quote_text || ''),
+        quoteId,
+        '', '', safeSheetValue(data.book_author || ''), String(data.memberId || data.author_id || data.authenticatedMemberId || '')
+      ]);
     /* إشعار المشرفين عند نشر اقتباس جديد — كان يُحفظ بدون أي تنبيه */
     try {
       notifySupervisors(
@@ -4077,6 +4321,9 @@ function doGet(e) {
   try {
     const ss = SpreadsheetApp.openById('1s_7SIePvvoBHcZSlqNqtNH9g6IIOCcr7GIKf7hC-46g');
     const action = e && e.parameter ? e.parameter.action || '' : '';
+    const authData = {};
+    const auth = authorizeApiRequest(ss, action, authData, e);
+    if (action === 'validateSession') return output({ success: true, member: auth.member });
 
     if (action === 'getMemberProfile') {
       const memberId = String(e && e.parameter ? e.parameter.memberId || '' : '').trim();
@@ -4803,7 +5050,7 @@ function doGet(e) {
     ensureQuoteDeleteColumns(sheet);
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return output({ success: true, status: 'success', data: [], deletedIds: [], deletedTexts: [] });
-    const rows = sheet.getRange(1, 1, lastRow, 9).getValues();
+    const rows = sheet.getRange(1, 1, lastRow, 10).getValues();
     const quotes = [];
     const deletedIds = [];
     const deletedTexts = [];
@@ -4822,7 +5069,8 @@ function doGet(e) {
           page_number: rows[i][2],
           book_title: rows[i][3],
           quote_text: rows[i][4],
-          book_author: rows[i][8] || ''
+          book_author: rows[i][8] || '',
+          author_id: rows[i][9] || ''
         });
       }
     }

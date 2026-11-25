@@ -1,4 +1,6 @@
-# Security audit — 2026-11-18
+# Historical security audit — 2026-11-18
+
+> Superseded by [`SECURITY_AUDIT_2026-11-25.md`](SECURITY_AUDIT_2026-11-25.md). This file records the earlier state and should not be used as the current assessment.
 
 ## Scope and limitations
 
