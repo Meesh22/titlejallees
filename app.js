@@ -3309,11 +3309,11 @@ function libraryBookCardHTML(book) {
         </button>
         ${inLibrary ? '<span class="book-in-my-library">في مكتبتي</span>' : ''}
         ${book.pdfUrl ? '<span class="book-pdf-badge">PDF</span>' : ''}
-        ${isClubBook && bookBorrowable(book) ? '<span class="book-borrow-badge book-borrow-badge-sm">متاح للاستعارة</span>' : ''}
+        ${isClubBook && bookBorrowable(book) ? `<a class="book-borrow-badge book-borrow-badge-sm" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer">متاح للاستعارة</a>` : ''}
       </div>
       ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
         ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
-        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>${bookBorrowable(book) ? `<a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}` : ''}
+        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}${isClubBook && bookBorrowable(book) ? `<a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}
       </div>` : ''}
     </article>`;
 }
@@ -4529,7 +4529,7 @@ function openBookSheet(id) {
       </div>
     </section>
     ${progress}
-    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook && bookBorrowable(book) ? `<span class="book-borrow-badge">متاح للاستعارة</span>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isSupervisor() && isClubBook && bookBorrowable(book) ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
+    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook && bookBorrowable(book) ? `<a class="book-borrow-badge" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer">متاح للاستعارة</a>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isClubBook && bookBorrowable(book) ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
     <div class="book-detail-tabs" role="tablist" aria-label="تفاصيل الكتاب">
       <button class="active" type="button" data-book-panel="details" role="tab" aria-selected="true">تفاصيل الكتاب</button>
       <button type="button" data-book-panel="reviews" role="tab" aria-selected="false">تقييمات ومراجعات <span>${toAr(ratings.length)}</span></button>
@@ -9421,6 +9421,56 @@ async function handleGlobalClick(event) {
     }
     case 'open-selection-image': {
       openSelectionImageViewer(actionEl.dataset.src);
+      break;
+    }
+    case 'move-selection-image': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const from = actionEl.dataset.from === 'windows' ? 'windows' : 'quotes';
+      const to = actionEl.dataset.to === 'windows' ? 'windows' : 'quotes';
+      const id = actionEl.dataset.id;
+      cloudRequest('moveSelectionImage', { id, from, to }).then((result) => {
+        if (result && result.success === true) {
+          toast('تم نقل الصورة', 'check');
+          invalidateSelectionImages(from);
+          invalidateSelectionImages(to);
+          const panel = document.querySelector('#selections-panel');
+          const activeTab = document.querySelector('#selections-tabs .chip-filter.active')?.dataset.selectionTab || 'quotes';
+          if (panel) {
+            if (activeTab === 'windows') renderSelectionsWindows(panel);
+            else if (activeTab === 'quotes') renderSelectionsQuotes(panel);
+          }
+        } else {
+          toast((result && result.message) || 'تعذر النقل', 'info');
+        }
+      });
+      break;
+    }
+    case 'move-all-selection-images': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const from = actionEl.dataset.from === 'windows' ? 'windows' : 'quotes';
+      const to = actionEl.dataset.to === 'windows' ? 'windows' : 'quotes';
+      openConfirm({
+        title: 'نقل جميع الصور',
+        text: `سيتم نقل جميع صور ${from === 'quotes' ? 'الاقتباسات' : 'النوافذ'} إلى ${to === 'quotes' ? 'الاقتباسات' : 'النوافذ'}.`,
+        confirmLabel: 'نقل',
+        danger: false,
+        onConfirm: async () => {
+          const result = await cloudRequest('moveAllSelectionImages', { from, to });
+          if (result && result.success === true) {
+            toast(result.message || 'تم النقل', 'check');
+            invalidateSelectionImages(from);
+            invalidateSelectionImages(to);
+            const panel = document.querySelector('#selections-panel');
+            if (panel) {
+              const activeTab2 = document.querySelector('#selections-tabs .chip-filter.active')?.dataset.selectionTab || 'quotes';
+               if (activeTab2 === 'windows') renderSelectionsWindows(panel);
+               else if (activeTab2 === 'quotes') renderSelectionsQuotes(panel);
+            }
+          } else {
+            toast((result && result.message) || 'تعذر النقل', 'info');
+          }
+        }
+      });
       break;
     }
     case 'delete-selection-image': {

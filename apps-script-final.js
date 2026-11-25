@@ -115,6 +115,25 @@ function findFolderByNameGlobal(name) {
   return null;
 }
 
+function migrateWindowsSelectionsToQuotesOnce() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('JALEES_MIGRATED_WINDOWS_TO_QUOTES') === '1') return;
+    const fromFolder = getSelectionFolder('windows');
+    const toFolder = getSelectionFolder('quotes');
+    const files = fromFolder.getFiles();
+    while (files.hasNext()) {
+      const file = files.next();
+      const mime = String(file.getMimeType() || '');
+      if (mime.indexOf('image/') !== 0) continue;
+      try { toFolder.addFile(file); fromFolder.removeFile(file); } catch (error) { /* تجاهل */ }
+    }
+    props.setProperty('JALEES_MIGRATED_WINDOWS_TO_QUOTES', '1');
+    CacheService.getScriptCache().remove('sel-folder-windows');
+    CacheService.getScriptCache().remove('sel-folder-quotes');
+  } catch (error) { /* تجاهل */ }
+}
+
 function getSelectionFolder(key) {
   const wanted = key === 'windows' ? 'windows' : 'quotes';
   // إعداد يدوي: если المشرف ربط مجلدًا محددًا، استخدمه
@@ -1067,7 +1086,8 @@ const ADMIN_API_ACTIONS = new Set([
   'deleteLibraryCategory', 'restoreLibraryCategory', 'saveReadingList',
   'deleteReadingList', 'saveMeeting', 'deleteMeeting', 'saveRecordedMeeting',
   'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests',
-  'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders', 'setSelectionFolder'
+  'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders', 'setSelectionFolder',
+  'moveSelectionImage', 'moveAllSelectionImages'
 ]);
 const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
 const MEMBER_BOUND_ACTIONS = new Set([
@@ -3082,6 +3102,7 @@ function doPost(e) {
 
     /* ---- صور مجلدات «مختارات النادي» (اقتباسات / نوافذ قرائية) ---- */
     if (action === 'getSelectionImages') {
+      migrateWindowsSelectionsToQuotesOnce();
       const key = data.key === 'windows' ? 'windows' : 'quotes';
       const page = Math.max(1, Math.min(100, Number(data.page) || 1));
       const size = 1000;
@@ -3139,6 +3160,7 @@ function doPost(e) {
     }
 
     if (action === 'getSelectionFolders') {
+      migrateWindowsSelectionsToQuotesOnce();
       const root = getSelectionsRootFolder();
       const subs = root.getFolders();
       const folders = [];
@@ -3170,6 +3192,45 @@ function doPost(e) {
       PropertiesService.getScriptProperties().setProperty('JALEES_SEL_FOLDER_' + key.toUpperCase(), folder.getId());
       CacheService.getScriptCache().remove('sel-folder-' + key);
       return output({ success: true, id: folder.getId(), name: folder.getName(), message: 'تم ربط المجلد' });
+    }
+
+    if (action === 'moveSelectionImage') {
+      const fileId = String(data.id || data.fileId || '').trim();
+      const fromKey = data.from === 'windows' ? 'windows' : (data.from === 'quotes' ? 'quotes' : (data.fromKey === 'windows' ? 'windows' : 'quotes'));
+      const toKey = data.to === 'windows' ? 'windows' : (data.to === 'quotes' ? 'quotes' : (data.toKey === 'windows' ? 'windows' : 'quotes'));
+      if (!fileId) throw new Error('معرّف الصورة مطلوب');
+      if (fromKey === toKey) throw new Error('المجلدات متطابقة');
+      const fromFolder = getSelectionFolder(fromKey);
+      const toFolder = getSelectionFolder(toKey);
+      const file = DriveApp.getFileById(fileId);
+      let inside = false;
+      const parents = file.getParents();
+      while (parents.hasNext()) { if (parents.next().getId() === fromFolder.getId()) { inside = true; break; } }
+      if (!inside) throw new Error('الصورة ليست في المجلد المحدد');
+      toFolder.addFile(file);
+      fromFolder.removeFile(file);
+      CacheService.getScriptCache().remove('sel-folder-' + fromKey);
+      CacheService.getScriptCache().remove('sel-folder-' + toKey);
+      return output({ success: true, message: 'تم نقل الصورة' });
+    }
+
+    if (action === 'moveAllSelectionImages') {
+      const fromKey = data.from === 'windows' ? 'windows' : 'quotes';
+      const toKey = data.to === 'windows' ? 'windows' : 'quotes';
+      if (fromKey === toKey) throw new Error('المجلدات متطابقة');
+      const fromFolder = getSelectionFolder(fromKey);
+      const toFolder = getSelectionFolder(toKey);
+      const files = fromFolder.getFiles();
+      let moved = 0;
+      while (files.hasNext()) {
+        const file = files.next();
+        const mime = String(file.getMimeType() || '');
+        if (mime.indexOf('image/') !== 0) continue;
+        try { toFolder.addFile(file); fromFolder.removeFile(file); moved++; } catch (error) { /* تجاهل */ }
+      }
+      CacheService.getScriptCache().remove('sel-folder-' + fromKey);
+      CacheService.getScriptCache().remove('sel-folder-' + toKey);
+      return output({ success: true, moved, message: 'تم نقل ' + moved + ' صورة' });
     }
 
     if (action === 'saveWeeklyReport') {
