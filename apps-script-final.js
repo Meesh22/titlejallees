@@ -1,5 +1,5 @@
 const QUOTES_SHEET = 'الاقتباسات';
-const CODE_VERSION = 'jalees-2026-11-25-r67';
+const CODE_VERSION = 'jalees-2026-11-25-r70';
 const BOOKS_SHEET = 'المكتبة';
 const ARTICLES_SHEET = 'المقالات';
 const BOOK_RATINGS_SHEET = 'تقييمات الكتب';
@@ -67,7 +67,121 @@ function imageFolderId(subfolder) {
   return sub.getId();
 }
 
-function storeImage(value, prefix, folder) {
+/* ---- مجلد «مختارات النادي»: مصدر صور الاقتباسات والنوافذ القرائية ---- */
+const SELECTIONS_ROOT_FOLDER_NAME = 'مختارات النادي';
+const SELECTION_FOLDER_ALIASES = {
+  quotes: ['الاقتباسات', 'اقتباسات', 'صور الاقتباسات', 'اقتباسات مختارة', 'مختارات الاقتباسات'],
+  windows: ['النوافذ القرائية', 'نوافذ قرائية', 'النوافذ', 'صور النوافذ', 'نوافذ قرائبة', 'نوافذ قرائبه']
+};
+
+function normalizeDriveFolderName(name) {
+  return String(name || '')
+    .replace(/[\u064B-\u0652\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function getSelectionsRootFolder() {
+  const props = PropertiesService.getScriptProperties();
+  const saved = String(props.getProperty('JALEES_SELECTIONS_FOLDER_ID') || '');
+  if (saved) {
+    try { return DriveApp.getFolderById(saved); } catch (error) { /* تجاهل */ }
+  }
+  const found = DriveApp.getFoldersByName(SELECTIONS_ROOT_FOLDER_NAME);
+  if (found.hasNext()) {
+    const folder = found.next();
+    props.setProperty('JALEES_SELECTIONS_FOLDER_ID', folder.getId());
+    return folder;
+  }
+  const created = DriveApp.createFolder(SELECTIONS_ROOT_FOLDER_NAME);
+  props.setProperty('JALEES_SELECTIONS_FOLDER_ID', created.getId());
+  return created;
+}
+
+function findFolderByNameGlobal(name) {
+  const normalized = normalizeDriveFolderName(name);
+  const iterator = DriveApp.getFoldersByName(name);
+  if (iterator.hasNext()) return iterator.next();
+  // محاولة مطابقة متساهلة (تجاهل الفروق البسيطة)
+  const all = DriveApp.getFolders();
+  while (all.hasNext()) {
+    const folder = all.next();
+    if (normalizeDriveFolderName(folder.getName()) === normalized) return folder;
+  }
+  return null;
+}
+
+function getSelectionFolder(key) {
+  const wanted = key === 'windows' ? 'windows' : 'quotes';
+  const aliases = (SELECTION_FOLDER_ALIASES[wanted] || []).map(normalizeDriveFolderName);
+
+  // 1) بحث عام بالاسم (أو نسخة مطبّعة) — الأقوى
+  for (let i = 0; i < aliases.length; i++) {
+    const original = (SELECTION_FOLDER_ALIASES[wanted] || [])[i];
+    const found = findFolderByNameGlobal(original);
+    if (found) return found;
+  }
+  // بحث عام بـ contains
+  const allFolders = DriveApp.getFolders();
+  while (allFolders.hasNext()) {
+    const folder = allFolders.next();
+    const name = normalizeDriveFolderName(folder.getName());
+    if (wanted === 'quotes' && name.indexOf('اقتباس') !== -1) return folder;
+    if (wanted === 'windows' && name.indexOf('نافذ') !== -1) return folder;
+  }
+
+  // 2) ضمن مجلد «مختارات النادي»
+  try {
+    const root = getSelectionsRootFolder();
+    const folders = root.getFolders();
+    let partial = null;
+    while (folders.hasNext()) {
+      const folder = folders.next();
+      const name = normalizeDriveFolderName(folder.getName());
+      if (aliases.indexOf(name) !== -1) return folder;
+      if (!partial && ((wanted === 'quotes' && name.indexOf('اقتباس') !== -1) || (wanted === 'windows' && name.indexOf('نافذ') !== -1))) {
+        partial = folder;
+      }
+    }
+    if (partial) return partial;
+    return root.createFolder(wanted === 'windows' ? 'النوافذ القرائية' : 'الاقتباسات');
+  } catch (error) { /* تجاهل */ }
+
+  // 3) إنشاء مستقل
+  return DriveApp.createFolder(wanted === 'windows' ? 'النوافذ القرائية' : 'الاقتباسات');
+}
+
+/* قائمة صور المجلد (مخزّنة مؤقتًا 10 دقائق) — الأحدث أولًا حسب الاسم */
+function selectionFolderFiles(key) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = `sel-folder-${key}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (error) { /* تجاهل */ }
+  }
+  const folder = getSelectionFolder(key);
+  const iterator = folder.getFiles();
+  const items = [];
+  while (iterator.hasNext()) {
+    const file = iterator.next();
+    const mime = String(file.getMimeType() || '');
+    if (mime.indexOf('image/') !== 0) continue;
+    items.push({
+      id: file.getId(),
+      name: file.getName(),
+      createdAt: file.getDateCreated().getTime()
+    });
+  }
+  items.sort((a, b) => String(b.name).localeCompare(String(a.name), 'ar', { numeric: true }));
+  try { cache.put(cacheKey, JSON.stringify(items), 600); } catch (error) { /* تجاهل */ }
+  return items;
+}
+
+function storeImage(value, prefix, folder, targetFolder) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
@@ -84,8 +198,8 @@ function storeImage(value, prefix, folder) {
     `image/${type}`,
     `${prefix || 'image'}-${Date.now()}.${type === 'jpeg' ? 'jpg' : type}`
   );
-  const folderName = folder || imageSubfolderName(prefix);
-  const file = DriveApp.getFolderById(imageFolderId(folderName)).createFile(blob);
+  const destination = targetFolder || DriveApp.getFolderById(imageFolderId(folder || imageSubfolderName(prefix)));
+  const file = destination.createFile(blob);
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
@@ -926,7 +1040,7 @@ const PUBLIC_API_ACTIONS = new Set([
   'getBookSummaries', 'getWeeklyReport', 'getWeeklyReports', 'getApprovedMembers',
   'getMemberProfile', 'saveJoinRequest', 'requestRegistrationCode',
   'verifyRegistrationCode', 'loginMember', 'requestPasswordReset', 'resetPassword',
-  'joinCompetition', 'leaveCompetition'
+  'joinCompetition', 'leaveCompetition', 'getLikes', 'getSelectionImages'
 ]);
 const ADMIN_API_ACTIONS = new Set([
   'organizeSheets', 'dedupeClubBooks', 'setJoinRequestStatus', 'getPendingMembers',
@@ -943,7 +1057,8 @@ const ADMIN_API_ACTIONS = new Set([
   'deleteClubBook', 'addLibraryCategory', 'renameLibraryCategory',
   'deleteLibraryCategory', 'restoreLibraryCategory', 'saveReadingList',
   'deleteReadingList', 'saveMeeting', 'deleteMeeting', 'saveRecordedMeeting',
-  'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests'
+  'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests',
+  'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders'
 ]);
 const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
 const MEMBER_BOUND_ACTIONS = new Set([
@@ -2909,7 +3024,7 @@ function doPost(e) {
     if (action === 'saveSelectionQuote') {
       const sheet = getSelectionQuotesSheet(ss);
       const selectionId = String(data.id || `sel-${Date.now()}`);
-      const image = storeImage(data.image, 'selquote');
+      const image = storeImage(data.image, 'selquote', null, getSelectionFolder('quotes'));
       if (!image) throw new Error('أضف صورة الاقتباس');
       const rowData = [
         selectionId, safeSheetValue(data.text || ''), safeSheetValue(data.book || ''), safeSheetValue(data.bookAuthor || ''),
@@ -2927,6 +3042,7 @@ function doPost(e) {
         }
       }
       sheet.appendRow(rowData);
+      CacheService.getScriptCache().remove('sel-folder-quotes');
       notifySupervisors(
         ss, 'selection',
         'اقتباس مختار جديد',
@@ -2950,6 +3066,83 @@ function doPost(e) {
         }
       }
       return output({ success: true, message: 'الاقتباس غير موجود' });
+    }
+
+    /* ---- صور مجلدات «مختارات النادي» (اقتباسات / نوافذ قرائية) ---- */
+    if (action === 'getSelectionImages') {
+      const key = data.key === 'windows' ? 'windows' : 'quotes';
+      const page = Math.max(1, Math.min(100, Number(data.page) || 1));
+      const size = 48;
+      const all = selectionFolderFiles(key);
+      const start = (page - 1) * size;
+      const slice = all.slice(start, start + size);
+      return output({
+        success: true,
+        key,
+        page,
+        total: all.length,
+        hasMore: start + size < all.length,
+        data: slice.map((item) => ({
+          id: item.id,
+          name: item.name,
+          thumb: `https://lh3.googleusercontent.com/d/${item.id}=w600`,
+          full: `https://lh3.googleusercontent.com/d/${item.id}=w1600`
+        }))
+      });
+    }
+
+    if (action === 'deleteSelectionImage') {
+      const key = data.key === 'windows' ? 'windows' : 'quotes';
+      const fileId = String(data.fileId || data.id || '').trim();
+      if (!fileId) throw new Error('لم أجد الصورة');
+      const folder = getSelectionFolder(key);
+      const file = DriveApp.getFileById(fileId);
+      let inside = false;
+      const parents = file.getParents();
+      while (parents.hasNext()) {
+        if (parents.next().getId() === folder.getId()) { inside = true; break; }
+      }
+      if (!inside) throw new Error('هذه الصورة ليست داخل مجلد مختارات النادي');
+      file.setTrashed(true);
+      CacheService.getScriptCache().remove(`sel-folder-${key}`);
+      return output({ success: true, message: 'تم حذف الصورة' });
+    }
+
+    if (action === 'shareSelectionFolder') {
+      const key = data.key === 'windows' ? 'windows' : 'quotes';
+      const folder = getSelectionFolder(key);
+      const files = folder.getFiles();
+      let shared = 0;
+      let failed = 0;
+      while (files.hasNext()) {
+        const file = files.next();
+        if (String(file.getMimeType() || '').indexOf('image/') !== 0) continue;
+        try {
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+          shared++;
+        } catch (error) { failed++; }
+      }
+      CacheService.getScriptCache().remove(`sel-folder-${key}`);
+      return output({ success: true, shared, failed, message: 'تم تحديث مشاركة الصور' });
+    }
+
+    if (action === 'getSelectionFolders') {
+      const root = getSelectionsRootFolder();
+      const subs = root.getFolders();
+      const folders = [];
+      while (subs.hasNext()) {
+        const folder = subs.next();
+        folders.push({ id: folder.getId(), name: folder.getName() });
+      }
+      const quotesFolder = getSelectionFolder('quotes');
+      const windowsFolder = getSelectionFolder('windows');
+      return output({
+        success: true,
+        root: { id: root.getId(), name: root.getName() },
+        folders,
+        quotes: { id: quotesFolder.getId(), name: quotesFolder.getName(), count: selectionFolderFiles('quotes').length },
+        windows: { id: windowsFolder.getId(), name: windowsFolder.getName(), count: selectionFolderFiles('windows').length }
+      });
     }
 
     if (action === 'saveWeeklyReport') {
@@ -3265,7 +3458,7 @@ function doPost(e) {
       const sheet = getReadingTipsSheet(ss);
       const tipId = String(data.id || `tip-${Date.now()}`);
       const rowData = [
-        tipId, data.title || '', data.body || '', storeImage(data.image, 'tip'),
+        tipId, data.title || '', data.body || '', storeImage(data.image, 'tip', null, getSelectionFolder('windows')),
         data.createdAt || Date.now(), data.createdBy || '', '', ''
       ];
       const lastRow = sheet.getLastRow();
@@ -3279,6 +3472,7 @@ function doPost(e) {
         }
       }
       sheet.appendRow(rowData);
+      CacheService.getScriptCache().remove('sel-folder-windows');
       notifySupervisors(
         ss, 'window',
         'نافذة قرائية جديدة',

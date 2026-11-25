@@ -3301,10 +3301,11 @@ function libraryBookCardHTML(book) {
         </button>
         ${inLibrary ? '<span class="book-in-my-library">في مكتبتي</span>' : ''}
         ${book.pdfUrl ? '<span class="book-pdf-badge">PDF</span>' : ''}
+        ${isClubBook ? '<span class="book-borrow-badge book-borrow-badge-sm">متاح للاستعارة</span>' : ''}
       </div>
       ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
         ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
-        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}
+        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button><a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}
       </div>` : ''}
     </article>`;
 }
@@ -4512,7 +4513,7 @@ function openBookSheet(id) {
       </div>
     </section>
     ${progress}
-    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}</div>
+    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook ? `<span class="book-borrow-badge">متاح للاستعارة</span>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isSupervisor() && isClubBook ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
     <div class="book-detail-tabs" role="tablist" aria-label="تفاصيل الكتاب">
       <button class="active" type="button" data-book-panel="details" role="tab" aria-selected="true">تفاصيل الكتاب</button>
       <button type="button" data-book-panel="reviews" role="tab" aria-selected="false">تقييمات ومراجعات <span>${toAr(ratings.length)}</span></button>
@@ -7448,6 +7449,48 @@ const SELECTIONS_TABS = [
 ];
 let readingListsCache = [];
 let selectionQuotesCache = [];
+const selectionFolderCache = {
+  quotes: { items: [], page: 0, total: 0, hasMore: true, loading: false },
+  windows: { items: [], page: 0, total: 0, hasMore: true, loading: false }
+};
+
+function selectionImageFileId(url) {
+  const s = String(url || '');
+  const m = s.match(/\/d\/([\w-]{20,})/) || s.match(/[?&]id=([\w-]{20,})/);
+  return m ? m[1] : '';
+}
+
+function invalidateSelectionImages(key) {
+  if (!selectionFolderCache[key]) return;
+  selectionFolderCache[key] = { items: [], page: 0, total: 0, hasMore: true, loading: false };
+}
+
+async function fetchSelectionImages(key, page) {
+  const result = await cloudRequest('getSelectionImages', { key, page });
+  if (!result || result.success !== true) return { items: [], hasMore: false, total: 0 };
+  return {
+    items: Array.isArray(result.data) ? result.data : [],
+    hasMore: Boolean(result.hasMore),
+    total: Number(result.total) || 0
+  };
+}
+
+async function ensureSelectionImages(key, { reset = false } = {}) {
+  const bucket = selectionFolderCache[key];
+  if (bucket.loading) return bucket;
+  if (reset) { bucket.items = []; bucket.page = 0; bucket.hasMore = true; }
+  if (!bucket.hasMore && bucket.page > 0) return bucket;
+  bucket.loading = true;
+  const nextPage = bucket.page + 1;
+  const res = await fetchSelectionImages(key, nextPage);
+  bucket.loading = false;
+  if (reset) bucket.items = res.items;
+  else bucket.items = bucket.items.concat(res.items);
+  bucket.page = nextPage;
+  bucket.total = res.total || bucket.items.length;
+  bucket.hasMore = res.hasMore;
+  return bucket;
+}
 
 /* اقتباسات اختارها المشرف (مختارات النادي) */
 async function refreshSelectionQuotes() {
@@ -7502,18 +7545,62 @@ function selectionQuoteCardHTML(item) {
     </article>`;
 }
 
+function selectionFolderCardHTML(item, key) {
+  return `
+    <article class="selection-quote-card has-image selection-folder-card">
+      <button class="selection-folder-open" type="button" data-action="open-selection-image" data-src="${esc(item.full)}" aria-label="عرض الصورة">
+        <img class="selection-quote-image" src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">
+      </button>
+      ${isSupervisor() ? `<button class="selection-quote-delete" type="button" data-action="delete-selection-image" data-id="${esc(item.id)}" data-key="${esc(key)}">حذف</button>` : ''}
+    </article>`;
+}
+
+function openSelectionImageViewer(src) {
+  if (!src) return;
+  openSheet(`
+    <div class="sheet-head">
+      <div><h2>صورة</h2></div>
+      <div class="sheet-head-actions">
+        <button class="sheet-back" type="button" data-sheet-back aria-label="رجوع"><svg class="ic"><use href="#i-back"/></svg></button>
+        <button class="sheet-close" type="button" data-close-sheet aria-label="إغلاق"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+    </div>
+    <div class="selection-image-viewer">
+      <img src="${esc(src)}" alt="" loading="eager" decoding="async">
+    </div>`, (root) => {}, { fullscreen: true });
+}
+
 function renderSelectionsQuotes(panel) {
-  const items = selectionQuotesCache || [];
+  const bucket = selectionFolderCache.quotes;
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">اقتباسات مختارة</span><p>صور الاقتباسات التي يختارها المشرفون</p></div>
       ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button>` : ''}
     </div>
-    <div class="selections-quotes">
-      ${items.length
-        ? items.map((item) => selectionQuoteCardHTML(item)).join('')
-        : emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'يضيف المشرف هنا صور الاقتباسات المختارة.')}
-    </div>`;
+    <div class="selections-quotes" id="selections-quotes-list"></div>
+    <div class="selections-more" id="selections-quotes-more"></div>`;
+  const list = panel.querySelector('#selections-quotes-list');
+  const more = panel.querySelector('#selections-quotes-more');
+
+  const draw = () => {
+    const sheetItems = selectionQuotesCache || [];
+    const known = new Set(sheetItems.map((q) => selectionImageFileId(q.image)).filter(Boolean));
+    const extra = bucket.items.filter((f) => !known.has(f.id));
+    list.innerHTML = [
+      ...sheetItems.map((item) => selectionQuoteCardHTML(item)),
+      ...extra.map((item) => selectionFolderCardHTML(item, 'quotes'))
+    ].join('') || emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'يضيف المشرف هنا صور الاقتباسات المختارة.');
+    if (bucket.hasMore) {
+      more.innerHTML = `<button class="btn btn-ghost btn-block" type="button" data-action="load-more-selection-images" data-key="quotes">تحميل المزيد</button>`;
+    } else {
+      more.innerHTML = '';
+    }
+  };
+
+  refreshSelectionQuotes().then(async () => {
+    await ensureSelectionImages('quotes', { reset: bucket.page === 0 && bucket.items.length === 0 });
+    draw();
+  });
 }
 
 /* قبول صورة بالإسقاط أو الاختيار وتحويلها لنص يرفع إلى Drive */
@@ -7610,6 +7697,7 @@ function openSelectionQuoteComposer() {
       });
       if (!result || result.success !== true) { toast(cleanServerError(result, 'تعذر نشر الاقتباس المختار'), 'info'); return; }
       toast('نُشر الاقتباس في مختارات النادي', 'check');
+      invalidateSelectionImages('quotes');
       closeSheet();
       setTimeout(() => openClubSelectionsSheet('quotes'), 340);
     });
@@ -7622,9 +7710,34 @@ async function renderSelectionsWindows(panel) {
       <div><span class="eyebrow">نوافذ قرائية</span><p>صور ونصائح يضيفها المشرف</p></div>
       ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button>` : ''}
     </div>
-    <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>`;
+    <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>
+    <div class="selections-more" id="selections-windows-more"></div>`;
   const box = panel.querySelector('#selections-windows');
+  const more = panel.querySelector('#selections-windows-more');
   await loadReadingTips(box);
+
+  const bucket = await ensureSelectionImages('windows', { reset: selectionFolderCache.windows.page === 0 && selectionFolderCache.windows.items.length === 0 });
+  const known = new Set((readingTipsCache || []).map((t) => selectionImageFileId(t.image)).filter(Boolean));
+  const extra = bucket.items.filter((f) => !known.has(f.id));
+  if (extra.length) {
+    const grid = box.closest('.selections') || box.parentElement;
+    box.insertAdjacentHTML('beforeend', extra.map((item) => `
+      <article class="reading-window-card selection-folder-card">
+        <button class="reading-window-card-open" type="button" data-action="open-selection-image" data-src="${esc(item.full)}" aria-label="عرض الصورة">
+          <span class="reading-window-card-media">
+            <img class="reading-window-card-image" src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">
+            <span class="reading-window-card-tag">نافذة مصوّرة</span>
+          </span>
+        </button>
+        ${isSupervisor() ? `<button class="reading-window-card-delete" type="button" data-action="delete-selection-image" data-id="${esc(item.id)}" data-key="windows">حذف</button>` : ''}
+      </article>`).join(''));
+  }
+  if (bucket.hasMore) {
+    more.innerHTML = `<button class="btn btn-ghost btn-block" type="button" data-action="load-more-selection-images" data-key="windows">تحميل المزيد</button>`;
+  } else {
+    more.innerHTML = '';
+  }
+
   const addBtn = panel.querySelector('[data-action="add-reading-tip"]');
   if (addBtn) addBtn.addEventListener('click', () => {
     closeSheet();
@@ -7955,6 +8068,7 @@ function openReadingTipComposer() {
       });
       if (!result || result.success !== true) { toast('تعذر حفظ النصيحة', 'info'); return; }
       toast('تم نشر النصيحة في النافذة القرائية', 'check');
+      invalidateSelectionImages('windows');
       closeSheet();
       openReadingWindowSheet();
     });
@@ -9270,6 +9384,37 @@ async function handleGlobalClick(event) {
     case 'open-reading-window':
       openReadingWindowViewer(id);
       break;
+    case 'open-selection-image': {
+      openSelectionImageViewer(actionEl.dataset.src);
+      break;
+    }
+    case 'delete-selection-image': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      const key = actionEl.dataset.key === 'windows' ? 'windows' : 'quotes';
+      openConfirm({
+        title: 'حذف الصورة',
+        text: 'سيُزال هذا الملف من المجلد في Drive.',
+        confirmLabel: 'حذف',
+        onConfirm: async () => {
+          const result = await cloudRequest('deleteSelectionImage', { id, key });
+          if (!result || result.success !== true) { toast('تعذر الحذف', 'info'); return; }
+          invalidateSelectionImages(key);
+          toast('تم حذف الصورة', 'trash');
+          const tabKey = key === 'windows' ? 'windows' : 'quotes';
+          closeSheet();
+          setTimeout(() => openClubSelectionsSheet(tabKey), 340);
+        }
+      });
+      break;
+    }
+    case 'load-more-selection-images': {
+      const key = actionEl.dataset.key === 'windows' ? 'windows' : 'quotes';
+      const tabKey = key === 'windows' ? 'windows' : 'quotes';
+      await ensureSelectionImages(key, { reset: false });
+      closeSheet();
+      setTimeout(() => openClubSelectionsSheet(tabKey), 340);
+      break;
+    }
     case 'member-stats':
       closeSheet();
       openMemberStatsSheet();
