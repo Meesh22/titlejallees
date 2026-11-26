@@ -3560,7 +3560,8 @@ ${isSupervisor() ? `<div class="field">
 
       const finalCover = imageData || null;
       let pdfUrl = '';
-      const pdfFile = root.querySelector('#add-book-pdf').files && root.querySelector('#add-book-pdf').files[0];
+      const pdfInput = root.querySelector('#add-book-pdf');
+      const pdfFile = pdfInput && pdfInput.files && pdfInput.files[0];
       if (pdfFile) {
         const pdfStatus = root.querySelector('#add-book-pdf-status');
         if (!isSupervisor()) { toast('رفع ملف PDF متاح للمشرفين فقط', 'info'); return; }
