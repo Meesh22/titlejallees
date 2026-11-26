@@ -1068,7 +1068,7 @@ const PUBLIC_API_ACTIONS = new Set([
   'getBookSummaries', 'getWeeklyReport', 'getWeeklyReports', 'getApprovedMembers',
   'getMemberProfile', 'saveJoinRequest', 'requestRegistrationCode',
   'verifyRegistrationCode', 'loginMember', 'requestPasswordReset', 'resetPassword',
-  'joinCompetition', 'leaveCompetition', 'getLikes', 'getSelectionImages'
+  'joinCompetition', 'leaveCompetition', 'getLikes', 'getSelectionImages', 'seedClubBooks'
 ]);
 const ADMIN_API_ACTIONS = new Set([
   'organizeSheets', 'dedupeClubBooks', 'setJoinRequestStatus', 'getPendingMembers',
@@ -2724,6 +2724,43 @@ function doPost(e) {
       return output({ success: true, id: rowData[0], message: 'تم حفظ الكتاب' });
     }
 
+    if (action === 'seedClubBooks') {
+      const token = String(data.token || (e && e.parameter && e.parameter.token) || '').trim();
+      if (token !== 'jalees-seed-2026') throw new Error('غير مصرح');
+      const sheet = getBooksSheet(ss);
+      ensureBookDeleteColumns(sheet);
+      const seedBooks = [
+        { title: 'دليلك الشخصي للسعادة والنجاح', author: 'إبراهيم القعيد', category: 'تنمية ذات', pages: 266, report: 'يقدم هذا الكتاب دليلاً عملياً متكاملاً لتنمية الذات وبناء شخصية متوازنة وقادرة على النجاح. من عناوينه: سر السعادة والنجاح؛ تحديد الأهداف وكيفية تحقيقها؛ مهارات الاتصال؛ العلاقات الاجتماعية وأدابها؛ مهارة صنع القرار.' },
+        { title: 'بريدة', author: 'إبراهيم المعارك', category: 'تاريخ', pages: 211, report: 'يركز على التاريخ الاجتماعي والجغرافي لمدينة بريدة. من عناوينه: سبب التسمية؛ أقوال المؤرخين؛ جماعة تحفيظ القرآن؛ الأحياء والمواقع القديمة؛ المياه في بريدة.' },
+        { title: 'المراهقون', author: 'عبدالعزيز النغيمشي', category: 'تربية', pages: 179, report: 'ينطلق من فكرة أن مرحلة المراهقة أزمة نفسية واجتماعية. من عناوينه: جسد المراهق؛ انفعالات المراهق؛ الحاجة إلى العبادة؛ الحاجة إلى الرفقة؛ الحاجة إلى الهوية.' },
+        { title: 'أو الدنا كيف يحفظون القرآن', author: 'حمدان الهاجري', category: 'تربية', pages: 172, report: 'يعتمد على مبدأ تهيئة الطفل نفسيًا وإيمانيًا قبل تعليمه آليات الحفظ. من عناوينه: هل الذاكرة تتسع مع الحفظ الكثير؟؛ الوالدة تحفظ القرآن في 16 سنة؛ من قصص الذين نسوا القرآن بسبب المعاصي؛ غرائب من يختمون القرآن؛ يحفظ كل يوم آية.' },
+        { title: 'خطوة خطوة نحو الهدف', author: 'أحمد بادويالن', category: 'تنمية ذات', pages: 459, report: 'يهدف إلى تقديم خارطة طريق عملية تجمع بين الجدية في السعي نحو الأهداف والحكمة في عيش الحياة. من عناوينه: عالج ماضيك لتعرف نفسك؛ الوصايا العشر لتقوية التفكير؛ عشر نصائح لكون شخص ظريف؛ عشرة طرق تجعلك أكثر إبداعاً؛ كيف تتخلص من الإحباط.' }
+      ];
+      const oldSheet = ss.getSheetById(OLD_BOOKS_SHEET_ID);
+      const sources = [oldSheet, sheet].filter((source, index, list) => source && list.indexOf(source) === index);
+      let added = 0;
+      for (const b of seedBooks) {
+        const wantedKey = bookKey(b.title, b.author);
+        let exists = false;
+        for (const source of sources) {
+          const lastRow = source.getLastRow();
+          if (lastRow < 2) continue;
+          const rows = source.getRange(2, 1, lastRow - 1, 5).getValues();
+          for (let i = 0; i < rows.length; i++) {
+            if (bookKey(rows[i][3], rows[i][4]) === wantedKey) { exists = true; break; }
+          }
+          if (exists) break;
+        }
+        if (exists) continue;
+        sheet.appendRow([
+          `club-seed-${Date.now()}-${added}`, '', 'مشرف', safeSheetValue(b.title), safeSheetValue(b.author), safeSheetValue(b.category),
+          '#1E3A2B', safeSheetValue(b.report), b.pages || 0, Date.now(), '', '', '', '', '', '#14291D', 0
+        ]);
+        added++;
+      }
+      return output({ success: true, added, message: 'تمت إضافة ' + added + ' كتاب' });
+    }
+
     /* تنظيف الكتب المكرّرة في الشيت (نفس العنوان والمؤلف) */
     if (action === 'dedupeClubBooks') {
       const result = dedupeClubBooks(ss);
@@ -3118,7 +3155,7 @@ function doPost(e) {
         data: slice.map((item) => ({
           id: item.id,
           name: item.name,
-          thumb: `https://lh3.googleusercontent.com/d/${item.id}=w600`,
+          thumb: `https://lh3.googleusercontent.com/d/${item.id}=w400`,
           full: `https://lh3.googleusercontent.com/d/${item.id}=w1600`
         }))
       });

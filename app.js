@@ -3400,6 +3400,8 @@ function parseBookDataFromText(text) {
 }
 
 function openAddBook() {
+  const isGuestUser = !currentMember || currentMember.id === 'guest';
+  if (isGuestUser) { toast('سجّل الدخول لإضافة كتاب للمكتبة', 'info'); if (typeof showGate === 'function') showGate('login'); return; }
   const bookCategories = getLibraryCategoryOptions();
   openSheet(`
     ${sheetHead('إضافة كتاب لمكتبة النادي', 'أضف كتاباً تود مشاركته مع أعضاء جليس.')}
@@ -3952,7 +3954,7 @@ function renderMyBooks() {
     const messages = {
       reading: ['لا كتاب مفتوح الآن', 'اختر كتاباً من مكتبة النادي وابدأ القراءة.'],
       want: ['قائمة الأمنيات فارغة', 'أضف ما تنوي قراءته من مكتبة النادي.'],
-      finished: ['لم تُنهِ كتاباً بعد', 'كل كتاب تنهيه سيظهر هنا كوسام.']
+      finished: ['لم تُنهِ كتاباً بعد', 'كل كتاب تنهيه سيظهر هنا.']
     };
     $('#my-books').innerHTML = emptyHTML('book', messages[state.myFilter][0], messages[state.myFilter][1]);
     return;
@@ -7497,14 +7499,18 @@ async function ensureSelectionImages(key, { reset = false } = {}) {
   if (reset) { bucket.items = []; bucket.page = 0; bucket.hasMore = true; }
   if (!bucket.hasMore && bucket.page > 0) return bucket;
   bucket.loading = true;
-  const nextPage = bucket.page + 1;
-  const res = await fetchSelectionImages(key, nextPage);
+  // جلب جميع الصفحات (حتى 20) لعرض كل الصور دون «تحميل المزيد»
+  while (bucket.hasMore && bucket.page < 20) {
+    const nextPage = bucket.page + 1;
+    const res = await fetchSelectionImages(key, nextPage);
+    if (reset && bucket.page === 0) bucket.items = res.items;
+    else bucket.items = bucket.items.concat(res.items);
+    bucket.page = nextPage;
+    bucket.total = res.total || bucket.items.length;
+    bucket.hasMore = res.hasMore;
+    if (!res.items.length) break;
+  }
   bucket.loading = false;
-  if (reset) bucket.items = res.items;
-  else bucket.items = bucket.items.concat(res.items);
-  bucket.page = nextPage;
-  bucket.total = res.total || bucket.items.length;
-  bucket.hasMore = res.hasMore;
   return bucket;
 }
 
@@ -8993,7 +8999,7 @@ function showGate(view = 'register') {
 
 function applyGuestVisibility() {
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article', 'manage-library-categories']);
+  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article', 'manage-library-categories']);
   document.querySelectorAll('[data-action]').forEach((el) => {
     if (blocked.has(el.dataset.action)) el.style.display = isGuest ? 'none' : '';
   });
@@ -9301,7 +9307,7 @@ async function handleGlobalClick(event) {
   const id = actionEl.dataset.id;
 
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article']);
+  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article']);
   if (isGuest && guestBlocked.has(action)) {
     showGate();
     toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user');
