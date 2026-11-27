@@ -1718,7 +1718,7 @@ function renderMeetingCard() {
     ? `object-position:${clamp(Number(meeting.imagePosX) || 50, 0, 100)}% ${clamp(Number(meeting.imagePosY) || 50, 0, 100)}%;transform:scale(${(clamp(Number(meeting.imageScale) || 100, 100, 300) / 100).toFixed(2)})`
     : '';
   const imageMarkup = meeting.image
-    ? `<img class="meeting-poster" style="${cropStyle}" src="${esc(imageThumb(meeting.image, 700))}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy" decoding="async">`
+    ? `<img class="meeting-poster" style="${cropStyle}" src="${esc(imageThumb(meeting.image, 1600))}" alt="إعلان ${esc(meeting.title || 'اللقاء')}" loading="lazy" decoding="async">`
     : `<div class="meeting-poster-placeholder"><svg class="ic"><use href="#i-calendar"/></svg><span>لقاء جليس القادم</span></div>`;
 
   root.innerHTML = `
@@ -1746,7 +1746,7 @@ function compressMeetingImage(file) {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
     image.onload = () => {
-      let scale = Math.min(1, 1200 / image.width, 1200 / image.height);
+      let scale = Math.min(1, 2400 / image.width, 2400 / image.height);
       let dataUrl = '';
       for (let attempt = 0; attempt < 12; attempt++) {
         const canvas = document.createElement('canvas');
@@ -1756,13 +1756,13 @@ function compressMeetingImage(file) {
         context.fillStyle = '#ffffff';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const quality = Math.max(0.55, 0.85 - attempt * 0.04);
+        const quality = Math.max(0.78, 0.92 - attempt * 0.03);
         dataUrl = canvas.toDataURL('image/jpeg', quality);
-        if (dataUrl.length <= 480000) break;
-        scale *= 0.84;
+        if (dataUrl.length <= 1500000) break;
+        scale *= 0.88;
       }
       URL.revokeObjectURL(objectUrl);
-      if (!dataUrl || dataUrl.length > 600000) {
+      if (!dataUrl || dataUrl.length > 2000000) {
         reject(new Error('تعذر ضغط الصورة للحجم المناسب. اختر صورة أصغر.'));
         return;
       }
@@ -7621,6 +7621,7 @@ function renderSelectionsQuotes(panel) {
   };
 
   refreshSelectionQuotes().then(async () => {
+    draw();
     await ensureSelectionImages('quotes', { reset: bucket.page === 0 && bucket.items.length === 0 });
     draw();
   });

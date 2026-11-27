@@ -3084,7 +3084,7 @@ textarea::placeholder { color: #A9B1AC; }
 .selection-folder-actions { display: flex; gap: 6px; margin-top: 6px; justify-content: center; }
 .selection-quote-move, .reading-window-card-move { font-size: 11px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; }
 .selections-head-row p { font-size: 8.5px; color: var(--muted); margin-top: 2px; }
-.selections-quotes { display: grid; gap: 9px; }
+.selections-quotes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 
 #selections-lists { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 @media (min-width: 768px) { #selections-lists { grid-template-columns: repeat(3, 1fr); } }

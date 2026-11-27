@@ -230,7 +230,8 @@ function storeImage(value, prefix, folder, targetFolder) {
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) { /* قد تمنع سياسة النطاق المشاركة العامة */ }
-  return `https://lh3.googleusercontent.com/d/${file.getId()}=w800`;
+  const storedWidth = (prefix && /meeting/i.test(String(prefix))) ? 2400 : 1200;
+  return `https://lh3.googleusercontent.com/d/${file.getId()}=w${storedWidth}`;
 }
 
 /* ---- ملفات عامة (صور وملفات PDF): تُرفع إلى Drive ويُخزَّن رابط ---- */
