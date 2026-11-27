@@ -1088,7 +1088,7 @@ const ADMIN_API_ACTIONS = new Set([
   'deleteReadingList', 'saveMeeting', 'deleteMeeting', 'saveRecordedMeeting',
   'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests',
   'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders', 'setSelectionFolder',
-  'moveSelectionImage', 'moveAllSelectionImages'
+  'moveSelectionImage', 'moveAllSelectionImages', 'deleteAllSelectionQuotes', 'deleteAllReadingTips'
 ]);
 const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
 const MEMBER_BOUND_ACTIONS = new Set([
@@ -3122,6 +3122,20 @@ function doPost(e) {
       return output({ success: true, id: selectionId, message: 'تم نشر الاقتباس في مختارات النادي' });
     }
 
+    if (action === 'deleteAllSelectionQuotes') {
+      const sheet = getSelectionQuotesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) { sheet.deleteRow(row); removed++; }
+      return output({ success: true, removed: removed, message: 'تم حذف جميع الاقتباسات المختارة' });
+    }
+    if (action === 'deleteAllReadingTips') {
+      const sheet = getReadingTipsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) { sheet.deleteRow(row); removed++; }
+      return output({ success: true, removed: removed, message: 'تم حذف جميع النوافذ القرائية' });
+    }
     if (action === 'deleteSelectionQuote') {
       const sheet = getSelectionQuotesSheet(ss);
       const selectionId = String(data.id || '');
@@ -4937,6 +4951,20 @@ function doGet(e) {
       return output({ success: true, removed: removed, message: 'تم حذف كل التقارير' });
     }
 
+    if (action === 'deleteAllSelectionQuotes') {
+      const sheet = getSelectionQuotesSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) { sheet.deleteRow(row); removed++; }
+      return output({ success: true, removed: removed, message: 'تم حذف جميع الاقتباسات المختارة' });
+    }
+    if (action === 'deleteAllReadingTips') {
+      const sheet = getReadingTipsSheet(ss);
+      const lastRow = sheet.getLastRow();
+      let removed = 0;
+      for (let row = lastRow; row >= 2; row--) { sheet.deleteRow(row); removed++; }
+      return output({ success: true, removed: removed, message: 'تم حذف جميع النوافذ القرائية' });
+    }
     if (action === 'getSelectionQuotes') {
       const sheet = getSelectionQuotesSheet(ss);
       const lastRow = sheet.getLastRow();

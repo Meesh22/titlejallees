@@ -72,11 +72,11 @@ const MAIN_API_ACTIONS = new Set([
   'getConsultations', 'submitConsultation', 'answerConsultation', 'setMemberPhoto', 'getMemberProfile',
   'saveProfile', 'getProfile', 'saveEntry', 'getEntries',
   'getMyBooks', 'saveMyBook', 'deleteMyBook',
-  'getReadingTips', 'saveReadingTip', 'deleteReadingTip',
+  'getReadingTips', 'saveReadingTip', 'deleteReadingTip', 'deleteAllReadingTips',
   'setConsultantStatus', 'setMemberType', 'setSupervisorStatus', 'banMember',
   'getBookSummaries', 'saveBookSummary', 'deleteBookSummary',
   'getReadingLists', 'saveReadingList', 'deleteReadingList',
-  'getSelectionQuotes', 'toggleSelectionQuote',
+  'getSelectionQuotes', 'toggleSelectionQuote', 'deleteAllSelectionQuotes', 'deleteAllReadingTips',
   'getWeeklyReports', 'saveWeeklyReport', 'deleteWeeklyReport', 'deleteAllWeeklyReports',
   'describeSpreadsheet', 'organizeSheets', 'dedupeClubBooks', 'getLikes', 'toggleLike',
   'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile',
@@ -769,8 +769,7 @@ async function saveClubBookToCloud(member, book) {
     report: book.report || '',
     pages: book.pages || 0,
     year: book.year || '',
-    createdAt: book.createdAt || Date.now(),
-    borrowable: bookBorrowable(book) ? 1 : 0
+    createdAt: book.createdAt || Date.now()
   });
 }
 
@@ -802,7 +801,6 @@ async function updateClubBookToCloud(book) {
     year: book.year || '',
     coverImage: book.coverImage || '',
     pdfUrl: book.pdfUrl || '',
-    borrowable: bookBorrowable(book) ? 1 : 0,
     updatedAt: Date.now()
   });
 }
@@ -2613,12 +2611,6 @@ function bookKey(title, author) {
   return `${clean(title)}|${clean(author)}`;
 }
 
-function bookBorrowable(book) {
-  if (!book) return false;
-  const value = book.borrowable;
-  if (value === undefined || value === null || value === '') return true;
-  return value === true || value === 1 || value === '1' || value === 'true';
-}
 function coverHTML(book, thumbWidth = 480) {
   if (book.coverImage) {
     return `
@@ -3309,11 +3301,11 @@ function libraryBookCardHTML(book) {
         </button>
         ${inLibrary ? '<span class="book-in-my-library">في مكتبتي</span>' : ''}
         ${book.pdfUrl ? '<span class="book-pdf-badge">PDF</span>' : ''}
-        ${isClubBook && bookBorrowable(book) ? `<a class="book-borrow-badge book-borrow-badge-sm" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer">متاح للاستعارة</a>` : ''}
+        ${isClubBook ? '<span class="book-borrow-badge book-borrow-badge-sm">متاح للاستعارة</span>' : ''}
       </div>
       ${(isSupervisor() && isClubBook) || !isGuest() ? `<div class="book-shelf-actions">
         ${!isGuest() ? `<button class="book-shelf-rate" type="button" data-action="rate-book" data-id="${esc(book.id)}">قيّم</button>` : ''}
-        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button>` : ''}${isClubBook && bookBorrowable(book) ? `<a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}
+        ${isSupervisor() && isClubBook ? `<button class="book-shelf-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}" aria-label="تعديل الكتاب"><svg class="ic"><use href="#i-edit"/></svg></button><button class="book-shelf-delete" type="button" data-action="delete-club-book" data-id="${esc(book.id)}" aria-label="حذف الكتاب"><svg class="ic"><use href="#i-trash"/></svg></button><a class="book-shelf-borrow" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer" aria-label="قابل للاستعارة"><svg class="ic"><use href="#i-book"/></svg></a>` : ''}
       </div>` : ''}
     </article>`;
 }
@@ -3400,8 +3392,6 @@ function parseBookDataFromText(text) {
 }
 
 function openAddBook() {
-  const isGuestUser = !currentMember || currentMember.id === 'guest';
-  if (isGuestUser) { toast('سجّل الدخول لإضافة كتاب للمكتبة', 'info'); if (typeof showGate === 'function') showGate('login'); return; }
   const bookCategories = getLibraryCategoryOptions();
   openSheet(`
     ${sheetHead('إضافة كتاب لمكتبة النادي', 'أضف كتاباً تود مشاركته مع أعضاء جليس.')}
@@ -3460,9 +3450,6 @@ function openAddBook() {
         <label for="add-book-pdf">ملف الكتاب PDF (للمشرفين فقط · اختياري)</label>
         <input class="input" id="add-book-pdf" type="file" accept="application/pdf,.pdf">
         <small id="add-book-pdf-status" class="meeting-image-status">يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.</small>
-      </div>` : ''}
-${isSupervisor() ? `<div class="field">
-        <label class="switch-row"><span class="switch-label"><svg class="ic"><use href="#i-book"/></svg> متاح للاستعارة</span><input type="checkbox" id="add-book-borrowable"><span class="switch" aria-hidden="true"></span></label>
       </div>` : ''}
       <button class="btn btn-primary btn-block" type="submit">
         <svg class="ic"><use href="#i-plus"/></svg> إضافة الكتاب
@@ -3560,8 +3547,7 @@ ${isSupervisor() ? `<div class="field">
 
       const finalCover = imageData || null;
       let pdfUrl = '';
-      const pdfInput = root.querySelector('#add-book-pdf');
-      const pdfFile = pdfInput && pdfInput.files && pdfInput.files[0];
+      const pdfFile = root.querySelector('#add-book-pdf').files && root.querySelector('#add-book-pdf').files[0];
       if (pdfFile) {
         const pdfStatus = root.querySelector('#add-book-pdf-status');
         if (!isSupervisor()) { toast('رفع ملف PDF متاح للمشرفين فقط', 'info'); return; }
@@ -3618,7 +3604,6 @@ ${isSupervisor() ? `<div class="field">
         coverImage: finalCover,
         coverColor2: shadeHex(color, 0.3) || '#14291D',
         pdfUrl,
-        borrowable: isSupervisor() ? (root.querySelector('#add-book-borrowable')?.checked ? 1 : 0) : 0,
         createdAt: Date.now(),
         memberId: currentMember.id,
         memberName: state.profile.name,
@@ -3687,9 +3672,6 @@ function openEditClubBook(bookId) {
           <button type="button" class="btn btn-sm btn-ghost danger" id="edit-club-book-pdf-remove">إزالة الملف</button>
         </div>` : ''}
         <small id="edit-club-book-pdf-status" class="meeting-image-status">${book.pdfUrl ? 'ارفع ملفًا جديدًا لاستبدال الحالي.' : 'يمكن للأعضاء فتح الكتاب مباشرة من التطبيق.'}</small>
-      </div>
-      <div class="field">
-        <label class="switch-row"><span class="switch-label"><svg class="ic"><use href="#i-book"/></svg> متاح للاستعارة</span><input type="checkbox" id="edit-club-book-borrowable" ${bookBorrowable(book) ? 'checked' : ''}><span class="switch" aria-hidden="true"></span></label>
       </div>
       <button class="btn btn-gold btn-block" type="submit"><svg class="ic"><use href="#i-check"/></svg> حفظ التعديلات</button>
     </form>`, (root) => {
@@ -3770,7 +3752,6 @@ function openEditClubBook(bookId) {
         coverColor2: shadeHex(root.querySelector('#edit-club-book-color').value, 0.3) || '#14291D',
         coverImage: imageData,
         pdfUrl,
-        borrowable: root.querySelector('#edit-club-book-borrowable')?.checked ? 1 : 0,
         updatedAt: Date.now()
       };
 
@@ -3955,7 +3936,7 @@ function renderMyBooks() {
     const messages = {
       reading: ['لا كتاب مفتوح الآن', 'اختر كتاباً من مكتبة النادي وابدأ القراءة.'],
       want: ['قائمة الأمنيات فارغة', 'أضف ما تنوي قراءته من مكتبة النادي.'],
-      finished: ['لم تُنهِ كتاباً بعد', 'كل كتاب تنهيه سيظهر هنا.']
+      finished: ['لم تُنهِ كتاباً بعد', 'كل كتاب تنهيه سيظهر هنا كوسام.']
     };
     $('#my-books').innerHTML = emptyHTML('book', messages[state.myFilter][0], messages[state.myFilter][1]);
     return;
@@ -4532,7 +4513,7 @@ function openBookSheet(id) {
       </div>
     </section>
     ${progress}
-    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook && bookBorrowable(book) ? `<a class="book-borrow-badge" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer">متاح للاستعارة</a>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isClubBook && bookBorrowable(book) ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
+    <div class="book-detail-actions">${mainAction}${secondaryAction}${book.pdfUrl ? `<a class="btn btn-ghost btn-block book-pdf-open" href="${esc(book.pdfUrl)}" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-article"/></svg> فتح ملف الكتاب (PDF)</a>` : ''}${isClubBook ? `<span class="book-borrow-badge">متاح للاستعارة</span>` : ''}${isSupervisor() && isClubBook ? `<button class="btn btn-ghost btn-block book-admin-edit" type="button" data-action="edit-club-book" data-id="${esc(book.id)}"><svg class="ic"><use href="#i-edit"/></svg> تعديل بيانات الكتاب</button>` : ''}${isSupervisor() && isClubBook ? `<a class="btn btn-gold btn-block book-borrow-open" href="https://docs.google.com/forms/d/e/1FAIpQLScHrKbemhFGiuFSsefHbG8oGibBdYMtDrEQVfufg-e9L0r0dA/viewform" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-book"/></svg> قابل للاستعارة</a>` : ''}</div>
     <div class="book-detail-tabs" role="tablist" aria-label="تفاصيل الكتاب">
       <button class="active" type="button" data-book-panel="details" role="tab" aria-selected="true">تفاصيل الكتاب</button>
       <button type="button" data-book-panel="reviews" role="tab" aria-selected="false">تقييمات ومراجعات <span>${toAr(ratings.length)}</span></button>
@@ -7500,18 +7481,14 @@ async function ensureSelectionImages(key, { reset = false } = {}) {
   if (reset) { bucket.items = []; bucket.page = 0; bucket.hasMore = true; }
   if (!bucket.hasMore && bucket.page > 0) return bucket;
   bucket.loading = true;
-  // جلب جميع الصفحات (حتى 20) لعرض كل الصور دون «تحميل المزيد»
-  while (bucket.hasMore && bucket.page < 20) {
-    const nextPage = bucket.page + 1;
-    const res = await fetchSelectionImages(key, nextPage);
-    if (reset && bucket.page === 0) bucket.items = res.items;
-    else bucket.items = bucket.items.concat(res.items);
-    bucket.page = nextPage;
-    bucket.total = res.total || bucket.items.length;
-    bucket.hasMore = res.hasMore;
-    if (!res.items.length) break;
-  }
+  const nextPage = bucket.page + 1;
+  const res = await fetchSelectionImages(key, nextPage);
   bucket.loading = false;
+  if (reset) bucket.items = res.items;
+  else bucket.items = bucket.items.concat(res.items);
+  bucket.page = nextPage;
+  bucket.total = res.total || bucket.items.length;
+  bucket.hasMore = res.hasMore;
   return bucket;
 }
 
@@ -7593,38 +7570,59 @@ function openSelectionImageViewer(src) {
     </div>`, (root) => {}, { fullscreen: true });
 }
 
+async function downloadImagesBulk(urls) {
+  const list = (urls || []).filter(Boolean);
+  if (!list.length) { toast('لا توجد صور للتنزيل', 'info'); return; }
+  toast('جاري تنزيل ' + toAr(list.length) + ' صورة…', 'check');
+  for (let i = 0; i < list.length; i++) {
+    const src = list[i];
+    const name = 'jalees-image-' + (i + 1) + '.jpg';
+    try {
+      const res = await fetch(src, { mode: 'cors' });
+      if (!res.ok) throw new Error('fail');
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    } catch (e) {
+      const a = document.createElement('a');
+      a.href = src;
+      a.download = name;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 function renderSelectionsQuotes(panel) {
-  const bucket = selectionFolderCache.quotes;
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">اقتباسات مختارة</span><p>صور الاقتباسات التي يختارها المشرفون</p></div>
-      ${isSupervisor() ? `<div class="selections-head-actions"><button class="btn btn-sm btn-ghost" type="button" data-action="link-selection-folder" data-key="quotes">ربط مجلد Drive</button><button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button></div>` : ''}
+      ${isSupervisor() ? `<div class="selections-head-actions">
+        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="quotes">تنزيل جميع الصور</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-action="delete-all-selections">حذف الكل</button>
+        <button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button>
+      </div>` : ''}
     </div>
-    <div class="selections-quotes" id="selections-quotes-list"></div>
-    <div class="selections-more" id="selections-quotes-more"></div>`;
+    <div class="selections-quotes" id="selections-quotes-list"></div>`;
   const list = panel.querySelector('#selections-quotes-list');
-  const more = panel.querySelector('#selections-quotes-more');
 
   const draw = () => {
     const sheetItems = selectionQuotesCache || [];
-    const known = new Set(sheetItems.map((q) => selectionImageFileId(q.image)).filter(Boolean));
-    const extra = bucket.items.filter((f) => !known.has(f.id));
-    list.innerHTML = [
-      ...sheetItems.map((item) => selectionQuoteCardHTML(item)),
-      ...extra.map((item) => selectionFolderCardHTML(item, 'quotes'))
-    ].join('') || emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'يضيف المشرف هنا صور الاقتباسات المختارة.');
-    if (bucket.hasMore) {
-      more.innerHTML = `<button class="btn btn-ghost btn-block" type="button" data-action="load-more-selection-images" data-key="quotes">تحميل المزيد</button>`;
-    } else {
-      more.innerHTML = '';
-    }
+    list.innerHTML = sheetItems.map((item) => selectionQuoteCardHTML(item)).join('')
+      || emptyHTML('quote', 'لا توجد اقتباسات مختارة', 'يضيف المشرف هنا صور الاقتباسات المختارة.');
   };
 
-  refreshSelectionQuotes().then(async () => {
-    draw();
-    await ensureSelectionImages('quotes', { reset: bucket.page === 0 && bucket.items.length === 0 });
-    draw();
-  });
+  refreshSelectionQuotes().then(() => draw());
 }
 
 /* قبول صورة بالإسقاط أو الاختيار وتحويلها لنص يرفع إلى Drive */
@@ -7732,35 +7730,15 @@ async function renderSelectionsWindows(panel) {
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">نوافذ قرائية</span><p>صور ونصائح يضيفها المشرف</p></div>
-      ${isSupervisor() ? `<div class="selections-head-actions"><button class="btn btn-sm btn-ghost" type="button" data-action="link-selection-folder" data-key="windows">ربط مجلد Drive</button><button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button></div>` : ''}
+      ${isSupervisor() ? `<div class="selections-head-actions">
+        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="windows">تنزيل جميع الصور</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-action="delete-all-selections">حذف الكل</button>
+        <button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button>
+      </div>` : ''}
     </div>
-    <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>
-    <div class="selections-more" id="selections-windows-more"></div>`;
+    <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>`;
   const box = panel.querySelector('#selections-windows');
-  const more = panel.querySelector('#selections-windows-more');
   await loadReadingTips(box);
-
-  const bucket = await ensureSelectionImages('windows', { reset: selectionFolderCache.windows.page === 0 && selectionFolderCache.windows.items.length === 0 });
-  const known = new Set((readingTipsCache || []).map((t) => selectionImageFileId(t.image)).filter(Boolean));
-  const extra = bucket.items.filter((f) => !known.has(f.id));
-  if (extra.length) {
-    const grid = box.closest('.selections') || box.parentElement;
-    box.insertAdjacentHTML('beforeend', extra.map((item) => `
-      <article class="reading-window-card selection-folder-card">
-        <button class="reading-window-card-open" type="button" data-action="open-selection-image" data-src="${esc(item.full)}" aria-label="عرض الصورة">
-          <span class="reading-window-card-media">
-            <img class="reading-window-card-image" src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">
-            <span class="reading-window-card-tag">نافذة مصوّرة</span>
-          </span>
-        </button>
-        ${isSupervisor() ? `<button class="reading-window-card-delete" type="button" data-action="delete-selection-image" data-id="${esc(item.id)}" data-key="windows">حذف</button>` : ''}
-      </article>`).join(''));
-  }
-  if (bucket.hasMore) {
-    more.innerHTML = `<button class="btn btn-ghost btn-block" type="button" data-action="load-more-selection-images" data-key="windows">تحميل المزيد</button>`;
-  } else {
-    more.innerHTML = '';
-  }
 
   const addBtn = panel.querySelector('[data-action="add-reading-tip"]');
   if (addBtn) addBtn.addEventListener('click', () => {
@@ -9001,7 +8979,7 @@ function showGate(view = 'register') {
 
 function applyGuestVisibility() {
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article', 'manage-library-categories']);
+  const blocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article', 'manage-library-categories']);
   document.querySelectorAll('[data-action]').forEach((el) => {
     if (blocked.has(el.dataset.action)) el.style.display = isGuest ? 'none' : '';
   });
@@ -9309,7 +9287,7 @@ async function handleGlobalClick(event) {
   const id = actionEl.dataset.id;
 
   const isGuest = !currentMember || currentMember.id === 'guest';
-  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article']);
+  const guestBlocked = new Set(['go-log', 'go-add-book-report', 'open-quote', 'open-article-compose', 'open-add-book', 'open-add-my-book', 'add-book', 'start-book', 'save-page', 'remove-book', 'reset-demo', 'like-quote', 'like-article', 'save-quote', 'save-article']);
   if (isGuest && guestBlocked.has(action)) {
     showGate();
     toast('سجّل دخولك بالبريد والرمز للتعديل والإضافة', 'user');
@@ -9408,74 +9386,37 @@ async function handleGlobalClick(event) {
     case 'open-reading-window':
       openReadingWindowViewer(id);
       break;
-    case 'link-selection-folder': {
-      const key = actionEl.dataset.key === 'windows' ? 'windows' : 'quotes';
-      const value = window.prompt('ألصق رابط مجلد Google Drive أو معرّفه:');
-      if (!value) break;
-      cloudRequest('setSelectionFolder', { key, url: value }).then((result) => {
-        if (result && result.success === true) {
-          toast('تم ربط المجلد: ' + (result.name || ''), 'check');
-          invalidateSelectionImages(key);
-          const panel = document.querySelector('#selections-panel');
-          if (panel) {
-            if (key === 'windows') renderSelectionsWindows(panel);
-            else renderSelectionsQuotes(panel);
-          }
-        } else {
-          toast((result && result.message) || 'تعذر ربط المجلد', 'info');
-        }
-      });
-      break;
-    }
     case 'open-selection-image': {
       openSelectionImageViewer(actionEl.dataset.src);
       break;
     }
-    case 'move-selection-image': {
+    case 'download-selection-images': {
       if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
-      const from = actionEl.dataset.from === 'windows' ? 'windows' : 'quotes';
-      const to = actionEl.dataset.to === 'windows' ? 'windows' : 'quotes';
-      const id = actionEl.dataset.id;
-      cloudRequest('moveSelectionImage', { id, from, to }).then((result) => {
-        if (result && result.success === true) {
-          toast('تم نقل الصورة', 'check');
-          invalidateSelectionImages(from);
-          invalidateSelectionImages(to);
+      const dlKey = actionEl.dataset.key === 'windows' ? 'windows' : 'quotes';
+      const dlUrls = dlKey === 'windows'
+        ? (readingTipsCache || []).map((t) => t.image).filter(Boolean)
+        : (selectionQuotesCache || []).map((q) => q.image).filter(Boolean);
+      downloadImagesBulk(dlUrls);
+      break;
+    }
+    case 'delete-all-selections': {
+      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
+      openConfirm({
+        title: 'حذف كل مختارات النادي',
+        text: 'سيتم حذف جميع الاقتباسات المختارة والنوافذ القرائية. لا يمكن التراجع.',
+        confirmLabel: 'حذف الكل',
+        danger: true,
+        onConfirm: async () => {
+          await cloudRequest('deleteAllSelectionQuotes', { by: (currentMember && currentMember.name) || 'مشرف' });
+          await cloudRequest('deleteAllReadingTips', { by: (currentMember && currentMember.name) || 'مشرف' });
+          selectionQuotesCache = [];
+          readingTipsCache = [];
+          toast('تم حذف جميع مختارات النادي', 'trash');
           const panel = document.querySelector('#selections-panel');
           const activeTab = document.querySelector('#selections-tabs .chip-filter.active')?.dataset.selectionTab || 'quotes';
           if (panel) {
             if (activeTab === 'windows') renderSelectionsWindows(panel);
-            else if (activeTab === 'quotes') renderSelectionsQuotes(panel);
-          }
-        } else {
-          toast((result && result.message) || 'تعذر النقل', 'info');
-        }
-      });
-      break;
-    }
-    case 'move-all-selection-images': {
-      if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
-      const from = actionEl.dataset.from === 'windows' ? 'windows' : 'quotes';
-      const to = actionEl.dataset.to === 'windows' ? 'windows' : 'quotes';
-      openConfirm({
-        title: 'نقل جميع الصور',
-        text: `سيتم نقل جميع صور ${from === 'quotes' ? 'الاقتباسات' : 'النوافذ'} إلى ${to === 'quotes' ? 'الاقتباسات' : 'النوافذ'}.`,
-        confirmLabel: 'نقل',
-        danger: false,
-        onConfirm: async () => {
-          const result = await cloudRequest('moveAllSelectionImages', { from, to });
-          if (result && result.success === true) {
-            toast(result.message || 'تم النقل', 'check');
-            invalidateSelectionImages(from);
-            invalidateSelectionImages(to);
-            const panel = document.querySelector('#selections-panel');
-            if (panel) {
-              const activeTab2 = document.querySelector('#selections-tabs .chip-filter.active')?.dataset.selectionTab || 'quotes';
-               if (activeTab2 === 'windows') renderSelectionsWindows(panel);
-               else if (activeTab2 === 'quotes') renderSelectionsQuotes(panel);
-            }
-          } else {
-            toast((result && result.message) || 'تعذر النقل', 'info');
+            else renderSelectionsQuotes(panel);
           }
         }
       });
