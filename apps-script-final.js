@@ -1088,7 +1088,8 @@ const ADMIN_API_ACTIONS = new Set([
   'deleteReadingList', 'saveMeeting', 'deleteMeeting', 'saveRecordedMeeting',
   'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests',
   'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders', 'setSelectionFolder',
-  'moveSelectionImage', 'moveAllSelectionImages', 'deleteAllSelectionQuotes', 'deleteAllReadingTips'
+  'moveSelectionImage', 'moveAllSelectionImages', 'deleteAllSelectionQuotes', 'deleteAllReadingTips',
+  'saveSelectionImagesToDrive'
 ]);
 const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
 const MEMBER_BOUND_ACTIONS = new Set([
@@ -3121,7 +3122,29 @@ function doPost(e) {
       );
       return output({ success: true, id: selectionId, message: 'تم نشر الاقتباس في مختارات النادي' });
     }
-
+ 
+    if (action === 'saveSelectionImagesToDrive') {
+      const key = data.key === 'windows' ? 'windows' : (data.key === 'lists' ? 'lists' : 'quotes');
+      const folderName = key === 'windows' ? 'نوافذ قرائية 1' : (key === 'lists' ? 'قوائم مختارة 1' : 'اقتباسات مختارة 1');
+      let folder = null;
+      const existing = DriveApp.getFoldersByName(folderName);
+      if (existing.hasNext()) folder = existing.next();
+      else folder = DriveApp.createFolder(folderName);
+      const urls = Array.isArray(data.urls) ? data.urls : [];
+      let saved = 0;
+      urls.forEach((url, i) => {
+        try {
+          const resp = UrlFetchApp.fetch(String(url), { muteHttpExceptions: true });
+          if (resp.getResponseCode() !== 200) return;
+          const blob = resp.getBlob();
+          const name = folderName + '-' + (i + 1) + '.jpg';
+          folder.createFile(blob.setName(name));
+          saved++;
+        } catch (e) { /* تجاهل */ }
+      });
+      return output({ success: true, saved: saved, total: urls.length, message: 'تم حفظ ' + saved + ' من ' + urls.length + ' صورة في Drive (' + folderName + ')' });
+    }
+ 
     if (action === 'deleteAllSelectionQuotes') {
       const sheet = getSelectionQuotesSheet(ss);
       const lastRow = sheet.getLastRow();

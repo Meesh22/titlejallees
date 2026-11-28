@@ -7608,9 +7608,7 @@ function renderSelectionsQuotes(panel) {
     <div class="selections-head-row">
       <div><span class="eyebrow">اقتباسات مختارة</span><p>صور الاقتباسات التي يختارها المشرفون</p></div>
       ${isSupervisor() ? `<div class="selections-head-actions">
-        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="quotes">تنزيل جميع الصور</button>
-        <button class="btn btn-sm btn-ghost" type="button" data-action="delete-all-selections">حذف الكل</button>
-        <button class="btn btn-sm btn-gold" type="button" data-action="add-selection-quote"><svg class="ic"><use href="#i-plus"/></svg> إضافة صورة</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="quotes">تنزيل صور</button>
       </div>` : ''}
     </div>
     <div class="selections-quotes" id="selections-quotes-list"></div>`;
@@ -7731,9 +7729,7 @@ async function renderSelectionsWindows(panel) {
     <div class="selections-head-row">
       <div><span class="eyebrow">نوافذ قرائية</span><p>صور ونصائح يضيفها المشرف</p></div>
       ${isSupervisor() ? `<div class="selections-head-actions">
-        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="windows">تنزيل جميع الصور</button>
-        <button class="btn btn-sm btn-ghost" type="button" data-action="delete-all-selections">حذف الكل</button>
-        <button class="btn btn-sm btn-gold" type="button" data-action="add-reading-tip"><svg class="ic"><use href="#i-plus"/></svg> إضافة نافذة</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="windows">تنزيل صور</button>
       </div>` : ''}
     </div>
     <div class="reading-windows-gallery" id="selections-windows"><p class="deleted-items-loading">جارٍ تحميل النوافذ القرائية…</p></div>`;
@@ -7751,7 +7747,7 @@ async function renderSelectionsLists(panel) {
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">قوائم قرائية مختارة</span><p>قوائم يختارها المشرف من مكتبة النادي</p></div>
-      ${isSupervisor() ? `<button class="btn btn-sm btn-gold" type="button" data-action="add-reading-list"><svg class="ic"><use href="#i-plus"/></svg> قائمة جديدة</button>` : ''}
+
     </div>
     <div id="selections-lists"><p class="deleted-items-loading">جارٍ تحميل القوائم…</p></div>`;
   const box = panel.querySelector('#selections-lists');
@@ -9396,7 +9392,16 @@ async function handleGlobalClick(event) {
       const dlUrls = dlKey === 'windows'
         ? (readingTipsCache || []).map((t) => t.image).filter(Boolean)
         : (selectionQuotesCache || []).map((q) => q.image).filter(Boolean);
-      downloadImagesBulk(dlUrls);
+      (async () => {
+        if (!dlUrls.length) { toast('لا توجد صور للحفظ', 'info'); return; }
+        toast('جاري حفظ ' + toAr(dlUrls.length) + ' صورة في Drive…', 'check');
+        const result = await cloudRequest('saveSelectionImagesToDrive', { key: dlKey, urls: dlUrls });
+        if (result && result.success === true) {
+          toast(result.message || ('تم حفظ ' + result.saved + ' صورة'), 'check');
+        } else {
+          toast((result && result.message) || 'تعذر الحفظ', 'info');
+        }
+      })();
       break;
     }
     case 'delete-all-selections': {
