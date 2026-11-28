@@ -2567,7 +2567,10 @@ function weekNumber() {
 function imageThumb(url, width = 480) {
   const raw = String(url || '').trim();
   if (!raw) return '';
-  if (/lh3\.googleusercontent\.com/i.test(raw)) return raw.replace(/=w\d+/, `=w${width}`);
+  if (/lh3\.googleusercontent\.com/i.test(raw)) {
+    if (/=s0\b/i.test(raw)) return raw.replace(/=s0\b/i, `=w${width}`);
+    return raw.replace(/=w\d+/, `=w${width}`);
+  }
   return raw;
 }
 
@@ -7650,7 +7653,7 @@ function bindImageDropzone(zone, input, onFile) {
 
 async function prepareUploadImage(file) {
   if (!file || !file.type || !file.type.startsWith('image/')) throw new Error('اختر ملف صورة صالحًا');
-  if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 4 * 1024 * 1024) {
+  if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 20 * 1024 * 1024) {
     return readFileAsDataUrl(file);
   }
   return compressMeetingImage(file);
