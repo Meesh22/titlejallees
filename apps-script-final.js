@@ -3154,12 +3154,26 @@ function doPost(e) {
       else folder = DriveApp.createFolder(folderName);
       const images = Array.isArray(data.images) ? data.images : [];
       let saved = 0;
-      images.forEach((img, i) => {
-        try {
-          storeImage(img, 'upload', null, folder);
-          saved++;
-        } catch (e) { /* تجاهل */ }
-      });
+       images.forEach((img, i) => {
+         try {
+           const stored = storeImage(img, 'upload', null, folder);
+           if (key === 'lists' && stored) {
+             const listSheet = getReadingListsSheet(ss);
+             listSheet.appendRow([
+               `list-image-${Date.now()}-${i}`,
+               'قائمة قرائية مصوّرة',
+               '',
+               '[]',
+               stored,
+               Date.now(),
+               data.by || 'مشرف',
+               '',
+               ''
+             ]);
+           }
+           saved++;
+         } catch (e) { /* تجاهل */ }
+       });
       return output({ success: true, saved: saved, total: images.length, message: 'تم حفظ ' + saved + ' من ' + images.length + ' صورة في Drive (' + folderName + ')' });
     }
  

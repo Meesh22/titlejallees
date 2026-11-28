@@ -7765,6 +7765,7 @@ async function renderSelectionsLists(panel) {
   } else {
     box.innerHTML = lists.map((list) => `
       <article class="reading-list-card">
+        ${list.cover ? `<img class="reading-list-cover" src="${esc(imageThumb(list.cover, 900))}" alt="${esc(list.title || 'قائمة قرائية')}" loading="lazy" decoding="async">` : ''}
         <div class="reading-list-head">
           <div>
             <h4>${esc(list.title || 'قائمة قرائية')}</h4>
