@@ -77,6 +77,7 @@ const MAIN_API_ACTIONS = new Set([
   'getBookSummaries', 'saveBookSummary', 'deleteBookSummary',
   'getReadingLists', 'saveReadingList', 'deleteReadingList',
   'getSelectionQuotes', 'toggleSelectionQuote', 'deleteAllSelectionQuotes', 'deleteAllReadingTips',
+  'saveSelectionImagesToDrive', 'uploadImagesToDrive',
   'getWeeklyReports', 'saveWeeklyReport', 'deleteWeeklyReport', 'deleteAllWeeklyReports',
   'describeSpreadsheet', 'organizeSheets', 'dedupeClubBooks', 'getLikes', 'toggleLike',
   'getPersonalBooks', 'savePersonalBook', 'deletePersonalBook', 'uploadFile',
@@ -7747,7 +7748,9 @@ async function renderSelectionsLists(panel) {
   panel.innerHTML = `
     <div class="selections-head-row">
       <div><span class="eyebrow">قوائم قرائية مختارة</span><p>قوائم يختارها المشرف من مكتبة النادي</p></div>
-
+      ${isSupervisor() ? `<div class="selections-head-actions">
+        <button class="btn btn-sm btn-ghost" type="button" data-action="download-selection-images" data-key="lists">تنزيل صور</button>
+      </div>` : ''}
     </div>
     <div id="selections-lists"><p class="deleted-items-loading">جارٍ تحميل القوائم…</p></div>`;
   const box = panel.querySelector('#selections-lists');
@@ -9389,19 +9392,55 @@ async function handleGlobalClick(event) {
     case 'download-selection-images': {
       if (!isSupervisor()) { toast('غير مصرح', 'info'); break; }
       const dlKey = actionEl.dataset.key === 'windows' ? 'windows' : 'quotes';
-      const dlUrls = dlKey === 'windows'
-        ? (readingTipsCache || []).map((t) => t.image).filter(Boolean)
-        : (selectionQuotesCache || []).map((q) => q.image).filter(Boolean);
-      (async () => {
-        if (!dlUrls.length) { toast('لا توجد صور للحفظ', 'info'); return; }
-        toast('جاري حفظ ' + toAr(dlUrls.length) + ' صورة في Drive…', 'check');
-        const result = await cloudRequest('saveSelectionImagesToDrive', { key: dlKey, urls: dlUrls });
-        if (result && result.success === true) {
-          toast(result.message || ('تم حفظ ' + result.saved + ' صورة'), 'check');
-        } else {
-          toast((result && result.message) || 'تعذر الحفظ', 'info');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', async () => {
+        const files = Array.from(input.files || []);
+        input.remove();
+        if (!files.length) return;
+        toast('جاري رفع ' + toAr(files.length) + ' صورة…', 'check');
+        let saved = 0;
+        for (const file of files) {
+          try {
+            const imageData = await prepareUploadImage(file);
+            if (dlKey === 'windows') {
+              const result = await cloudRequest('saveReadingTip', {
+                id: 'tip-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                title: 'نافذة قرائية',
+                body: '',
+                image: imageData,
+                createdAt: Date.now(),
+                createdBy: (currentMember && currentMember.name) || 'مشرف'
+              });
+              if (result && result.success === true) saved++;
+            } else if (dlKey === 'lists') {
+              try {
+                const r = await cloudRequest('uploadImagesToDrive', { key: 'lists', images: [imageData] });
+                if (r && r.success === true) saved++;
+              } catch (e) { /* تجاهل */ }
+            } else {
+              const result = await cloudRequest('saveSelectionQuote', {
+                id: 'sel-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                image: imageData,
+                createdAt: Date.now(),
+                by: (currentMember && currentMember.name) || 'مشرف'
+              });
+              if (result && result.success === true) saved++;
+            }
+          } catch (e) { /* تجاهل */ }
         }
-      })();
+        toast('تم رفع ' + toAr(saved) + ' من ' + toAr(files.length) + ' صورة', saved === files.length ? 'check' : 'info');
+        const panel = document.querySelector('#selections-panel');
+        if (panel) {
+          if (dlKey === 'windows') renderSelectionsWindows(panel);
+          else renderSelectionsQuotes(panel);
+        }
+      });
+      input.click();
       break;
     }
     case 'delete-all-selections': {

@@ -1089,7 +1089,7 @@ const ADMIN_API_ACTIONS = new Set([
   'deleteRecordedMeeting', 'saveActivity', 'getJoinRequests',
   'deleteSelectionImage', 'shareSelectionFolder', 'getSelectionFolders', 'setSelectionFolder',
   'moveSelectionImage', 'moveAllSelectionImages', 'deleteAllSelectionQuotes', 'deleteAllReadingTips',
-  'saveSelectionImagesToDrive'
+  'saveSelectionImagesToDrive', 'uploadImagesToDrive'
 ]);
 const CONSULTANT_API_ACTIONS = new Set(['answerConsultation']);
 const MEMBER_BOUND_ACTIONS = new Set([
@@ -3143,6 +3143,24 @@ function doPost(e) {
         } catch (e) { /* تجاهل */ }
       });
       return output({ success: true, saved: saved, total: urls.length, message: 'تم حفظ ' + saved + ' من ' + urls.length + ' صورة في Drive (' + folderName + ')' });
+    }
+ 
+    if (action === 'uploadImagesToDrive') {
+      const key = data.key === 'windows' ? 'windows' : (data.key === 'lists' ? 'lists' : 'quotes');
+      const folderName = key === 'windows' ? 'نوافذ قرائية 1' : (key === 'lists' ? 'قوائم مختارة 1' : 'اقتباسات مختارة 1');
+      let folder = null;
+      const existing = DriveApp.getFoldersByName(folderName);
+      if (existing.hasNext()) folder = existing.next();
+      else folder = DriveApp.createFolder(folderName);
+      const images = Array.isArray(data.images) ? data.images : [];
+      let saved = 0;
+      images.forEach((img, i) => {
+        try {
+          storeImage(img, 'upload', null, folder);
+          saved++;
+        } catch (e) { /* تجاهل */ }
+      });
+      return output({ success: true, saved: saved, total: images.length, message: 'تم حفظ ' + saved + ' من ' + images.length + ' صورة في Drive (' + folderName + ')' });
     }
  
     if (action === 'deleteAllSelectionQuotes') {
